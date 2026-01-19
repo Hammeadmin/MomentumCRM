@@ -1,0 +1,838 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+    Plus, X, Rss, Zap, Briefcase, Filter, User, Phone, Mail, MapPin, Edit, Trash2, Calendar,
+    MessageSquare, DollarSign, ChevronDown, CheckSquare, Square, RefreshCw, AlertTriangle, Target, Loader2,
+    TrendingUp, BarChart3, Clock, Users, ArrowRight, LayoutGrid, List, PhoneCall, Send
+} from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../hooks/useToast';
+import { useLeads } from '../hooks/useLeads';
+import { useTranslation } from '../locales/sv';
+import { parseLead } from '../lib/schemas';
+import KanbanCard from './kanban/KanbanCard';
+import {
+    createLead, updateLead, deleteLead, getSalesTasks, updateSalesTask,
+    fetchRSSArticles, getAILeadSuggestions, createLeadFromArticle, getLeadScoreColor,
+    getLeadAnalytics, getLeadScoreLabel, getNextActionSuggestion,
+    type LeadWithRelations, type SalesTask, type RSSArticle, type AILeadSuggestion,
+    type LeadFilters
+} from '../lib/leads';
+import { formatDate, formatCurrency, getCustomers, getTeamMembers } from '../lib/database';
+import { supabase } from '../lib/supabase';
+import { createQuoteFromLead } from '../lib/quotes';
+import type { LeadStatus, Customer, UserProfile } from '../types/database';
+
+import EmptyState from './EmptyState';
+import ConfirmDialog from './ConfirmDialog';
+import ReminderModal from './ReminderModal';
+import CreateQuoteModal from './CreateQuoteModal';
+import { Button } from './ui';
+
+// Lead Analytics interface (replaces `any`)
+interface LeadAnalytics {
+    totalLeads: number;
+    conversionRate: number;
+    averageDealSize: number;
+    averageSalesCycle: number;
+    sourcePerformance: Array<{ source: string; count: number; conversion: number }>;
+    wonLeads: number;
+}
+
+// Status configuration - matches actual DB enum values
+const LEAD_STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bgColor: string }> = {
+    new: { label: 'Ny', color: 'text-blue-700', bgColor: 'bg-blue-100' },
+    contacted: { label: 'Kontaktad', color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
+    qualified: { label: 'Kvalificerad', color: 'text-purple-700', bgColor: 'bg-purple-100' },
+    proposal: { label: 'Offert', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
+    won: { label: 'Vunnen', color: 'text-green-700', bgColor: 'bg-green-100' },
+    lost: { label: 'Förlorad', color: 'text-red-700', bgColor: 'bg-red-100' }
+};
+
+const PIPELINE_STAGES: LeadStatus[] = ['new', 'contacted', 'qualified', 'proposal', 'won', 'lost'];
+
+// ====== ANALYTICS COMPONENT ====== //
+const AnalyticsHeader = ({ analytics, loading }: { analytics: LeadAnalytics | null; loading: boolean }) => {
+    if (loading) {
+        return (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                {[...Array(4)].map((_, i) => (
+                    <div key={i} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 animate-pulse">
+                        <div className="h-4 bg-gray-200 rounded w-20 mb-2"></div>
+                        <div className="h-8 bg-gray-200 rounded w-16"></div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if (!analytics) return null;
+
+    const stats = [
+        { label: 'Totala Leads', value: analytics.totalLeads, icon: Target, color: 'text-blue-600', bgColor: 'bg-blue-50' },
+        { label: 'Konvertering', value: `${analytics.conversionRate}%`, icon: TrendingUp, color: 'text-green-600', bgColor: 'bg-green-50' },
+        { label: 'Snitt Affärsvärde', value: formatCurrency(analytics.averageDealSize), icon: DollarSign, color: 'text-purple-600', bgColor: 'bg-purple-50' },
+        { label: 'Säljcykel', value: `${analytics.averageSalesCycle} dagar`, icon: Clock, color: 'text-orange-600', bgColor: 'bg-orange-50' }
+    ];
+
+    return (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {stats.map((stat, idx) => (
+                <div key={idx} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{stat.label}</p>
+                            <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
+                        </div>
+                        <div className={`w-10 h-10 rounded-lg ${stat.bgColor} flex items-center justify-center`}>
+                            <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+// ====== KANBAN VIEW COMPONENT ====== //
+const LeadKanbanView = ({ leads, onSelectLead, onStatusChange, leadsTranslations }: {
+    leads: LeadWithRelations[];
+    onSelectLead: (lead: LeadWithRelations) => void;
+    onStatusChange: (leadId: string, newStatus: LeadStatus) => void;
+    leadsTranslations: ReturnType<typeof useTranslation>['leads'];
+}) => {
+    const handleDragStart = (e: React.DragEvent, lead: LeadWithRelations) => {
+        e.dataTransfer.setData('leadId', lead.id);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDrop = (e: React.DragEvent, status: LeadStatus) => {
+        e.preventDefault();
+        const leadId = e.dataTransfer.getData('leadId');
+        if (leadId) {
+            onStatusChange(leadId, status);
+        }
+    };
+
+    return (
+        <div className="flex gap-4 overflow-x-auto pb-4 min-h-[500px]">
+            {PIPELINE_STAGES.filter(s => s !== 'lost').map(status => {
+                const config = LEAD_STATUS_CONFIG[status];
+                const stageLeads = leads.filter(l => l.status === status);
+                const totalValue = stageLeads.reduce((sum, l) => sum + (l.estimated_value || 0), 0);
+
+                return (
+                    <div
+                        key={status}
+                        className="flex-shrink-0 w-72 bg-gray-50 rounded-xl p-3"
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, status)}
+                    >
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <span className={`px-2 py-1 rounded-md text-xs font-semibold ${config.bgColor} ${config.color}`}>
+                                    {config.label}
+                                </span>
+                                <span className="text-xs text-gray-500">{stageLeads.length}</span>
+                            </div>
+                            <span className="text-xs font-medium text-gray-500">{formatCurrency(totalValue)}</span>
+                        </div>
+
+                        <div className="space-y-2">
+                            {stageLeads.map(lead => (
+                                <KanbanCard
+                                    key={lead.id}
+                                    type="lead"
+                                    data={lead}
+                                    onDragStart={(e: React.DragEvent) => handleDragStart(e, lead)}
+                                    onClick={() => onSelectLead(lead)}
+                                />
+                            ))}
+                            {stageLeads.length === 0 && (
+                                <div className="text-center py-8 text-gray-400 text-sm">
+                                    {leadsTranslations.KANBAN.DRAG_HERE}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+// ====== LEAD FORM MODAL ====== //
+const LeadFormModal = ({ isOpen, onClose, onSave, leadToEdit, organisationId }: {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+    leadToEdit?: LeadWithRelations | null;
+    organisationId: string | null;
+}) => {
+    const { user } = useAuth();
+    const { success, error: showError } = useToast();
+    const { leads: leadsText } = useTranslation();
+    const [formData, setFormData] = useState({
+        title: '', description: '', source: '', status: 'new' as LeadStatus,
+        estimated_value: '', customer_id: '', assigned_to_user_id: ''
+    });
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        if (isOpen) {
+            setErrors({});
+            setFormData({
+                title: leadToEdit?.title || '',
+                description: leadToEdit?.description || '',
+                source: leadToEdit?.source || '',
+                status: leadToEdit?.status || 'new',
+                estimated_value: leadToEdit?.estimated_value?.toString() || '',
+                customer_id: leadToEdit?.customer_id || '',
+                assigned_to_user_id: leadToEdit?.assigned_to_user_id || user?.id || ''
+            });
+
+            const loadModalData = async () => {
+                const [customersRes, membersRes] = await Promise.all([getCustomers(organisationId!), getTeamMembers(organisationId!)]);
+                if (customersRes.data) setCustomers(customersRes.data);
+                if (membersRes.data) setTeamMembers(membersRes.data);
+            };
+            loadModalData();
+        }
+    }, [isOpen, leadToEdit, user, organisationId]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user) return showError(leadsText.MESSAGES.ERROR_TITLE, leadsText.MESSAGES.MUST_LOGIN);
+
+        // Build payload for validation
+        const dataPayload = {
+            organisation_id: organisationId,
+            title: formData.title,
+            description: formData.description || null,
+            source: formData.source || null,
+            status: formData.status,
+            estimated_value: formData.estimated_value ? parseFloat(formData.estimated_value) : null,
+            customer_id: formData.customer_id || null,
+            assigned_to_user_id: formData.assigned_to_user_id || null,
+        };
+
+        // Validate using Zod schema
+        const validation = parseLead(dataPayload);
+        if (!validation.success) {
+            setErrors(validation.errors);
+            return;
+        }
+
+        setLoading(true);
+        setErrors({});
+
+        const result = leadToEdit
+            ? await updateLead(leadToEdit.id, dataPayload)
+            : await createLead(dataPayload as Omit<LeadWithRelations, 'id' | 'created_at'>);
+
+        if (result.error) {
+            showError(leadsText.MESSAGES.ERROR_TITLE, leadsText.MESSAGES.ERROR_SAVE(result.error.message));
+        } else {
+            success(leadsText.MESSAGES.SUCCESS_TITLE, leadToEdit ? leadsText.MESSAGES.LEAD_UPDATED : leadsText.MESSAGES.LEAD_CREATED);
+            onSave();
+            onClose();
+        }
+        setLoading(false);
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 transition-opacity" onClick={onClose}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transform transition-all" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                    <h3 className="text-2xl font-bold text-gray-800">{leadToEdit ? leadsText.FORM.EDIT_TITLE : leadsText.FORM.CREATE_TITLE}</h3>
+                    <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{leadsText.FORM.TITLE_LABEL} *</label>
+                            <input type="text" value={formData.title} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })} className={`w-full px-3 py-2 border rounded-lg focus:ring-primary-500 focus:border-primary-500 ${errors.title ? 'border-error-500' : 'border-gray-300'}`} placeholder={leadsText.FORM.TITLE_PLACEHOLDER} />
+                            {errors.title && <p className="text-error-600 text-xs mt-1">{errors.title}</p>}
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{leadsText.FORM.DESCRIPTION_LABEL}</label>
+                            <textarea value={formData.description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })} rows={4} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" placeholder={leadsText.FORM.DESCRIPTION_PLACEHOLDER} />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{leadsText.FORM.SOURCE_LABEL}</label>
+                                <input type="text" value={formData.source} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, source: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" placeholder={leadsText.FORM.SOURCE_PLACEHOLDER} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{leadsText.FORM.VALUE_LABEL}</label>
+                                <input type="number" value={formData.estimated_value} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, estimated_value: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" placeholder="25000" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{leadsText.FORM.CUSTOMER_LABEL}</label>
+                                <select value={formData.customer_id} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, customer_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
+                                    <option value="">{leadsText.FORM.CUSTOMER_PLACEHOLDER}</option>
+                                    {customers.map((c: Customer) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{leadsText.FORM.SALESPERSON_LABEL}</label>
+                                <select value={formData.assigned_to_user_id} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, assigned_to_user_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
+                                    <option value="">{leadsText.FORM.SALESPERSON_PLACEHOLDER}</option>
+                                    {teamMembers.filter((tm: UserProfile) => tm.role === 'sales' || tm.role === 'admin').map((tm: UserProfile) => <option key={tm.id} value={tm.id}>{tm.full_name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex justify-end space-x-4 pt-4">
+                        <button type="button" onClick={onClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-all">Avbryt</button>
+                        <button type="submit" disabled={loading} className="inline-flex items-center px-5 py-2.5 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 transition-all">
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : (leadToEdit ? leadsText.FORM.SAVE_BUTTON : leadsText.FORM.CREATE_BUTTON)}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+
+// ====== MAIN COMPONENT ====== //
+
+const LeadManagement: React.FC = () => {
+    const { user, organisationId } = useAuth();
+    const { success, error: showError } = useToast();
+    const { leads: leadsTranslations } = useTranslation();
+    const [filters, setFilters] = useState<LeadFilters>({});
+
+    // Use the useLeads hook for leads, customers, teamMembers
+    const { leads, customers, teamMembers, isLoading: leadsLoading, refetch: refetchLeads } = useLeads(filters);
+
+    const [salesTasks, setSalesTasks] = useState<SalesTask[]>([]);
+    const [rssArticles, setRssArticles] = useState<RSSArticle[]>([]);
+    const [selectedLead, setSelectedLead] = useState<LeadWithRelations | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [leadToEdit, setLeadToEdit] = useState<LeadWithRelations | null>(null);
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
+    const [loading, setLoading] = useState({ tasks: true, rss: true, ai: false, analytics: true });
+    const [aiSuggestions, setAiSuggestions] = useState<AILeadSuggestion[]>([]);
+    const [analytics, setAnalytics] = useState<LeadAnalytics | null>(null);
+    const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
+
+    // Reminder State
+    const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
+    const [reminderEntity, setReminderEntity] = useState<{ id: string; title: string } | null>(null);
+
+    // Quote Modal State
+    const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
+    const [quoteLead, setQuoteLead] = useState<LeadWithRelations | null>(null);
+
+    // Get unique sources for filter dropdown
+    const uniqueSources = useMemo(() => {
+        const sources = leads.map((l: LeadWithRelations) => l.source).filter(Boolean);
+        return [...new Set(sources)];
+    }, [leads]);
+
+    useEffect(() => {
+        if (!user) return;
+        loadInitialData();
+
+        const leadChannel = supabase.channel('public:leads')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => refetchLeads())
+            .subscribe();
+
+        const taskChannel = supabase.channel('public:sales_tasks')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_tasks' }, () => loadTasks(user.id))
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(leadChannel);
+            supabase.removeChannel(taskChannel);
+        };
+    }, [user, refetchLeads]);
+
+    useEffect(() => {
+        if (selectedLead) loadAISuggestions(selectedLead.id);
+        else setAiSuggestions([]);
+    }, [selectedLead]);
+
+    // Update selected lead when leads change
+    useEffect(() => {
+        if (selectedLead) {
+            const updatedSelected = leads.find((l: LeadWithRelations) => l.id === selectedLead.id);
+            if (updatedSelected) setSelectedLead(updatedSelected);
+        }
+    }, [leads, selectedLead]);
+
+    const loadInitialData = async () => {
+        if (!user || !organisationId) return;
+        loadTasks(user.id);
+        loadRssFeed();
+        loadAnalytics();
+    };
+
+    const loadAnalytics = async () => {
+        if (!organisationId) return;
+        setLoading(prev => ({ ...prev, analytics: true }));
+        const { data, error } = await getLeadAnalytics(organisationId);
+        if (!error && data) setAnalytics(data);
+        setLoading(prev => ({ ...prev, analytics: false }));
+    };
+
+    const loadTasks = async (userId: string) => {
+        setLoading(prev => ({ ...prev, tasks: true }));
+        const { data, error } = await getSalesTasks(userId);
+        if (error) showError(leadsTranslations.MESSAGES.ERROR_TITLE, leadsTranslations.MESSAGES.ERROR_TASKS);
+        else setSalesTasks(data || []);
+        setLoading(prev => ({ ...prev, tasks: false }));
+    };
+
+    const loadRssFeed = async () => {
+        if (!organisationId) return;
+        setLoading(prev => ({ ...prev, rss: true }));
+        const { data, error } = await fetchRSSArticles(organisationId);
+        if (error) showError(leadsTranslations.MESSAGES.ERROR_TITLE, leadsTranslations.MESSAGES.ERROR_RSS);
+        else setRssArticles(data || []);
+        setLoading(prev => ({ ...prev, rss: false }));
+    };
+
+    const loadAISuggestions = async (leadId: string) => {
+        setLoading(prev => ({ ...prev, ai: true }));
+        const { data, error } = await getAILeadSuggestions(leadId);
+        if (error) showError(leadsTranslations.MESSAGES.ERROR_TITLE, leadsTranslations.MESSAGES.ERROR_AI);
+        else setAiSuggestions(data || []);
+        setLoading(prev => ({ ...prev, ai: false }));
+    };
+
+    const handleCreateLead = () => {
+        setLeadToEdit(null);
+        setIsModalOpen(true);
+    };
+
+    const handleEditLead = (lead: LeadWithRelations) => {
+        setLeadToEdit(lead);
+        setIsModalOpen(true);
+    };
+
+    const handleDeleteLead = async () => {
+        if (!selectedLead) return;
+        const { error } = await deleteLead(selectedLead.id);
+        if (error) {
+            showError(leadsTranslations.MESSAGES.ERROR_TITLE, leadsTranslations.MESSAGES.ERROR_DELETE);
+        } else {
+            success(leadsTranslations.MESSAGES.SUCCESS_TITLE, leadsTranslations.MESSAGES.LEAD_DELETED);
+            setSelectedLead(null);
+            loadAnalytics();
+        }
+        setShowDeleteDialog(false);
+    };
+
+    const handleStatusChange = async (leadId: string, newStatus: LeadStatus) => {
+        const { data: updatedLead, error } = await updateLead(leadId, { status: newStatus });
+        if (error) {
+            showError(leadsTranslations.MESSAGES.ERROR_TITLE, leadsTranslations.MESSAGES.ERROR_STATUS);
+            return;
+        }
+
+        refetchLeads();
+        loadAnalytics();
+    };
+
+    // Create quote from a lead - update status to 'proposal' and open quote modal
+    const handleCreateQuote = async (lead: LeadWithRelations) => {
+        if (!organisationId) return;
+
+        // Update lead status to 'proposal' (Offert stage)
+        const { error } = await updateLead(lead.id, { status: 'proposal' });
+        if (error) {
+            showError(leadsTranslations.MESSAGES.ERROR_TITLE, leadsTranslations.MESSAGES.ERROR_STATUS);
+            return;
+        }
+
+        // Store the lead and open the quote creation modal
+        setQuoteLead(lead);
+        setIsQuoteModalOpen(true);
+
+        refetchLeads();
+        loadAnalytics();
+    };
+
+    const handleCreateFromArticle = async (article: RSSArticle) => {
+        if (!user || !organisationId) return;
+        const { error } = await createLeadFromArticle(article, organisationId, user.id);
+        if (error) showError(leadsTranslations.MESSAGES.ERROR_TITLE, leadsTranslations.MESSAGES.ERROR_ARTICLE);
+        else {
+            success(leadsTranslations.MESSAGES.SUCCESS_TITLE, leadsTranslations.MESSAGES.ARTICLE_SUCCESS);
+            loadAnalytics();
+        }
+    };
+
+    const handleTaskToggle = async (task: SalesTask) => {
+        const { error } = await updateSalesTask(task.id, { is_completed: !task.is_completed });
+        if (error) showError(leadsTranslations.MESSAGES.ERROR_TITLE, leadsTranslations.MESSAGES.ERROR_TASK);
+    };
+
+    const handleOpenReminder = (lead: LeadWithRelations) => {
+        setReminderEntity({
+            id: lead.id,
+            title: `Lead: ${lead.title}`
+        });
+        setIsReminderModalOpen(true);
+    };
+
+    const clearFilters = () => {
+        setFilters({});
+    };
+
+    return (
+        <>
+            <LeadFormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={() => { refetchLeads(); loadAnalytics(); }} leadToEdit={leadToEdit} organisationId={organisationId} />
+            <ConfirmDialog isOpen={showDeleteDialog} onClose={() => setShowDeleteDialog(false)} onConfirm={handleDeleteLead} title={leadsTranslations.CONFIRM.DELETE_TITLE} message={leadsTranslations.CONFIRM.DELETE_MESSAGE(selectedLead?.title || '')} type="danger" />
+            <CreateQuoteModal
+                isOpen={isQuoteModalOpen}
+                onClose={() => {
+                    setIsQuoteModalOpen(false);
+                    setQuoteLead(null);
+                }}
+                onQuoteCreated={() => {
+                    refetchLeads();
+                    loadAnalytics();
+                    success('Offert skapad', 'Offerten har skapats framgångsrikt.');
+                }}
+                lead={quoteLead}
+            />
+
+            <div className="space-y-6">
+                {/* Page Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex items-center">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center mr-4 shadow-lg shadow-purple-500/20">
+                            <Target className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">{leadsTranslations.TITLE}</h1>
+                            <p className="text-sm text-gray-500">{leadsTranslations.SUBTITLE(leads.length, leads.filter((l: LeadWithRelations) => l.status === 'won').length)}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {/* View Toggle */}
+                        <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                title={leadsTranslations.ACTIONS.LIST_VIEW}
+                            >
+                                <List className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('kanban')}
+                                className={`p-2 rounded-md transition-all ${viewMode === 'kanban' ? 'bg-white shadow text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                title={leadsTranslations.ACTIONS.PIPELINE_VIEW}
+                            >
+                                <LayoutGrid className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} icon={<Filter className="w-4 h-4" />}>
+                            {leadsTranslations.ACTIONS.FILTER} {Object.keys(filters).length > 0 && `(${Object.keys(filters).length})`}
+                        </Button>
+                        <Button variant="primary" size="md" onClick={handleCreateLead} icon={<Plus className="w-4 h-4" />}>
+                            {leadsTranslations.ACTIONS.CREATE}
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Analytics Header */}
+                <AnalyticsHeader analytics={analytics} loading={loading.analytics} />
+
+                {/* Filters Panel */}
+                {showFilters && (
+                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 transition-all">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                            <input
+                                type="text"
+                                placeholder={leadsTranslations.FILTERS.SEARCH_PLACEHOLDER}
+                                value={filters.search || ''}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilters({ ...filters, search: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <select
+                                value={filters.status || 'all'}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters({ ...filters, status: e.target.value === 'all' ? undefined : e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            >
+                                <option value="all">{leadsTranslations.FILTERS.ALL_STATUSES}</option>
+                                {PIPELINE_STAGES.map(status => (
+                                    <option key={status} value={status}>{LEAD_STATUS_CONFIG[status].label}</option>
+                                ))}
+                            </select>
+                            <select
+                                value={filters.source || 'all'}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters({ ...filters, source: e.target.value === 'all' ? undefined : e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            >
+                                <option value="all">{leadsTranslations.FILTERS.ALL_SOURCES}</option>
+                                {uniqueSources.map((source: string) => (
+                                    <option key={source} value={source}>{source}</option>
+                                ))}
+                            </select>
+                            <select
+                                value={filters.assignedTo || 'all'}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters({ ...filters, assignedTo: e.target.value === 'all' ? undefined : e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            >
+                                <option value="all">{leadsTranslations.FILTERS.ALL_SALESPEOPLE}</option>
+                                <option value="unassigned">{leadsTranslations.FILTERS.UNASSIGNED}</option>
+                                {teamMembers.filter((tm: UserProfile) => tm.role === 'sales' || tm.role === 'admin').map((tm: UserProfile) => (
+                                    <option key={tm.id} value={tm.id}>{tm.full_name}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={clearFilters}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 flex items-center justify-center gap-2"
+                            >
+                                <RefreshCw className="w-4 h-4" /> {leadsTranslations.FILTERS.RESET}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Main Content */}
+                {viewMode === 'kanban' ? (
+                    <div className="flex gap-6">
+                        {/* Kanban Columns */}
+                        <div className={`transition-all duration-300 ${selectedLead ? 'flex-1' : 'w-full'}`}>
+                            <LeadKanbanView
+                                leads={leads}
+                                onSelectLead={setSelectedLead}
+                                onStatusChange={handleStatusChange}
+                                leadsTranslations={leadsTranslations}
+                            />
+                        </div>
+
+                        {/* Lead Detail Panel (Kanban Mode) */}
+                        {selectedLead && (
+                            <div className="w-96 flex-shrink-0 bg-white rounded-xl shadow-lg border border-gray-200 p-6 overflow-y-auto max-h-[calc(100vh-200px)] animate-in slide-in-from-right">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h3 className="font-bold text-lg text-gray-800">{selectedLead.title}</h3>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className={`px-2 py-1 rounded text-xs font-semibold ${LEAD_STATUS_CONFIG[selectedLead.status].bgColor} ${LEAD_STATUS_CONFIG[selectedLead.status].color}`}>
+                                                {LEAD_STATUS_CONFIG[selectedLead.status].label}
+                                            </span>
+                                            <span className={`px-2 py-1 rounded text-xs font-semibold ${getLeadScoreColor(selectedLead.lead_score || 0)}`}>
+                                                {getLeadScoreLabel(selectedLead.lead_score || 0)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedLead(null)}
+                                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+
+                                {/* Quick Actions */}
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                    <Button variant="outline" size="sm" icon={<Edit className="w-4 h-4" />} onClick={() => handleEditLead(selectedLead)}>Redigera</Button>
+                                    <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => handleCreateQuote(selectedLead)}>Skapa offert</Button>
+                                </div>
+
+                                {/* Customer Info */}
+                                {selectedLead.customer && (
+                                    <div className="grid grid-cols-1 gap-2 text-sm text-gray-700 mb-4 bg-gray-50 p-3 rounded-lg">
+                                        <div className="flex items-center"><User className="w-4 h-4 mr-2 text-gray-400" /> {selectedLead.customer.name}</div>
+                                        <div className="flex items-center"><Mail className="w-4 h-4 mr-2 text-gray-400" /> {selectedLead.customer.email || 'N/A'}</div>
+                                        <div className="flex items-center"><Phone className="w-4 h-4 mr-2 text-gray-400" /> {selectedLead.customer.phone_number || 'N/A'}</div>
+                                        <div className="flex items-center"><MapPin className="w-4 h-4 mr-2 text-gray-400" /> {selectedLead.customer.city || 'N/A'}</div>
+                                    </div>
+                                )}
+
+                                {/* Details */}
+                                <div className="space-y-3 text-sm">
+                                    <div><strong className="font-semibold text-gray-600">Beskrivning:</strong><p className="text-gray-800 mt-1">{selectedLead.description || 'Ingen beskrivning.'}</p></div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div><strong className="font-semibold text-gray-600">Källa:</strong><p className="text-gray-800">{selectedLead.source || 'Okänd'}</p></div>
+                                        <div><strong className="font-semibold text-gray-600">Värde:</strong><p className="text-gray-800">{selectedLead.estimated_value ? formatCurrency(selectedLead.estimated_value) : '-'}</p></div>
+                                    </div>
+                                </div>
+
+                                {/* Next Action Suggestion */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+                                    <p className="text-sm font-medium text-blue-800 flex items-center gap-2">
+                                        <ArrowRight className="w-4 h-4" />
+                                        {getNextActionSuggestion(selectedLead)}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {/* Lead List */}
+                        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 lg:col-span-1 xl:col-span-1 flex flex-col max-h-[600px]">
+                            <h2 className="text-xl font-semibold mb-4 px-2">Förfrågningar ({leads.length})</h2>
+                            {leadsLoading ? <Loader2 className="w-6 h-6 mx-auto animate-spin text-blue-600" /> : (
+                                <div className="space-y-2 overflow-y-auto pr-2">
+                                    {leads.map(lead => (
+                                        <div key={lead.id} onClick={() => setSelectedLead(lead)} className={`p-3 border-l-4 rounded-r-lg cursor-pointer transition-all ${selectedLead?.id === lead.id ? 'bg-blue-50 border-blue-500 shadow-md' : 'border-transparent hover:bg-gray-50 hover:border-gray-300'}`}>
+                                            <div className="flex justify-between items-start">
+                                                <p className="font-semibold text-gray-800">{lead.title}</p>
+                                                <span className={`text-xs font-bold flex items-center px-2 py-0.5 rounded-full ${getLeadScoreColor(lead.lead_score || 0)}`}>
+                                                    <Zap className="w-3 h-3 mr-1" />{lead.lead_score || 'N/A'}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className={`text-xs px-2 py-0.5 rounded ${LEAD_STATUS_CONFIG[lead.status]?.bgColor} ${LEAD_STATUS_CONFIG[lead.status]?.color}`}>
+                                                    {LEAD_STATUS_CONFIG[lead.status]?.label}
+                                                </span>
+                                                {lead.estimated_value && (
+                                                    <span className="text-xs text-gray-500">{formatCurrency(lead.estimated_value)}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Lead Details */}
+                        <div className="xl:col-span-2 lg:col-span-2 space-y-6 overflow-y-auto pr-2">
+                            {selectedLead ? (
+                                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                    <div className="flex justify-between items-center mb-4 pb-4 border-b">
+                                        <div>
+                                            <h2 className="text-2xl font-bold text-gray-900">{selectedLead.title}</h2>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className={`px-2 py-1 rounded text-xs font-semibold ${LEAD_STATUS_CONFIG[selectedLead.status]?.bgColor} ${LEAD_STATUS_CONFIG[selectedLead.status]?.color}`}>
+                                                    {LEAD_STATUS_CONFIG[selectedLead.status]?.label}
+                                                </span>
+                                                <span className={`px-2 py-1 rounded text-xs font-semibold ${getLeadScoreColor(selectedLead.lead_score || 0)}`}>
+                                                    {getLeadScoreLabel(selectedLead.lead_score || 0)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <button onClick={() => handleEditLead(selectedLead)} className="p-2 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100"><Edit className="w-5 h-5" /></button>
+                                            <button onClick={() => setShowDeleteDialog(true)} className="p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-red-50"><Trash2 className="w-5 h-5" /></button>
+                                            <button onClick={() => handleOpenReminder(selectedLead)} className="p-2 text-gray-500 hover:text-orange-600 rounded-full hover:bg-orange-50" title="Sätt påminnelse"><AlertTriangle className="w-5 h-5" /></button>
+                                        </div>
+                                    </div>
+
+                                    {/* Quick Actions */}
+                                    <div className="flex gap-2 mb-4">
+                                        <Button variant="outline" size="sm" icon={<PhoneCall className="w-4 h-4" />}>Ring</Button>
+                                        <Button variant="outline" size="sm" icon={<Mail className="w-4 h-4" />}>E-post</Button>
+                                        <Button variant="outline" size="sm" icon={<Calendar className="w-4 h-4" />}>Boka möte</Button>
+                                        <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => handleCreateQuote(selectedLead)}>Skapa offert</Button>
+                                    </div>
+
+                                    {/* Next Action Suggestion */}
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                                        <p className="text-sm font-medium text-blue-800 flex items-center gap-2">
+                                            <ArrowRight className="w-4 h-4" />
+                                            Rekommenderat: {getNextActionSuggestion(selectedLead)}
+                                        </p>
+                                    </div>
+
+                                    {selectedLead.customer && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700 mb-6 bg-gray-50 p-4 rounded-lg">
+                                            <div className="flex items-center"><User className="w-4 h-4 mr-2 text-gray-400" /> {selectedLead.customer.name}</div>
+                                            <div className="flex items-center"><Mail className="w-4 h-4 mr-2 text-gray-400" /> {selectedLead.customer.email || 'N/A'}</div>
+                                            <div className="flex items-center"><Phone className="w-4 h-4 mr-2 text-gray-400" /> {selectedLead.customer.phone_number || 'N/A'}</div>
+                                            <div className="flex items-center"><MapPin className="w-4 h-4 mr-2 text-gray-400" /> {selectedLead.customer.city || 'N/A'}</div>
+                                        </div>
+                                    )}
+                                    <div className="space-y-4">
+                                        <div><strong className="font-semibold text-gray-600">Beskrivning:</strong> <p className="text-gray-800 mt-1">{selectedLead.description || 'Ingen beskrivning.'}</p></div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div><strong className="font-semibold text-gray-600">Källa:</strong> <p className="text-gray-800 mt-1">{selectedLead.source || 'Okänd'}</p></div>
+                                            <div><strong className="font-semibold text-gray-600">Uppskattat värde:</strong> <p className="text-gray-800 mt-1">{selectedLead.estimated_value ? formatCurrency(selectedLead.estimated_value) : 'Ej angivet'}</p></div>
+                                        </div>
+                                        <div><strong className="font-semibold text-gray-600">Senaste aktivitet:</strong> <p className="text-gray-800 mt-1">{formatDate(selectedLead.last_activity_at || selectedLead.created_at || '')}</p></div>
+                                    </div>
+                                    <div className="border-t pt-4 mt-6">
+                                        <h3 className="text-lg font-semibold mb-2 flex items-center"><Zap className="w-5 h-5 mr-2 text-purple-500" />AI-Assistent: Nästa Steg</h3>
+                                        {loading.ai ? <Loader2 className="w-5 h-5 mx-auto animate-spin text-purple-600" /> : (aiSuggestions.length > 0 ? aiSuggestions.map(suggestion => (
+                                            <div key={suggestion.title} className="p-3 bg-purple-50 text-purple-800 rounded-lg text-sm mb-2 border border-purple-100">
+                                                <p><strong>{suggestion.title}</strong> <span className="text-xs opacity-70">({suggestion.priority})</span></p>
+                                                <p className="text-xs">{suggestion.reasoning}</p>
+                                            </div>
+                                        )) : <p className="text-sm text-gray-500">Inga specifika förslag just nu.</p>)}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center min-h-[400px]">
+                                    <Briefcase className="w-16 h-16 text-gray-300 mb-4" />
+                                    <h3 className="text-xl font-semibold text-gray-700">Välj ett lead</h3>
+                                    <p className="text-gray-500 mt-1">Välj ett lead från listan till vänster för att se detaljer och AI-förslag.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Sidebar */}
+                        <div className="hidden xl:block space-y-6 overflow-y-auto pr-2">
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                                <h3 className="text-lg font-semibold mb-3 flex items-center"><Rss className="w-5 h-5 mr-2 text-orange-500" />Nya Affärsmöjligheter</h3>
+                                {loading.rss ? <Loader2 className="w-5 h-5 mx-auto animate-spin text-orange-600" /> : (
+                                    <div className="space-y-3">
+                                        {rssArticles.slice(0, 5).map(item => (
+                                            <div key={item.link} className="p-2 border-l-4 border-orange-200 hover:bg-orange-50 transition-colors">
+                                                <a href={item.link} target="_blank" rel="noopener noreferrer" className="font-semibold text-sm hover:underline text-gray-800">{item.title}</a>
+                                                <button onClick={() => handleCreateFromArticle(item)} className="text-xs text-primary-600 hover:underline mt-1 font-semibold block">Skapa lead av detta &rarr;</button>
+                                            </div>
+                                        ))}
+                                        {rssArticles.length === 0 && <p className="text-sm text-gray-400">Inga artiklar tillgängliga.</p>}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                                <h3 className="text-lg font-semibold mb-3 flex items-center"><CheckSquare className="w-5 h-5 mr-2 text-green-500" />Mina Uppgifter</h3>
+                                {loading.tasks ? <Loader2 className="w-5 h-5 mx-auto animate-spin text-green-600" /> : (
+                                    <div className="space-y-2">
+                                        {salesTasks.filter(t => !t.is_completed).slice(0, 5).map(task => (
+                                            <div key={task.id} className="flex items-center group">
+                                                <button onClick={() => handleTaskToggle(task)} className="p-1">
+                                                    <Square className="w-5 h-5 text-gray-300 group-hover:text-green-500 transition-colors" />
+                                                </button>
+                                                <label className="ml-2 text-sm text-gray-700">{task.title}</label>
+                                            </div>
+                                        ))}
+                                        {salesTasks.filter(t => !t.is_completed).length === 0 && <p className="text-sm text-gray-400 p-2">Inga aktiva uppgifter. Bra jobbat!</p>}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+
+            {/* Reminder Modal */}
+            {
+                reminderEntity && (
+                    <ReminderModal
+                        isOpen={isReminderModalOpen}
+                        onClose={() => setIsReminderModalOpen(false)}
+                        entityType="lead"
+                        entityId={reminderEntity.id}
+                        entityTitle={reminderEntity.title}
+                    />
+                )
+            }
+        </>
+    );
+};
+
+export default LeadManagement;
