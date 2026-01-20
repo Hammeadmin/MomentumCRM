@@ -49,6 +49,19 @@ export default {
           foreground: 'hsl(var(--accent-foreground))',
         },
 
+        // Brand accent - premium indigo for glows and highlights (use sparingly)
+        'brand-accent': {
+          DEFAULT: '#6366f1',
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          200: '#c7d2fe',
+          300: '#a5b4fc',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+        },
+
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
@@ -90,6 +103,11 @@ export default {
           foreground: 'hsl(var(--popover-foreground))',
         },
       },
+      // Typography - tighter letter-spacing for modern look
+      letterSpacing: {
+        'tighter-custom': '-0.02em',
+        'tight-custom': '-0.01em',
+      },
       screens: {
         'xs': '475px',
       },
@@ -104,6 +122,12 @@ export default {
         'scale-in': 'scaleIn 0.3s ease-out',
         'bounce-subtle': 'bounce 1s infinite',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        // High-end animations
+        'fade-in-up': 'fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'slow-pulse': 'slowPulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'float': 'float 3s ease-in-out infinite',
+        'draw-path': 'drawPath 0.8s cubic-bezier(0.65, 0, 0.35, 1) forwards',
+        'shine': 'shine 1.5s ease-in-out',
       },
       keyframes: {
         fadeIn: {
@@ -121,6 +145,27 @@ export default {
         scaleIn: {
           '0%': { opacity: '0', transform: 'scale(0.95)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        // High-end keyframes
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(30px)', filter: 'blur(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)', filter: 'blur(0)' },
+        },
+        slowPulse: {
+          '0%, 100%': { opacity: '0.4' },
+          '50%': { opacity: '0.8' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-5px)' },
+        },
+        drawPath: {
+          '0%': { strokeDashoffset: '100' },
+          '100%': { strokeDashoffset: '0' },
+        },
+        shine: {
+          '0%': { left: '-100%' },
+          '100%': { left: '100%' },
         },
       },
       maxWidth: {
@@ -141,6 +186,11 @@ export default {
         'glow-primary': '0 0 20px hsl(var(--primary) / 0.3)',
         'glow-accent': '0 0 20px hsl(var(--accent) / 0.3)',
         '3xl': '0 30px 60px -15px rgba(0, 0, 0, 0.3)',
+        // High-end glassmorphic shadows
+        'glass-premium': '0 20px 40px rgba(0, 0, 0, 0.2)',
+        'glow-brand': '0 0 120px rgba(99, 102, 241, 0.2)',
+        'glow-brand-intense': '0 0 80px rgba(99, 102, 241, 0.4)',
+        'inner-glow': 'inset 0 1px 0 0 rgba(255, 255, 255, 0.05)',
       },
       borderRadius: {
         lg: 'var(--radius)',
