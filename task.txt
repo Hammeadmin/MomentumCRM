@@ -35,3 +35,25 @@
 
 ## Phase 7: Teams.tsx
 - [ ] Add internal email functionality
+
+
+
+*INITIAL ISSUES SENT BY USER:*
+
+
+''However there are some issues that ive found:
+1. Sending the quote as an email from quotesdetailspage is not working. I tried it but didnt get an email and there are no logs in supabase, it seems the function is not called. I also noticed hardcoded text for ''Momentum CRM'' in this page. It should be dynamic and instead of ''Momentum CRM'' it should be the users company name. Also make sure the quote acceptance link is provided with the email.
+2. I tried sending from quotemanagementpage.tsx but it didnt work from here either. It seems the issue is with SendQuoteModal.tsx since both pages uses this modal. It seems the modal is not correctly wired to use send-quote email.
+3. Sending from invoicemanagement.tsx did not work. It's ''sent'' according to the ui but the email was not actually sent and the edge function has no logs, i.e it didnt fire off. invoicemanagement.tsx uses a hardcoded modal - showEmailModal - which is not configured to use the edge function it seems.
+4. I noticed some other issues while testing the email functions, in calendarview.tsx. Some events allows for ''skicka inbjudan'', a button that shows on the detailsmodal for ''säljmöte'' only. However i was not able to test this function since the button ''skicka inbjudan'' only appears after i mark the lead/sales meeting as ''won''. This is not logical since i need to send out the invitation for the salesmeeting BEFORE i win/lose the lead. Also since the lead was connected to a test customer i could not try out the email sending function since the customer has a mock-email and it cant be edited in this modal. We should change that as well.
+5.We need to implement the ''skicka inbjudan'' button for all sales event cards on calendarview.tsx, we should also add an send email button for all other events just in case. maybe something is booked and you need to contact the customer, it would be easier to do it right away from the calendarview instead of navigating to customers -> contact -> send email. 
+6. There is currently no function or ui for contacting a customer in the customermanagement.tsx page. It is crucial to be able to contact customers from here for simplicity. There is a button for ''boka möte'' though, this button navigates to calendarview.tsx and opens up the create event modal, it does not however allow me to invite the customer to the meeting, which is not logical and not a working workflow. We need to fix this as well.
+7. I couldnt test remindermanagement.tsx since the email for my customer is a mock email and i cant change the email in the modal. However i need you to analyze this component and make sure its properly configured. *SIDE NOTE*: Also we need to implement this component in invoicemanagement.tsx as well. We need to be able to send reminders for invoices.
+8. In payrollmanagement.tsx there is currently no logic for sending payroll reports to our employees. It is crucial to be able to send out ''lönespecifikation'' in an easy and robust way from this component. Implement email sending both individually and en-mass.
+9. We need to implement email-sending between organisation employees as well in an easy way. This could be implemented in team.tsx.
+
+
+*SIDE NOTE:*
+8. While i tested the calendarview i noticed another issue - when marking a salesmeeting as ''won'' for a customer who i created in leadsmanagement.tsx temporary for a quote i get an error: Kunde inte skapa offert: Lead must be linked to a customer to create a quote. It seems the temporary customer logic in leadsmanagement.tsx is not robust enough. The handling for this needs to be more robust - when creating a lead from a non-existing customer we need to atleast fill in their name and email or something and actually create a customer directly so all other components work. Analyze this flow and make the proper fixes, make sure to do it comprehensive.''
+
+
