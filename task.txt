@@ -1,0 +1,37 @@
+# Email System Comprehensive Fix - Task Checklist
+
+## Phase 1: SendQuoteModal.tsx ✅ COMPLETE
+- [x] Wire to `send-quote-email` edge function (fixed in quotes.ts)
+- [x] Replace hardcoded "Momentum CRM" with organisation name
+- [x] Pass `include_acceptance_link: true`
+
+## Phase 2: InvoiceManagement.tsx ✅ COMPLETE
+- [x] Fix sendInvoiceEmail to use `send-email` edge function
+- [x] Added organisation to InvoiceWithRelations type
+- [x] Replaced hardcoded company names with dynamic organisation name
+
+## Critical Fix: LeadManagement Customer Handling ✅ COMPLETE
+- [x] Added inline customer creation toggle in LeadFormModal
+- [x] Create actual customer when lead created without existing customer
+- [x] Require name + email at minimum
+
+## Phase 3: CalendarView.tsx
+- [ ] Show "Skicka inbjudan" for all sales meetings (not just after win)
+- [ ] Add email button for all event types
+- [ ] Make customer email editable in modal
+
+## Phase 4: CustomerManagement.tsx
+- [ ] Add "Skicka e-post" button
+- [ ] Add EmailComposer modal
+- [ ] Fix "Boka möte" to include invitation
+
+## Phase 5: ReminderManagement.tsx
+- [ ] Verify edge function integration
+- [ ] Add to InvoiceManagement
+
+## Phase 6: PayrollManagement.tsx
+- [ ] Add individual lönespecifikation email
+- [ ] Add bulk sending
+
+## Phase 7: Teams.tsx
+- [ ] Add internal email functionality
