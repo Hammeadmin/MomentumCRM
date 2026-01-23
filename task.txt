@@ -29,7 +29,7 @@
 - [ ] Verify edge function integration
 - [ ] Add to InvoiceManagement
 
-## Phase 6: PayrollManagement.tsx
+## Phase 6: PayrollDashboard.tsx
 - [ ] Add individual lönespecifikation email
 - [ ] Add bulk sending
 
