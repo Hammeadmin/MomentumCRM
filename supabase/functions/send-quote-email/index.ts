@@ -138,8 +138,13 @@ Deno.serve(async (req: Request) => {
       }
 
       acceptanceToken = token;
-      const siteUrl = Deno.env.get('SITE_URL') || req.headers.get('origin') || '';
-      acceptanceUrl = `${siteUrl}/quote-accept/${token}`;
+      const siteUrl = Deno.env.get('SITE_URL')
+        || Deno.env.get('PUBLIC_SITE_URL')
+        || req.headers.get('origin')
+        || 'https://crm.momentumcrm.com';
+      const cleanSiteUrl = siteUrl.replace(/\/$/, '');
+      acceptanceUrl = `${cleanSiteUrl}/quote-accept/${token}`;
+      console.log(`Generated acceptance URL: ${acceptanceUrl}`);
     }
 
     // Generate tracking pixel URL (supabaseUrl from line 55)
