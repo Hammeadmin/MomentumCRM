@@ -43,6 +43,12 @@ export default function AnimatedMomentum({
                         className={`inline-block ${isVisible ? 'animate-momentum-letter' : 'opacity-0 translate-y-6'}`}
                         style={{
                             animationDelay: isVisible ? `${index * letterDelay}ms` : undefined,
+                            // Inherit text gradient properties
+                            background: 'inherit',
+                            backgroundClip: 'inherit',
+                            WebkitBackgroundClip: 'inherit',
+                            WebkitTextFillColor: 'inherit',
+                            color: 'inherit',
                         }}
                     >
                         {letter}

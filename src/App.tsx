@@ -19,6 +19,8 @@ import ContactPage from './pages/public/ContactPage';
 import CaseStudiesPage from './pages/public/CaseStudiesPage';
 import Integritetspolicy from './pages/public/Integritetspolicy';
 import Anvandarvillkor from './pages/public/Anvandarvillkor';
+import SignupPage from './pages/public/SignupPage';
+import CompleteSignupPage from './pages/public/CompleteSignupPage';
 
 function App() {
   return (
@@ -49,7 +51,8 @@ function App() {
                   AUTH ROUTES (Public)
                   =========================== */}
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<LoginPage />} /> {/* Same component, just toggles to signup */}
+              <Route path="/register" element={<SignupPage />} />
+              <Route path="/complete-signup" element={<CompleteSignupPage />} />
 
               {/* Public standalone routes */}
               <Route path="/quote-accept/:token" element={<QuoteAcceptance />} />

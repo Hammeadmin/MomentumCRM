@@ -31,6 +31,11 @@ function Orders() {
   const [orders, setOrders] = useState<OrderWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 20;
+
   // Delete confirmation state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<OrderWithRelations | null>(null);
@@ -45,21 +50,26 @@ function Orders() {
     if (viewMode === 'table' && organisationId) {
       fetchOrders();
     }
-  }, [viewMode, organisationId]);
+  }, [viewMode, organisationId, currentPage]);
 
   const fetchOrders = async () => {
     if (!organisationId) return;
 
     setLoading(true);
     try {
-      const { data, error } = await getOrders(organisationId);
+      const { data, count, error } = await getOrders(organisationId, {}, currentPage, pageSize);
       if (error) throw error;
       setOrders(data || []);
+      setTotalCount(count);
     } catch (err) {
       console.error('Error fetching orders:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
 
   const handleOrderClick = (order: OrderWithRelations) => {
@@ -144,6 +154,10 @@ function Orders() {
           onOrderClick={handleOrderClick}
           onStatusChange={handleStatusChange}
           onDelete={handleDeleteRequest}
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          onPageChange={handlePageChange}
         />
       )}
 

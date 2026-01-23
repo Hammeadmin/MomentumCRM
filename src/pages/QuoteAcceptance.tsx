@@ -29,6 +29,7 @@ import {
   type ROTFormData
 } from '../lib/rot';
 import { formatCurrency, formatDate } from '../lib/database';
+import { supabase } from '../lib/supabase';
 
 
 function QuoteAcceptance() {
@@ -124,6 +125,24 @@ function QuoteAcceptance() {
         return;
       }
 
+      // Send acceptance notification to organisation
+      if (quote?.organisation?.email) {
+        try {
+          await supabase.functions.invoke('send-email', {
+            body: {
+              to: quote.organisation.email,
+              subject: `✅ Offert ${quote.quote_number} har godkänts!`,
+              html: generateAcceptanceNotificationEmail(quote, rotData),
+              from_name: 'MomentumCRM'
+            }
+          });
+          console.log('Acceptance notification sent to', quote.organisation.email);
+        } catch (notifyErr) {
+          console.error('Failed to send acceptance notification:', notifyErr);
+          // Don't block the success flow if notification fails
+        }
+      }
+
       setAccepted(true);
     } catch (err) {
       console.error('Error accepting quote:', err);
@@ -131,6 +150,74 @@ function QuoteAcceptance() {
     } finally {
       setAccepting(false);
     }
+  };
+
+  // Generate notification email for organisation
+  const generateAcceptanceNotificationEmail = (quoteData: any, rotInfo: ROTFormData) => {
+    const customerName = quoteData?.customer?.name || 'Kund';
+    const quoteAmount = formatCurrency(quoteData?.total_amount || 0);
+    const rotAmount = quoteData?.include_rot ? formatCurrency(calculateROTAmount(quoteData?.total_amount || 0)) : null;
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Offert godkänd</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background: #f3f4f6;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="margin: 0; font-size: 28px;">🎉 Offert godkänd!</h1>
+          </div>
+          
+          <div style="background: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <p style="font-size: 16px; margin-bottom: 20px;">Fantastiska nyheter! <strong>${customerName}</strong> har just godkänt offert <strong>${quoteData?.quote_number}</strong>.</p>
+            
+            <div style="background: #f0fdf4; border: 1px solid #86efac; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin: 0 0 15px 0; color: #166534;">Offertdetaljer:</h3>
+              <table style="width: 100%;">
+                <tr>
+                  <td style="padding: 5px 0; color: #374151;">Titel:</td>
+                  <td style="padding: 5px 0; font-weight: bold;">${quoteData?.title}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0; color: #374151;">Belopp:</td>
+                  <td style="padding: 5px 0; font-weight: bold;">${quoteAmount}</td>
+                </tr>
+                ${rotAmount ? `
+                <tr>
+                  <td style="padding: 5px 0; color: #059669;">ROT-avdrag:</td>
+                  <td style="padding: 5px 0; font-weight: bold; color: #059669;">-${rotAmount}</td>
+                </tr>
+                ` : ''}
+                <tr>
+                  <td style="padding: 5px 0; color: #374151;">Kund:</td>
+                  <td style="padding: 5px 0;">${customerName}</td>
+                </tr>
+                ${quoteData?.customer?.email ? `
+                <tr>
+                  <td style="padding: 5px 0; color: #374151;">E-post:</td>
+                  <td style="padding: 5px 0;">${quoteData.customer.email}</td>
+                </tr>
+                ` : ''}
+                ${quoteData?.customer?.phone_number ? `
+                <tr>
+                  <td style="padding: 5px 0; color: #374151;">Telefon:</td>
+                  <td style="padding: 5px 0;">${quoteData.customer.phone_number}</td>
+                </tr>
+                ` : ''}
+              </table>
+            </div>
+            
+            <p style="margin: 20px 0; color: #6b7280;">En ny order har automatiskt skapats baserat på den godkända offerten. Logga in för att se detaljer och planera nästa steg.</p>
+            
+            <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px;">Detta är en automatisk notifiering från MomentumCRM.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
   };
 
   const getClientIP = async (): Promise<string> => {

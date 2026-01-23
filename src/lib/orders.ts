@@ -35,7 +35,131 @@ export interface OrderFilters {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  commissionable?: boolean;
 }
+
+// All order statuses for Kanban columns
+export const KANBAN_ORDER_STATUSES: OrderStatus[] = [
+  'öppen_order',
+  'bokad_bekräftad',
+  'ej_slutfört',
+  'redo_fakturera',
+  'avbokad_kund'
+];
+
+// Result type for Kanban data with per-status counts
+export interface KanbanOrdersResult {
+  data: OrderWithRelations[];
+  countsByStatus: Record<string, number>;
+  error: Error | null;
+}
+
+/**
+ * Fetches orders for Kanban board - gets top N orders for EACH status in parallel.
+ * This is more efficient than standard pagination for Kanban boards.
+ * 
+ * @param organisationId - The organisation ID to fetch orders for
+ * @param perColumnLimit - Number of orders to fetch per column (default: 20)
+ * @returns Object containing combined orders array, counts per status, and any error
+ */
+export const getKanbanOrders = async (
+  organisationId: string,
+  perColumnLimit: number = 20
+): Promise<KanbanOrdersResult> => {
+  try {
+    const selectQuery = `
+      *,
+      customer:customers(*),
+      assigned_to:user_profiles!orders_assigned_to_user_id_fkey(*),
+      assigned_team:teams(*, team_leader:user_profiles(*)),
+      primary_salesperson:user_profiles!orders_primary_salesperson_id_fkey(*),
+      secondary_salesperson:user_profiles!orders_secondary_salesperson_id_fkey(*),
+      quote:quotes(*, quote_line_items(*))
+    `;
+
+    // Create a query for each status in parallel
+    const queries = KANBAN_ORDER_STATUSES.map(status =>
+      supabase
+        .from('orders')
+        .select(selectQuery, { count: 'exact' })
+        .eq('organisation_id', organisationId)
+        .eq('status', status)
+        .order('created_at', { ascending: false })
+        .range(0, perColumnLimit - 1)
+    );
+
+    // Execute all queries in parallel
+    const results = await Promise.all(queries);
+
+    // Process results
+    const allOrders: OrderWithRelations[] = [];
+    const countsByStatus: Record<string, number> = {};
+
+    results.forEach((result: { data: any[] | null; error: any; count: number | null }, index: number) => {
+      const status = KANBAN_ORDER_STATUSES[index];
+
+      if (result.error) {
+        console.error(`Error fetching orders for status ${status}:`, result.error);
+        countsByStatus[status] = 0;
+      } else {
+        const processedOrders = (result.data || []).map(processOrderData);
+        allOrders.push(...processedOrders);
+        countsByStatus[status] = result.count || 0;
+      }
+    });
+
+    return { data: allOrders, countsByStatus, error: null };
+  } catch (err) {
+    console.error('Error fetching kanban orders:', err);
+    return { data: [], countsByStatus: {}, error: err as Error };
+  }
+};
+
+/**
+ * Fetches more orders for a specific status column (for "Load More" functionality).
+ * 
+ * @param organisationId - The organisation ID
+ * @param status - The specific order status to fetch more of
+ * @param offset - Starting offset (e.g., 20 to skip first 20)
+ * @param limit - Number of additional orders to fetch (default: 20)
+ * @returns Array of additional orders for that status
+ */
+export const getMoreOrdersByStatus = async (
+  organisationId: string,
+  status: OrderStatus,
+  offset: number,
+  limit: number = 20
+): Promise<{ data: OrderWithRelations[] | null; error: Error | null }> => {
+  try {
+    const selectQuery = `
+      *,
+      customer:customers(*),
+      assigned_to:user_profiles!orders_assigned_to_user_id_fkey(*),
+      assigned_team:teams(*, team_leader:user_profiles(*)),
+      primary_salesperson:user_profiles!orders_primary_salesperson_id_fkey(*),
+      secondary_salesperson:user_profiles!orders_secondary_salesperson_id_fkey(*),
+      quote:quotes(*, quote_line_items(*))
+    `;
+
+    const { data, error } = await supabase
+      .from('orders')
+      .select(selectQuery)
+      .eq('organisation_id', organisationId)
+      .eq('status', status)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+
+    const processedData = (data || []).map(processOrderData);
+    return { data: processedData, error: null };
+  } catch (err) {
+    console.error('Error fetching more orders:', err);
+    return { data: null, error: err as Error };
+  }
+};
 
 // Helper function to process order data consistently
 const processOrderData = (order: any): OrderWithRelations => {
@@ -52,8 +176,10 @@ const processOrderData = (order: any): OrderWithRelations => {
 // Database operations
 export const getOrders = async (
   organisationId: string,
-  filters: OrderFilters = {}
-): Promise<{ data: OrderWithRelations[] | null; error: Error | null }> => {
+  filters: OrderFilters = {},
+  page: number = 0,
+  pageSize: number = 20
+): Promise<{ data: OrderWithRelations[] | null; count: number; error: Error | null }> => {
   try {
     let query = supabase
       .from('orders')
@@ -65,7 +191,7 @@ export const getOrders = async (
       primary_salesperson:user_profiles!orders_primary_salesperson_id_fkey(*),
       secondary_salesperson:user_profiles!orders_secondary_salesperson_id_fkey(*),
       quote:quotes(*, quote_line_items(*))
-    `)
+    `, { count: 'exact' })
       .eq('organisation_id', organisationId);
 
 
@@ -106,18 +232,23 @@ export const getOrders = async (
       query = query.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
     }
 
-    const { data, error } = await query.order('created_at', { ascending: false });
+    // Apply pagination
+    const from = page * pageSize;
+    const to = (page + 1) * pageSize - 1;
+    query = query.range(from, to);
+
+    const { data, error, count } = await query.order('created_at', { ascending: false });
 
     if (error) {
-      return { data: null, error: new Error(error.message) };
+      return { data: null, count: 0, error: new Error(error.message) };
     }
     const processedData = data?.map(processOrderData);
-    return { data: (processedData as OrderWithRelations[]) || [], error: null };
+    return { data: (processedData as OrderWithRelations[]) || [], count: count || 0, error: null };
 
 
   } catch (err) {
     console.error('Error fetching orders:', err);
-    return { data: null, error: err as Error };
+    return { data: null, count: 0, error: err as Error };
   }
 
 };

@@ -21,6 +21,7 @@ export { default as Pagination } from './Pagination';
 export { default as QuickActions, createCommonActions } from './QuickActions';
 export { FilterTabs, useFilterTabs } from './FilterTabs';
 export { StatusBadge, HotLeadBadge, PriorityBadge, STATUS_COLORS } from './StatusBadge';
+export { VirtualTable, type VirtualTableColumn, type VirtualTableProps } from './VirtualTable';
 
 // Usage examples:
 // import { Button, Modal, Badge, Breadcrumbs, KeyboardShortcutsHelp } from './components/ui';

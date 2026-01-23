@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -137,6 +138,7 @@ const getRoleColor = (role?: string) => {
 
 function CalendarView() {
   const { user, session } = useAuth();
+  const location = useLocation();
   const { success, error: showToastError, warning } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
@@ -442,6 +444,24 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
   useEffect(() => {
     initializeCalendar();
   }, [user]);
+
+  // Handle navigation state for creating meeting from customer page
+  useEffect(() => {
+    const state = location.state as { createMeetingForCustomer?: { id: string; name: string } } | null;
+    if (state?.createMeetingForCustomer && currentUserProfile) {
+      const customer = state.createMeetingForCustomer;
+      // Pre-fill the form with customer info and open modal
+      setEventForm({
+        title: `Möte med ${customer.name}`,
+        type: 'meeting',
+        description: `Möte bokat från kundkortet för ${customer.name}`,
+        assigned_to_user_id: currentUserProfile.id,
+      });
+      setShowEventModal(true);
+      // Clear the navigation state so it doesn't re-trigger
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, currentUserProfile]);
 
   useEffect(() => {
     if (currentUserProfile) {

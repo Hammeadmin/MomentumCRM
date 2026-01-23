@@ -83,6 +83,8 @@ function QuoteManagement() {
   useEffect(() => {
     // Check if we navigated here with an order object in the state
     const orderToQuote = location.state?.orderToQuote;
+    // Check if we navigated here from customer page to create quote for customer
+    const createForCustomer = location.state?.createForCustomer;
 
     if (orderToQuote) {
       // Pre-populate by setting a "draft" editing quote
@@ -95,6 +97,23 @@ function QuoteManagement() {
         description: orderToQuote.description || '',
         // Note: order_id might need to be handled if we want to link back explicitly
         // For now, mapping basic fields
+        status: 'draft',
+        total_amount: 0
+      } as unknown as QuoteWithRelations;
+
+      setEditingQuote(draftQuote);
+      setShowCreateModal(true);
+
+      // Clear the state so it doesn't re-trigger on refresh
+      window.history.replaceState({}, document.title)
+    } else if (createForCustomer) {
+      // Pre-populate with just the customer
+      const draftQuote = {
+        id: '',
+        customer_id: createForCustomer.id,
+        customer: createForCustomer,
+        title: `Offert för ${createForCustomer.name}`,
+        description: '',
         status: 'draft',
         total_amount: 0
       } as unknown as QuoteWithRelations;

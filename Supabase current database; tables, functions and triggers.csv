@@ -1,0 +1,1666 @@
+type,schema,name,details
+FUNCTION,cron,alter_job,"job_id bigint, schedule text DEFAULT NULL::text, command text DEFAULT NULL::text, database text DEFAULT NULL::text, username text DEFAULT NULL::text, active boolean DEFAULT NULL::boolean RETURNS void AS CREATE OR REPLACE FUNCTION cron.alter_job(job_id bigint, schedule text DEFAULT NULL::text, command text DEFAULT NULL::text, database text DEFAULT NULL::text, username text DEFAULT NULL::text, active boolean DEFAULT NULL::boolean)
+ RETURNS void
+ LANGUAGE c
+AS '$libdir/pg_cron', $function$cron_alter_job$function$
+"
+FUNCTION,cron,job_cache_invalidate," RETURNS trigger AS CREATE OR REPLACE FUNCTION cron.job_cache_invalidate()
+ RETURNS trigger
+ LANGUAGE c
+AS '$libdir/pg_cron', $function$cron_job_cache_invalidate$function$
+"
+FUNCTION,cron,schedule,"job_name text, schedule text, command text RETURNS bigint AS CREATE OR REPLACE FUNCTION cron.schedule(job_name text, schedule text, command text)
+ RETURNS bigint
+ LANGUAGE c
+AS '$libdir/pg_cron', $function$cron_schedule_named$function$
+"
+FUNCTION,cron,schedule,"schedule text, command text RETURNS bigint AS CREATE OR REPLACE FUNCTION cron.schedule(schedule text, command text)
+ RETURNS bigint
+ LANGUAGE c
+ STRICT
+AS '$libdir/pg_cron', $function$cron_schedule$function$
+"
+FUNCTION,cron,schedule_in_database,"job_name text, schedule text, command text, database text, username text DEFAULT NULL::text, active boolean DEFAULT true RETURNS bigint AS CREATE OR REPLACE FUNCTION cron.schedule_in_database(job_name text, schedule text, command text, database text, username text DEFAULT NULL::text, active boolean DEFAULT true)
+ RETURNS bigint
+ LANGUAGE c
+AS '$libdir/pg_cron', $function$cron_schedule_named$function$
+"
+FUNCTION,cron,unschedule,"job_id bigint RETURNS boolean AS CREATE OR REPLACE FUNCTION cron.unschedule(job_id bigint)
+ RETURNS boolean
+ LANGUAGE c
+ STRICT
+AS '$libdir/pg_cron', $function$cron_unschedule$function$
+"
+FUNCTION,cron,unschedule,"job_name text RETURNS boolean AS CREATE OR REPLACE FUNCTION cron.unschedule(job_name text)
+ RETURNS boolean
+ LANGUAGE c
+ STRICT
+AS '$libdir/pg_cron', $function$cron_unschedule_named$function$
+"
+FUNCTION,graphql,_internal_resolve,"query text, variables jsonb DEFAULT '{}'::jsonb, ""operationName"" text DEFAULT NULL::text, extensions jsonb DEFAULT NULL::jsonb RETURNS jsonb AS CREATE OR REPLACE FUNCTION graphql._internal_resolve(query text, variables jsonb DEFAULT '{}'::jsonb, ""operationName"" text DEFAULT NULL::text, extensions jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE c
+AS '$libdir/pg_graphql', $function$resolve_wrapper$function$
+"
+FUNCTION,graphql,comment_directive,"comment_ text RETURNS jsonb AS CREATE OR REPLACE FUNCTION graphql.comment_directive(comment_ text)
+ RETURNS jsonb
+ LANGUAGE sql
+ IMMUTABLE
+AS $function$
+    /*
+    comment on column public.account.name is '@graphql.name: myField'
+    */
+    select
+        coalesce(
+            (
+                regexp_match(
+                    comment_,
+                    '@graphql\((.+)\)'
+                )
+            )[1]::jsonb,
+            jsonb_build_object()
+        )
+$function$
+"
+FUNCTION,graphql,exception,"message text RETURNS text AS CREATE OR REPLACE FUNCTION graphql.exception(message text)
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$
+begin
+    raise exception using errcode='22000', message=message;
+end;
+$function$
+"
+FUNCTION,graphql,get_schema_version," RETURNS integer AS CREATE OR REPLACE FUNCTION graphql.get_schema_version()
+ RETURNS integer
+ LANGUAGE sql
+ SECURITY DEFINER
+AS $function$
+    select last_value from graphql.seq_schema_version;
+$function$
+"
+FUNCTION,graphql,increment_schema_version," RETURNS event_trigger AS CREATE OR REPLACE FUNCTION graphql.increment_schema_version()
+ RETURNS event_trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+begin
+    perform pg_catalog.nextval('graphql.seq_schema_version');
+end;
+$function$
+"
+FUNCTION,graphql,resolve,"query text, variables jsonb DEFAULT '{}'::jsonb, ""operationName"" text DEFAULT NULL::text, extensions jsonb DEFAULT NULL::jsonb RETURNS jsonb AS CREATE OR REPLACE FUNCTION graphql.resolve(query text, variables jsonb DEFAULT '{}'::jsonb, ""operationName"" text DEFAULT NULL::text, extensions jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
+declare
+    res jsonb;
+    message_text text;
+begin
+  begin
+    select graphql._internal_resolve(""query"" := ""query"",
+                                     ""variables"" := ""variables"",
+                                     ""operationName"" := ""operationName"",
+                                     ""extensions"" := ""extensions"") into res;
+    return res;
+  exception
+    when others then
+    get stacked diagnostics message_text = message_text;
+    return
+    jsonb_build_object('data', null,
+                       'errors', jsonb_build_array(jsonb_build_object('message', message_text)));
+  end;
+end;
+$function$
+"
+FUNCTION,graphql_public,graphql,"""operationName"" text DEFAULT NULL::text, query text DEFAULT NULL::text, variables jsonb DEFAULT NULL::jsonb, extensions jsonb DEFAULT NULL::jsonb RETURNS jsonb AS CREATE OR REPLACE FUNCTION graphql_public.graphql(""operationName"" text DEFAULT NULL::text, query text DEFAULT NULL::text, variables jsonb DEFAULT NULL::jsonb, extensions jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE sql
+AS $function$
+            select graphql.resolve(
+                query := query,
+                variables := coalesce(variables, '{}'),
+                ""operationName"" := ""operationName"",
+                extensions := extensions
+            );
+        $function$
+"
+FUNCTION,pgbouncer,get_auth,"p_usename text RETURNS TABLE(username text, password text) AS CREATE OR REPLACE FUNCTION pgbouncer.get_auth(p_usename text)
+ RETURNS TABLE(username text, password text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  BEGIN
+      RAISE DEBUG 'PgBouncer auth request: %', p_usename;
+
+      RETURN QUERY
+      SELECT
+          rolname::text,
+          CASE WHEN rolvaliduntil < now()
+              THEN null
+              ELSE rolpassword::text
+          END
+      FROM pg_authid
+      WHERE rolname=$1 and rolcanlogin;
+  END;
+  $function$
+"
+FUNCTION,public,accept_quote_with_rot,"token text, rot_type text, rot_identifier text, fastighetsbeteckning text, client_ip text DEFAULT NULL::text RETURNS json AS CREATE OR REPLACE FUNCTION public.accept_quote_with_rot(token text, rot_type text, rot_identifier text, fastighetsbeteckning text, client_ip text DEFAULT NULL::text)
+ RETURNS json
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+  quote_record quotes%ROWTYPE;
+  order_id uuid;
+  result json;
+BEGIN
+  -- Find and validate quote
+  SELECT * INTO quote_record
+  FROM quotes
+  WHERE acceptance_token = token
+    AND token_expires_at > now()
+    AND status = 'sent';
+  
+  IF NOT FOUND THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Ogiltig eller utgången token'
+    );
+  END IF;
+  
+  -- Validate ROT identifier format
+  IF rot_type = 'person' AND NOT validate_swedish_personnummer(rot_identifier) THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Ogiltigt personnummer format'
+    );
+  END IF;
+  
+  IF rot_type = 'company' AND NOT validate_swedish_organisationsnummer(rot_identifier) THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Ogiltigt organisationsnummer format'
+    );
+  END IF;
+  
+  -- Update quote with acceptance and ROT information
+  UPDATE quotes
+  SET 
+    status = 'accepted',
+    accepted_at = now(),
+    accepted_by_ip = client_ip,
+    rot_personnummer = CASE WHEN rot_type = 'person' THEN rot_identifier ELSE NULL END,
+    rot_organisationsnummer = CASE WHEN rot_type = 'company' THEN rot_identifier ELSE NULL END,
+    rot_fastighetsbeteckning = fastighetsbeteckning,
+    rot_amount = CASE WHEN quote_record.include_rot THEN calculate_rot_amount(quote_record.total_amount) ELSE 0 END
+  WHERE id = quote_record.id;
+  
+  -- Create order from accepted quote
+  INSERT INTO orders (
+    organisation_id,
+    customer_id,
+    title,
+    description,
+    value,
+    status,
+    source,
+    job_description,
+    job_type,
+    include_rot,
+    rot_personnummer,
+    rot_organisationsnummer,
+    rot_fastighetsbeteckning,
+    rot_amount
+  )
+  VALUES (
+    quote_record.organisation_id,
+    quote_record.customer_id,
+    quote_record.title,
+    quote_record.description,
+    quote_record.total_amount,
+    'öppen_order',
+    'Accepterad offert',
+    quote_record.description,
+    'allmänt',
+    quote_record.include_rot,
+    CASE WHEN rot_type = 'person' THEN rot_identifier ELSE NULL END,
+    CASE WHEN rot_type = 'company' THEN rot_identifier ELSE NULL END,
+    fastighetsbeteckning,
+    CASE WHEN quote_record.include_rot THEN calculate_rot_amount(quote_record.total_amount) ELSE 0 END
+  )
+  RETURNING id INTO order_id;
+  
+  -- Link quote to order
+  UPDATE quotes SET order_id = order_id WHERE id = quote_record.id;
+  
+  RETURN json_build_object(
+    'success', true,
+    'quote_id', quote_record.id,
+    'order_id', order_id,
+    'rot_amount', CASE WHEN quote_record.include_rot THEN calculate_rot_amount(quote_record.total_amount) ELSE 0 END
+  );
+END;
+$function$
+"
+FUNCTION,public,calculate_invoice_net_amount," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.calculate_invoice_net_amount()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  -- Always calculate the net_amount for the row being modified
+  NEW.net_amount = NEW.amount - COALESCE(NEW.credited_amount, 0);
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,calculate_order_commission," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.calculate_order_commission()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  -- Only calculate if order has value and primary salesperson
+  IF NEW.value IS NOT NULL AND NEW.primary_salesperson_id IS NOT NULL THEN
+    -- Get primary salesperson commission rate
+    SELECT commission_rate INTO NEW.commission_amount
+    FROM user_profiles 
+    WHERE id = NEW.primary_salesperson_id AND has_commission = true;
+    
+    -- Calculate commission amount (commission_rate is percentage)
+    IF NEW.commission_amount IS NOT NULL THEN
+      NEW.commission_amount := (NEW.value * NEW.commission_amount / 100);
+      
+      -- If there's a secondary salesperson, split the commission
+      IF NEW.secondary_salesperson_id IS NOT NULL AND NEW.commission_split_percentage > 0 THEN
+        -- The commission_amount will be split between primary and secondary
+        -- Primary gets (100 - split_percentage)%, secondary gets split_percentage%
+        NULL; -- Commission splitting logic handled in application
+      END IF;
+    ELSE
+      NEW.commission_amount := 0;
+    END IF;
+  ELSE
+    NEW.commission_amount := 0;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,calculate_rot_amount,"total_amount numeric, labor_percentage numeric DEFAULT 0.7, rot_percentage numeric DEFAULT 0.5, max_rot_per_person numeric DEFAULT 50000 RETURNS numeric AS CREATE OR REPLACE FUNCTION public.calculate_rot_amount(total_amount numeric, labor_percentage numeric DEFAULT 0.7, rot_percentage numeric DEFAULT 0.5, max_rot_per_person numeric DEFAULT 50000)
+ RETURNS numeric
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+  labor_cost numeric;
+  rot_deduction numeric;
+BEGIN
+  -- Calculate labor cost (default 70% of total)
+  labor_cost := total_amount * labor_percentage;
+  
+  -- Calculate ROT deduction (50% of labor cost)
+  rot_deduction := labor_cost * rot_percentage;
+  
+  -- Apply maximum limit per person per year
+  IF rot_deduction > max_rot_per_person THEN
+    rot_deduction := max_rot_per_person;
+  END IF;
+  
+  RETURN ROUND(rot_deduction, 2);
+END;
+$function$
+"
+FUNCTION,public,calculate_time_log_amount," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.calculate_time_log_amount()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  -- Only calculate if we have both start and end time
+  IF NEW.start_time IS NOT NULL AND NEW.end_time IS NOT NULL THEN
+    -- Calculate total minutes worked (excluding breaks)
+    NEW.total_amount := (
+      EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 60 - COALESCE(NEW.break_duration, 0)
+    ) / 60 * NEW.hourly_rate;
+  ELSE
+    NEW.total_amount := 0;
+  END IF;
+  
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,create_library_item,"p_name text, p_unit measurement_unit, p_category text, p_organisation_id uuid, p_quantity numeric, p_price numeric RETURNS uuid AS CREATE OR REPLACE FUNCTION public.create_library_item(p_name text, p_unit measurement_unit, p_category text, p_organisation_id uuid, p_quantity numeric, p_price numeric)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+  v_library_item_id uuid;
+BEGIN
+  INSERT INTO quote_line_items (
+    name, 
+    unit, 
+    category, 
+    organisation_id, 
+    is_library_item, 
+    quantity, 
+    price
+  ) VALUES (
+    p_name, 
+    p_unit, 
+    p_category, 
+    p_organisation_id, 
+    true, 
+    p_quantity, 
+    p_price
+  ) RETURNING id INTO v_library_item_id;
+  
+  RETURN v_library_item_id;
+END;
+$function$
+"
+FUNCTION,public,create_order_from_quote," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.create_order_from_quote()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  -- Only create order if quote status changed to 'accepted'
+  IF NEW.status = 'accepted' AND (OLD.status IS NULL OR OLD.status != 'accepted') THEN
+    INSERT INTO orders (
+      organisation_id,
+      customer_id,
+      title,
+      description,
+      value,
+      status,
+      source,
+      created_at
+    ) VALUES (
+      NEW.organisation_id,
+      NEW.customer_id,
+      NEW.title,
+      NEW.description,
+      NEW.total_amount,
+      'öppen_order',
+      'Accepterad offert',
+      now()
+    );
+    
+    -- Update quote to reference the new order
+    UPDATE quotes 
+    SET order_id = (
+      SELECT id FROM orders 
+      WHERE organisation_id = NEW.organisation_id 
+      AND customer_id = NEW.customer_id 
+      AND title = NEW.title 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    )
+    WHERE id = NEW.id;
+  END IF;
+  
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,generate_acceptance_token," RETURNS text AS CREATE OR REPLACE FUNCTION public.generate_acceptance_token()
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$BEGIN
+  -- Generate a standard base64 token
+  RETURN translate(encode(gen_random_bytes(32), 'base64'), '+/=', '-_');
+END;$function$
+"
+FUNCTION,public,generate_credit_note_number,"org_id uuid RETURNS text AS CREATE OR REPLACE FUNCTION public.generate_credit_note_number(org_id uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$DECLARE
+  current_year text;
+  next_number integer;
+  credit_note_number text;
+BEGIN
+  current_year := EXTRACT(year FROM CURRENT_DATE)::text;
+  
+  -- Get the next number for this year and organization
+  SELECT COALESCE(MAX(
+    CASE 
+      WHEN invoices.credit_note_number ~ ('^KN-' || current_year || '-\d+$') 
+      THEN CAST(SUBSTRING(invoices.credit_note_number FROM '\d+$') AS integer)
+      ELSE 0 
+    END
+  ), 0) + 1
+  INTO next_number
+  FROM invoices 
+  WHERE invoices.organisation_id = org_id 
+    AND invoices.is_credit_note = true 
+    AND invoices.credit_note_number IS NOT NULL;
+  
+  credit_note_number := 'KN-' || current_year || '-' || LPAD(next_number::text, 3, '0');
+  
+  RETURN credit_note_number;
+END;$function$
+"
+FUNCTION,public,generate_invoice_number,"org_id uuid RETURNS text AS CREATE OR REPLACE FUNCTION public.generate_invoice_number(org_id uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    current_year INTEGER;
+    next_number INTEGER;
+    invoice_number TEXT;
+BEGIN
+    current_year := EXTRACT(YEAR FROM NOW());
+    
+    -- Get the highest invoice number for this year and organization
+    SELECT COALESCE(
+        MAX(
+            CASE 
+                WHEN invoice_number ~ ('^' || current_year || '-[0-9]+$')
+                THEN CAST(SPLIT_PART(invoice_number, '-', 2) AS INTEGER)
+                ELSE 0
+            END
+        ), 0
+    ) + 1
+    INTO next_number
+    FROM invoices 
+    WHERE organisation_id = org_id;
+    
+    invoice_number := current_year || '-' || LPAD(next_number::TEXT, 4, '0');
+    
+    RETURN invoice_number;
+END;
+$function$
+"
+FUNCTION,public,generate_job_number,"org_id uuid RETURNS text AS CREATE OR REPLACE FUNCTION public.generate_job_number(org_id uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+    current_year integer;
+    max_sequence integer;
+    new_sequence integer;
+    new_job_number text;
+BEGIN
+    -- Get current year
+    current_year := EXTRACT(YEAR FROM NOW());
+    
+    -- Find the highest sequence number for this organization and year
+    SELECT COALESCE(
+        MAX(
+            CASE 
+                WHEN j.job_number ~ ('^JOBB-' || current_year::text || '-[0-9]{3}$')
+                THEN CAST(RIGHT(j.job_number, 3) AS integer)
+                ELSE 0
+            END
+        ), 
+        0
+    ) INTO max_sequence
+    FROM jobs j
+    WHERE j.organisation_id = org_id
+    AND j.job_number IS NOT NULL;
+    
+    -- Increment sequence
+    new_sequence := max_sequence + 1;
+    
+    -- Format the new job number
+    new_job_number := 'JOBB-' || current_year::text || '-' || LPAD(new_sequence::text, 3, '0');
+    
+    RETURN new_job_number;
+END;
+$function$
+"
+FUNCTION,public,generate_quote_number,"org_id uuid RETURNS text AS CREATE OR REPLACE FUNCTION public.generate_quote_number(org_id uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    current_year text;
+    next_seq_val int;
+    quote_num text;
+BEGIN
+    current_year := to_char(now(), 'YYYY');
+
+    -- Find the maximum existing sequence number for the current year and organization
+    -- and increment it. COALESCE handles the case where no quotes exist yet.
+    SELECT COALESCE(MAX(SUBSTRING(quote_number FROM '[0-9]+$')::int), 0) + 1
+    INTO next_seq_val
+    FROM public.quotes
+    WHERE organisation_id = org_id
+      AND quote_number LIKE 'OFF-' || current_year || '-%';
+
+    -- Format the quote number with leading zeros for the sequence part
+    quote_num := 'OFF-' || current_year || '-' || LPAD(next_seq_val::text, 3, '0');
+
+    RETURN quote_num;
+END;
+$function$
+"
+FUNCTION,public,get_my_org," RETURNS uuid AS CREATE OR REPLACE FUNCTION public.get_my_org()
+ RETURNS uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+    SELECT organisation_id 
+    FROM user_profiles 
+    WHERE id = auth.uid()
+$function$
+"
+FUNCTION,public,get_my_role," RETURNS user_role AS CREATE OR REPLACE FUNCTION public.get_my_role()
+ RETURNS user_role
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+    SELECT role 
+    FROM user_profiles 
+    WHERE id = auth.uid()
+$function$
+"
+FUNCTION,public,get_sales_leaderboard," RETURNS TABLE(name text, sales numeric, avatar text) AS CREATE OR REPLACE FUNCTION public.get_sales_leaderboard()
+ RETURNS TABLE(name text, sales numeric, avatar text)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  RETURN QUERY
+    SELECT
+      up.full_name AS name,
+      SUM(i.amount)::NUMERIC AS sales,
+      -- Creates a simple two-letter avatar from the full name
+      UPPER(SUBSTRING(up.full_name FROM 1 FOR 1) || SUBSTRING(up.full_name FROM '(\w)\w*$')) AS avatar
+    FROM
+      public.invoices AS i
+    -- JOIN orders table to find the salesperson
+    JOIN
+      public.orders AS o ON i.order_id = o.id
+    JOIN
+      public.user_profiles AS up ON o.primary_salesperson_id = up.id
+    WHERE
+      i.status = 'paid' AND up.role = 'sales'
+    GROUP BY
+      up.id, up.full_name
+    ORDER BY
+      sales DESC
+    LIMIT 5;
+END;
+$function$
+"
+FUNCTION,public,get_unassigned_users,"org_id uuid RETURNS SETOF user_profiles AS CREATE OR REPLACE FUNCTION public.get_unassigned_users(org_id uuid)
+ RETURNS SETOF user_profiles
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  RETURN QUERY
+  SELECT *
+  FROM public.user_profiles
+  WHERE
+    organisation_id = org_id AND
+    is_active = true AND
+    id NOT IN (
+      SELECT user_id FROM public.team_members WHERE is_active = true
+    );
+END;
+$function$
+"
+FUNCTION,public,populate_invoice_from_order," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.populate_invoice_from_order()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  -- If order_id is provided, copy team and job data from the order
+  IF NEW.order_id IS NOT NULL THEN
+    UPDATE invoices SET
+      assigned_team_id = COALESCE(NEW.assigned_team_id, (
+        SELECT assigned_to_team_id FROM orders WHERE id = NEW.order_id
+      )),
+      assigned_user_id = COALESCE(NEW.assigned_user_id, (
+        SELECT assigned_to_user_id FROM orders WHERE id = NEW.order_id
+      )),
+      job_description = COALESCE(NEW.job_description, (
+        SELECT job_description FROM orders WHERE id = NEW.order_id
+      )),
+      job_type = COALESCE(NEW.job_type, (
+        SELECT job_type FROM orders WHERE id = NEW.order_id
+      ))
+    WHERE id = NEW.id;
+  END IF;
+  
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,set_quote_acceptance_token,"quote_id uuid, expires_in_days integer DEFAULT 30 RETURNS text AS CREATE OR REPLACE FUNCTION public.set_quote_acceptance_token(quote_id uuid, expires_in_days integer DEFAULT 30)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+  token text;
+BEGIN
+  token := generate_acceptance_token();
+  
+  UPDATE quotes 
+  SET 
+    acceptance_token = token,
+    token_expires_at = now() + (expires_in_days || ' days')::interval
+  WHERE id = quote_id;
+  
+  RETURN token;
+END;
+$function$
+"
+FUNCTION,public,update_document_download_count," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.update_document_download_count()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  UPDATE documents 
+  SET download_count = download_count + 1
+  WHERE id = NEW.document_id;
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,update_documents_updated_at," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.update_documents_updated_at()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,update_intranet_post_counters," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.update_intranet_post_counters()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF TG_TABLE_NAME = 'intranet_post_views' THEN
+    UPDATE intranet_posts 
+    SET view_count = (
+      SELECT COUNT(*) FROM intranet_post_views 
+      WHERE post_id = NEW.post_id
+    )
+    WHERE id = NEW.post_id;
+  ELSIF TG_TABLE_NAME = 'intranet_post_likes' THEN
+    UPDATE intranet_posts 
+    SET like_count = (
+      SELECT COUNT(*) FROM intranet_post_likes 
+      WHERE post_id = COALESCE(NEW.post_id, OLD.post_id)
+    )
+    WHERE id = COALESCE(NEW.post_id, OLD.post_id);
+  ELSIF TG_TABLE_NAME = 'intranet_comments' THEN
+    UPDATE intranet_posts 
+    SET comment_count = (
+      SELECT COUNT(*) FROM intranet_comments 
+      WHERE post_id = COALESCE(NEW.post_id, OLD.post_id)
+      AND is_approved = true
+    )
+    WHERE id = COALESCE(NEW.post_id, OLD.post_id);
+  END IF;
+  
+  RETURN COALESCE(NEW, OLD);
+END;
+$function$
+"
+FUNCTION,public,update_intranet_updated_at," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.update_intranet_updated_at()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,update_invoice_rot_amount," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.update_invoice_rot_amount()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF NEW.include_rot = true AND NEW.amount > 0 THEN
+    NEW.rot_amount := calculate_rot_amount(NEW.amount);
+  ELSE
+    NEW.rot_amount := 0;
+  END IF;
+  
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,update_order_rot_amount," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.update_order_rot_amount()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF NEW.include_rot = true AND NEW.value > 0 THEN
+    NEW.rot_amount := calculate_rot_amount(NEW.value);
+  ELSE
+    NEW.rot_amount := 0;
+  END IF;
+  
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,update_original_invoice_on_credit," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.update_original_invoice_on_credit()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  -- After a credit note is inserted, update the original invoice
+  UPDATE invoices 
+  SET 
+    credited_amount = COALESCE(credited_amount, 0) + ABS(NEW.amount)
+  WHERE id = NEW.original_invoice_id;
+  
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,update_overdue_invoices," RETURNS void AS CREATE OR REPLACE FUNCTION public.update_overdue_invoices()
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    UPDATE invoices 
+    SET status = 'overdue'
+    WHERE status = 'sent' 
+    AND due_date < CURRENT_DATE;
+END;
+$function$
+"
+FUNCTION,public,update_quote_rot_amount," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.update_quote_rot_amount()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF NEW.include_rot = true AND NEW.total_amount > 0 THEN
+    NEW.rot_amount := calculate_rot_amount(NEW.total_amount);
+  ELSE
+    NEW.rot_amount := 0;
+  END IF;
+  
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,update_team_settings_updated_at," RETURNS trigger AS CREATE OR REPLACE FUNCTION public.update_team_settings_updated_at()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$function$
+"
+FUNCTION,public,validate_swedish_organisationsnummer,"orgnummer text RETURNS boolean AS CREATE OR REPLACE FUNCTION public.validate_swedish_organisationsnummer(orgnummer text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  -- Remove any non-digit characters except hyphen
+  orgnummer := regexp_replace(orgnummer, '[^0-9-]', '', 'g');
+  
+  -- Check format: XXXXXX-XXXX
+  IF NOT orgnummer ~ '^[0-9]{6}-[0-9]{4}$' THEN
+    RETURN false;
+  END IF;
+  
+  -- Basic validation (more complex Luhn algorithm would be done in application)
+  RETURN length(replace(orgnummer, '-', '')) = 10;
+END;
+$function$
+"
+FUNCTION,public,validate_swedish_personnummer,"personnummer text RETURNS boolean AS CREATE OR REPLACE FUNCTION public.validate_swedish_personnummer(personnummer text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  -- Remove any non-digit characters except hyphen
+  personnummer := regexp_replace(personnummer, '[^0-9-]', '', 'g');
+  
+  -- Check format: YYYYMMDD-XXXX or YYMMDD-XXXX
+  IF NOT (personnummer ~ '^[0-9]{8}-[0-9]{4}$' OR personnummer ~ '^[0-9]{6}-[0-9]{4}$') THEN
+    RETURN false;
+  END IF;
+  
+  -- Basic length validation (more complex validation would be done in application)
+  RETURN length(replace(personnummer, '-', '')) IN (10, 12);
+END;
+$function$
+"
+FUNCTION,realtime,apply_rls,"wal jsonb, max_record_bytes integer DEFAULT (1024 * 1024) RETURNS SETOF realtime.wal_rls AS CREATE OR REPLACE FUNCTION realtime.apply_rls(wal jsonb, max_record_bytes integer DEFAULT (1024 * 1024))
+ RETURNS SETOF realtime.wal_rls
+ LANGUAGE plpgsql
+AS $function$
+declare
+-- Regclass of the table e.g. public.notes
+entity_ regclass = (quote_ident(wal ->> 'schema') || '.' || quote_ident(wal ->> 'table'))::regclass;
+
+-- I, U, D, T: insert, update ...
+action realtime.action = (
+    case wal ->> 'action'
+        when 'I' then 'INSERT'
+        when 'U' then 'UPDATE'
+        when 'D' then 'DELETE'
+        else 'ERROR'
+    end
+);
+
+-- Is row level security enabled for the table
+is_rls_enabled bool = relrowsecurity from pg_class where oid = entity_;
+
+subscriptions realtime.subscription[] = array_agg(subs)
+    from
+        realtime.subscription subs
+    where
+        subs.entity = entity_;
+
+-- Subscription vars
+roles regrole[] = array_agg(distinct us.claims_role::text)
+    from
+        unnest(subscriptions) us;
+
+working_role regrole;
+claimed_role regrole;
+claims jsonb;
+
+subscription_id uuid;
+subscription_has_access bool;
+visible_to_subscription_ids uuid[] = '{}';
+
+-- structured info for wal's columns
+columns realtime.wal_column[];
+-- previous identity values for update/delete
+old_columns realtime.wal_column[];
+
+error_record_exceeds_max_size boolean = octet_length(wal::text) > max_record_bytes;
+
+-- Primary jsonb output for record
+output jsonb;
+
+begin
+perform set_config('role', null, true);
+
+columns =
+    array_agg(
+        (
+            x->>'name',
+            x->>'type',
+            x->>'typeoid',
+            realtime.cast(
+                (x->'value') #>> '{}',
+                coalesce(
+                    (x->>'typeoid')::regtype, -- null when wal2json version <= 2.4
+                    (x->>'type')::regtype
+                )
+            ),
+            (pks ->> 'name') is not null,
+            true
+        )::realtime.wal_column
+    )
+    from
+        jsonb_array_elements(wal -> 'columns') x
+        left join jsonb_array_elements(wal -> 'pk') pks
+            on (x ->> 'name') = (pks ->> 'name');
+
+old_columns =
+    array_agg(
+        (
+            x->>'name',
+            x->>'type',
+            x->>'typeoid',
+            realtime.cast(
+                (x->'value') #>> '{}',
+                coalesce(
+                    (x->>'typeoid')::regtype, -- null when wal2json version <= 2.4
+                    (x->>'type')::regtype
+                )
+            ),
+            (pks ->> 'name') is not null,
+            true
+        )::realtime.wal_column
+    )
+    from
+        jsonb_array_elements(wal -> 'identity') x
+        left join jsonb_array_elements(wal -> 'pk') pks
+            on (x ->> 'name') = (pks ->> 'name');
+
+for working_role in select * from unnest(roles) loop
+
+    -- Update `is_selectable` for columns and old_columns
+    columns =
+        array_agg(
+            (
+                c.name,
+                c.type_name,
+                c.type_oid,
+                c.value,
+                c.is_pkey,
+                pg_catalog.has_column_privilege(working_role, entity_, c.name, 'SELECT')
+            )::realtime.wal_column
+        )
+        from
+            unnest(columns) c;
+
+    old_columns =
+            array_agg(
+                (
+                    c.name,
+                    c.type_name,
+                    c.type_oid,
+                    c.value,
+                    c.is_pkey,
+                    pg_catalog.has_column_privilege(working_role, entity_, c.name, 'SELECT')
+                )::realtime.wal_column
+            )
+            from
+                unnest(old_columns) c;
+
+    if action <> 'DELETE' and count(1) = 0 from unnest(columns) c where c.is_pkey then
+        return next (
+            jsonb_build_object(
+                'schema', wal ->> 'schema',
+                'table', wal ->> 'table',
+                'type', action
+            ),
+            is_rls_enabled,
+            -- subscriptions is already filtered by entity
+            (select array_agg(s.subscription_id) from unnest(subscriptions) as s where claims_role = working_role),
+            array['Error 400: Bad Request, no primary key']
+        )::realtime.wal_rls;
+
+    -- The claims role does not have SELECT permission to the primary key of entity
+    elsif action <> 'DELETE' and sum(c.is_selectable::int) <> count(1) from unnest(columns) c where c.is_pkey then
+        return next (
+            jsonb_build_object(
+                'schema', wal ->> 'schema',
+                'table', wal ->> 'table',
+                'type', action
+            ),
+            is_rls_enabled,
+            (select array_agg(s.subscription_id) from unnest(subscriptions) as s where claims_role = working_role),
+            array['Error 401: Unauthorized']
+        )::realtime.wal_rls;
+
+    else
+        output = jsonb_build_object(
+            'schema', wal ->> 'schema',
+            'table', wal ->> 'table',
+            'type', action,
+            'commit_timestamp', to_char(
+                ((wal ->> 'timestamp')::timestamptz at time zone 'utc'),
+                'YYYY-MM-DD""T""HH24:MI:SS.MS""Z""'
+            ),
+            'columns', (
+                select
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'name', pa.attname,
+                            'type', pt.typname
+                        )
+                        order by pa.attnum asc
+                    )
+                from
+                    pg_attribute pa
+                    join pg_type pt
+                        on pa.atttypid = pt.oid
+                where
+                    attrelid = entity_
+                    and attnum > 0
+                    and pg_catalog.has_column_privilege(working_role, entity_, pa.attname, 'SELECT')
+            )
+        )
+        -- Add ""record"" key for insert and update
+        || case
+            when action in ('INSERT', 'UPDATE') then
+                jsonb_build_object(
+                    'record',
+                    (
+                        select
+                            jsonb_object_agg(
+                                -- if unchanged toast, get column name and value from old record
+                                coalesce((c).name, (oc).name),
+                                case
+                                    when (c).name is null then (oc).value
+                                    else (c).value
+                                end
+                            )
+                        from
+                            unnest(columns) c
+                            full outer join unnest(old_columns) oc
+                                on (c).name = (oc).name
+                        where
+                            coalesce((c).is_selectable, (oc).is_selectable)
+                            and ( not error_record_exceeds_max_size or (octet_length((c).value::text) <= 64))
+                    )
+                )
+            else '{}'::jsonb
+        end
+        -- Add ""old_record"" key for update and delete
+        || case
+            when action = 'UPDATE' then
+                jsonb_build_object(
+                        'old_record',
+                        (
+                            select jsonb_object_agg((c).name, (c).value)
+                            from unnest(old_columns) c
+                            where
+                                (c).is_selectable
+                                and ( not error_record_exceeds_max_size or (octet_length((c).value::text) <= 64))
+                        )
+                    )
+            when action = 'DELETE' then
+                jsonb_build_object(
+                    'old_record',
+                    (
+                        select jsonb_object_agg((c).name, (c).value)
+                        from unnest(old_columns) c
+                        where
+                            (c).is_selectable
+                            and ( not error_record_exceeds_max_size or (octet_length((c).value::text) <= 64))
+                            and ( not is_rls_enabled or (c).is_pkey ) -- if RLS enabled, we can't secure deletes so filter to pkey
+                    )
+                )
+            else '{}'::jsonb
+        end;
+
+        -- Create the prepared statement
+        if is_rls_enabled and action <> 'DELETE' then
+            if (select 1 from pg_prepared_statements where name = 'walrus_rls_stmt' limit 1) > 0 then
+                deallocate walrus_rls_stmt;
+            end if;
+            execute realtime.build_prepared_statement_sql('walrus_rls_stmt', entity_, columns);
+        end if;
+
+        visible_to_subscription_ids = '{}';
+
+        for subscription_id, claims in (
+                select
+                    subs.subscription_id,
+                    subs.claims
+                from
+                    unnest(subscriptions) subs
+                where
+                    subs.entity = entity_
+                    and subs.claims_role = working_role
+                    and (
+                        realtime.is_visible_through_filters(columns, subs.filters)
+                        or (
+                          action = 'DELETE'
+                          and realtime.is_visible_through_filters(old_columns, subs.filters)
+                        )
+                    )
+        ) loop
+
+            if not is_rls_enabled or action = 'DELETE' then
+                visible_to_subscription_ids = visible_to_subscription_ids || subscription_id;
+            else
+                -- Check if RLS allows the role to see the record
+                perform
+                    -- Trim leading and trailing quotes from working_role because set_config
+                    -- doesn't recognize the role as valid if they are included
+                    set_config('role', trim(both '""' from working_role::text), true),
+                    set_config('request.jwt.claims', claims::text, true);
+
+                execute 'execute walrus_rls_stmt' into subscription_has_access;
+
+                if subscription_has_access then
+                    visible_to_subscription_ids = visible_to_subscription_ids || subscription_id;
+                end if;
+            end if;
+        end loop;
+
+        perform set_config('role', null, true);
+
+        return next (
+            output,
+            is_rls_enabled,
+            visible_to_subscription_ids,
+            case
+                when error_record_exceeds_max_size then array['Error 413: Payload Too Large']
+                else '{}'
+            end
+        )::realtime.wal_rls;
+
+    end if;
+end loop;
+
+perform set_config('role', null, true);
+end;
+$function$
+"
+FUNCTION,realtime,broadcast_changes,"topic_name text, event_name text, operation text, table_name text, table_schema text, new record, old record, level text DEFAULT 'ROW'::text RETURNS void AS CREATE OR REPLACE FUNCTION realtime.broadcast_changes(topic_name text, event_name text, operation text, table_name text, table_schema text, new record, old record, level text DEFAULT 'ROW'::text)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    -- Declare a variable to hold the JSONB representation of the row
+    row_data jsonb := '{}'::jsonb;
+BEGIN
+    IF level = 'STATEMENT' THEN
+        RAISE EXCEPTION 'function can only be triggered for each row, not for each statement';
+    END IF;
+    -- Check the operation type and handle accordingly
+    IF operation = 'INSERT' OR operation = 'UPDATE' OR operation = 'DELETE' THEN
+        row_data := jsonb_build_object('old_record', OLD, 'record', NEW, 'operation', operation, 'table', table_name, 'schema', table_schema);
+        PERFORM realtime.send (row_data, event_name, topic_name);
+    ELSE
+        RAISE EXCEPTION 'Unexpected operation type: %', operation;
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Failed to process the row: %', SQLERRM;
+END;
+
+$function$
+"
+FUNCTION,realtime,build_prepared_statement_sql,"prepared_statement_name text, entity regclass, columns realtime.wal_column[] RETURNS text AS CREATE OR REPLACE FUNCTION realtime.build_prepared_statement_sql(prepared_statement_name text, entity regclass, columns realtime.wal_column[])
+ RETURNS text
+ LANGUAGE sql
+AS $function$
+      /*
+      Builds a sql string that, if executed, creates a prepared statement to
+      tests retrive a row from *entity* by its primary key columns.
+      Example
+          select realtime.build_prepared_statement_sql('public.notes', '{""id""}'::text[], '{""bigint""}'::text[])
+      */
+          select
+      'prepare ' || prepared_statement_name || ' as
+          select
+              exists(
+                  select
+                      1
+                  from
+                      ' || entity || '
+                  where
+                      ' || string_agg(quote_ident(pkc.name) || '=' || quote_nullable(pkc.value #>> '{}') , ' and ') || '
+              )'
+          from
+              unnest(columns) pkc
+          where
+              pkc.is_pkey
+          group by
+              entity
+      $function$
+"
+FUNCTION,realtime,cast,"val text, type_ regtype RETURNS jsonb AS CREATE OR REPLACE FUNCTION realtime.""cast""(val text, type_ regtype)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ IMMUTABLE
+AS $function$
+    declare
+      res jsonb;
+    begin
+      execute format('select to_jsonb(%L::'|| type_::text || ')', val)  into res;
+      return res;
+    end
+    $function$
+"
+FUNCTION,realtime,check_equality_op,"op realtime.equality_op, type_ regtype, val_1 text, val_2 text RETURNS boolean AS CREATE OR REPLACE FUNCTION realtime.check_equality_op(op realtime.equality_op, type_ regtype, val_1 text, val_2 text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ IMMUTABLE
+AS $function$
+      /*
+      Casts *val_1* and *val_2* as type *type_* and check the *op* condition for truthiness
+      */
+      declare
+          op_symbol text = (
+              case
+                  when op = 'eq' then '='
+                  when op = 'neq' then '!='
+                  when op = 'lt' then '<'
+                  when op = 'lte' then '<='
+                  when op = 'gt' then '>'
+                  when op = 'gte' then '>='
+                  when op = 'in' then '= any'
+                  else 'UNKNOWN OP'
+              end
+          );
+          res boolean;
+      begin
+          execute format(
+              'select %L::'|| type_::text || ' ' || op_symbol
+              || ' ( %L::'
+              || (
+                  case
+                      when op = 'in' then type_::text || '[]'
+                      else type_::text end
+              )
+              || ')', val_1, val_2) into res;
+          return res;
+      end;
+      $function$
+"
+FUNCTION,realtime,is_visible_through_filters,"columns realtime.wal_column[], filters realtime.user_defined_filter[] RETURNS boolean AS CREATE OR REPLACE FUNCTION realtime.is_visible_through_filters(columns realtime.wal_column[], filters realtime.user_defined_filter[])
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+AS $function$
+    /*
+    Should the record be visible (true) or filtered out (false) after *filters* are applied
+    */
+        select
+            -- Default to allowed when no filters present
+            $2 is null -- no filters. this should not happen because subscriptions has a default
+            or array_length($2, 1) is null -- array length of an empty array is null
+            or bool_and(
+                coalesce(
+                    realtime.check_equality_op(
+                        op:=f.op,
+                        type_:=coalesce(
+                            col.type_oid::regtype, -- null when wal2json version <= 2.4
+                            col.type_name::regtype
+                        ),
+                        -- cast jsonb to text
+                        val_1:=col.value #>> '{}',
+                        val_2:=f.value
+                    ),
+                    false -- if null, filter does not match
+                )
+            )
+        from
+            unnest(filters) f
+            join unnest(columns) col
+                on f.column_name = col.name;
+    $function$
+"
+FUNCTION,realtime,list_changes,"publication name, slot_name name, max_changes integer, max_record_bytes integer RETURNS SETOF realtime.wal_rls AS CREATE OR REPLACE FUNCTION realtime.list_changes(publication name, slot_name name, max_changes integer, max_record_bytes integer)
+ RETURNS SETOF realtime.wal_rls
+ LANGUAGE sql
+ SET log_min_messages TO 'fatal'
+AS $function$
+      with pub as (
+        select
+          concat_ws(
+            ',',
+            case when bool_or(pubinsert) then 'insert' else null end,
+            case when bool_or(pubupdate) then 'update' else null end,
+            case when bool_or(pubdelete) then 'delete' else null end
+          ) as w2j_actions,
+          coalesce(
+            string_agg(
+              realtime.quote_wal2json(format('%I.%I', schemaname, tablename)::regclass),
+              ','
+            ) filter (where ppt.tablename is not null and ppt.tablename not like '% %'),
+            ''
+          ) w2j_add_tables
+        from
+          pg_publication pp
+          left join pg_publication_tables ppt
+            on pp.pubname = ppt.pubname
+        where
+          pp.pubname = publication
+        group by
+          pp.pubname
+        limit 1
+      ),
+      w2j as (
+        select
+          x.*, pub.w2j_add_tables
+        from
+          pub,
+          pg_logical_slot_get_changes(
+            slot_name, null, max_changes,
+            'include-pk', 'true',
+            'include-transaction', 'false',
+            'include-timestamp', 'true',
+            'include-type-oids', 'true',
+            'format-version', '2',
+            'actions', pub.w2j_actions,
+            'add-tables', pub.w2j_add_tables
+          ) x
+      )
+      select
+        xyz.wal,
+        xyz.is_rls_enabled,
+        xyz.subscription_ids,
+        xyz.errors
+      from
+        w2j,
+        realtime.apply_rls(
+          wal := w2j.data::jsonb,
+          max_record_bytes := max_record_bytes
+        ) xyz(wal, is_rls_enabled, subscription_ids, errors)
+      where
+        w2j.w2j_add_tables <> ''
+        and xyz.subscription_ids[1] is not null
+    $function$
+"
+FUNCTION,realtime,quote_wal2json,"entity regclass RETURNS text AS CREATE OR REPLACE FUNCTION realtime.quote_wal2json(entity regclass)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE STRICT
+AS $function$
+      select
+        (
+          select string_agg('' || ch,'')
+          from unnest(string_to_array(nsp.nspname::text, null)) with ordinality x(ch, idx)
+          where
+            not (x.idx = 1 and x.ch = '""')
+            and not (
+              x.idx = array_length(string_to_array(nsp.nspname::text, null), 1)
+              and x.ch = '""'
+            )
+        )
+        || '.'
+        || (
+          select string_agg('' || ch,'')
+          from unnest(string_to_array(pc.relname::text, null)) with ordinality x(ch, idx)
+          where
+            not (x.idx = 1 and x.ch = '""')
+            and not (
+              x.idx = array_length(string_to_array(nsp.nspname::text, null), 1)
+              and x.ch = '""'
+            )
+          )
+      from
+        pg_class pc
+        join pg_namespace nsp
+          on pc.relnamespace = nsp.oid
+      where
+        pc.oid = entity
+    $function$
+"
+FUNCTION,realtime,send,"payload jsonb, event text, topic text, private boolean DEFAULT true RETURNS void AS CREATE OR REPLACE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean DEFAULT true)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+  generated_id uuid;
+  final_payload jsonb;
+BEGIN
+  BEGIN
+    -- Generate a new UUID for the id
+    generated_id := gen_random_uuid();
+
+    -- Check if payload has an 'id' key, if not, add the generated UUID
+    IF payload ? 'id' THEN
+      final_payload := payload;
+    ELSE
+      final_payload := jsonb_set(payload, '{id}', to_jsonb(generated_id));
+    END IF;
+
+    -- Set the topic configuration
+    EXECUTE format('SET LOCAL realtime.topic TO %L', topic);
+
+    -- Attempt to insert the message
+    INSERT INTO realtime.messages (id, payload, event, topic, private, extension)
+    VALUES (generated_id, final_payload, event, topic, private, 'broadcast');
+  EXCEPTION
+    WHEN OTHERS THEN
+      -- Capture and notify the error
+      RAISE WARNING 'ErrorSendingBroadcastMessage: %', SQLERRM;
+  END;
+END;
+$function$
+"
+FUNCTION,realtime,subscription_check_filters," RETURNS trigger AS CREATE OR REPLACE FUNCTION realtime.subscription_check_filters()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+    /*
+    Validates that the user defined filters for a subscription:
+    - refer to valid columns that the claimed role may access
+    - values are coercable to the correct column type
+    */
+    declare
+        col_names text[] = coalesce(
+                array_agg(c.column_name order by c.ordinal_position),
+                '{}'::text[]
+            )
+            from
+                information_schema.columns c
+            where
+                format('%I.%I', c.table_schema, c.table_name)::regclass = new.entity
+                and pg_catalog.has_column_privilege(
+                    (new.claims ->> 'role'),
+                    format('%I.%I', c.table_schema, c.table_name)::regclass,
+                    c.column_name,
+                    'SELECT'
+                );
+        filter realtime.user_defined_filter;
+        col_type regtype;
+
+        in_val jsonb;
+    begin
+        for filter in select * from unnest(new.filters) loop
+            -- Filtered column is valid
+            if not filter.column_name = any(col_names) then
+                raise exception 'invalid column for filter %', filter.column_name;
+            end if;
+
+            -- Type is sanitized and safe for string interpolation
+            col_type = (
+                select atttypid::regtype
+                from pg_catalog.pg_attribute
+                where attrelid = new.entity
+                      and attname = filter.column_name
+            );
+            if col_type is null then
+                raise exception 'failed to lookup type for column %', filter.column_name;
+            end if;
+
+            -- Set maximum number of entries for in filter
+            if filter.op = 'in'::realtime.equality_op then
+                in_val = realtime.cast(filter.value, (col_type::text || '[]')::regtype);
+                if coalesce(jsonb_array_length(in_val), 0) > 100 then
+                    raise exception 'too many values for `in` filter. Maximum 100';
+                end if;
+            else
+                -- raises an exception if value is not coercable to type
+                perform realtime.cast(filter.value, col_type);
+            end if;
+
+        end loop;
+
+        -- Apply consistent order to filters so the unique constraint on
+        -- (subscription_id, entity, filters) can't be tricked by a different filter order
+        new.filters = coalesce(
+            array_agg(f order by f.column_name, f.op, f.value),
+            '{}'
+        ) from unnest(new.filters) f;
+
+        return new;
+    end;
+    $function$
+"
+FUNCTION,realtime,to_regrole,"role_name text RETURNS regrole AS CREATE OR REPLACE FUNCTION realtime.to_regrole(role_name text)
+ RETURNS regrole
+ LANGUAGE sql
+ IMMUTABLE
+AS $function$ select role_name::regrole $function$
+"
+FUNCTION,realtime,topic," RETURNS text AS CREATE OR REPLACE FUNCTION realtime.topic()
+ RETURNS text
+ LANGUAGE sql
+ STABLE
+AS $function$
+select nullif(current_setting('realtime.topic', true), '')::text;
+$function$
+"
+FUNCTION,vault,_crypto_aead_det_decrypt,"message bytea, additional bytea, key_id bigint, context bytea DEFAULT '\x7067736f6469756d'::bytea, nonce bytea DEFAULT NULL::bytea RETURNS bytea AS CREATE OR REPLACE FUNCTION vault._crypto_aead_det_decrypt(message bytea, additional bytea, key_id bigint, context bytea DEFAULT '\x7067736f6469756d'::bytea, nonce bytea DEFAULT NULL::bytea)
+ RETURNS bytea
+ LANGUAGE c
+ IMMUTABLE
+AS '$libdir/supabase_vault', $function$pgsodium_crypto_aead_det_decrypt_by_id$function$
+"
+FUNCTION,vault,_crypto_aead_det_encrypt,"message bytea, additional bytea, key_id bigint, context bytea DEFAULT '\x7067736f6469756d'::bytea, nonce bytea DEFAULT NULL::bytea RETURNS bytea AS CREATE OR REPLACE FUNCTION vault._crypto_aead_det_encrypt(message bytea, additional bytea, key_id bigint, context bytea DEFAULT '\x7067736f6469756d'::bytea, nonce bytea DEFAULT NULL::bytea)
+ RETURNS bytea
+ LANGUAGE c
+ IMMUTABLE
+AS '$libdir/supabase_vault', $function$pgsodium_crypto_aead_det_encrypt_by_id$function$
+"
+FUNCTION,vault,_crypto_aead_det_noncegen," RETURNS bytea AS CREATE OR REPLACE FUNCTION vault._crypto_aead_det_noncegen()
+ RETURNS bytea
+ LANGUAGE c
+ IMMUTABLE
+AS '$libdir/supabase_vault', $function$pgsodium_crypto_aead_det_noncegen$function$
+"
+FUNCTION,vault,create_secret,"new_secret text, new_name text DEFAULT NULL::text, new_description text DEFAULT ''::text, new_key_id uuid DEFAULT NULL::uuid RETURNS uuid AS CREATE OR REPLACE FUNCTION vault.create_secret(new_secret text, new_name text DEFAULT NULL::text, new_description text DEFAULT ''::text, new_key_id uuid DEFAULT NULL::uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  rec record;
+BEGIN
+  INSERT INTO vault.secrets (secret, name, description)
+  VALUES (
+    new_secret,
+    new_name,
+    new_description
+  )
+  RETURNING * INTO rec;
+  UPDATE vault.secrets s
+  SET secret = encode(vault._crypto_aead_det_encrypt(
+    message := convert_to(rec.secret, 'utf8'),
+    additional := convert_to(s.id::text, 'utf8'),
+    key_id := 0,
+    context := 'pgsodium'::bytea,
+    nonce := rec.nonce
+  ), 'base64')
+  WHERE id = rec.id;
+  RETURN rec.id;
+END
+$function$
+"
+FUNCTION,vault,update_secret,"secret_id uuid, new_secret text DEFAULT NULL::text, new_name text DEFAULT NULL::text, new_description text DEFAULT NULL::text, new_key_id uuid DEFAULT NULL::uuid RETURNS void AS CREATE OR REPLACE FUNCTION vault.update_secret(secret_id uuid, new_secret text DEFAULT NULL::text, new_name text DEFAULT NULL::text, new_description text DEFAULT NULL::text, new_key_id uuid DEFAULT NULL::uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  decrypted_secret text := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE id = secret_id);
+BEGIN
+  UPDATE vault.secrets s
+  SET
+    secret = CASE WHEN new_secret IS NULL THEN s.secret
+                  ELSE encode(vault._crypto_aead_det_encrypt(
+                    message := convert_to(new_secret, 'utf8'),
+                    additional := convert_to(s.id::text, 'utf8'),
+                    key_id := 0,
+                    context := 'pgsodium'::bytea,
+                    nonce := s.nonce
+                  ), 'base64') END,
+    name = coalesce(new_name, s.name),
+    description = coalesce(new_description, s.description),
+    updated_at = now()
+  WHERE s.id = secret_id;
+END
+$function$
+"
+TABLE,cron,job,"jobid (bigint), schedule (text), command (text), nodename (text), nodeport (integer), database (text), username (text), active (boolean), jobname (text)"
+TABLE,cron,job_run_details,"jobid (bigint), runid (bigint), job_pid (integer), database (text), username (text), command (text), status (text), return_message (text), start_time (timestamp with time zone), end_time (timestamp with time zone)"
+TABLE,public,activity_log,"id (uuid), organisation_id (uuid), action_type (text), entity_type (text), entity_id (uuid), metadata (jsonb), created_at (timestamp with time zone)"
+TABLE,public,attendance,"id (uuid), organisation_id (uuid), user_id (uuid), date (date), status (text), hours (numeric), notes (text), created_at (timestamp with time zone), updated_at (timestamp with time zone)"
+TABLE,public,calendar_events,"id (uuid), organisation_id (uuid), assigned_to_user_id (uuid), title (text), type (USER-DEFINED), start_time (timestamp with time zone), end_time (timestamp with time zone), related_lead_id (uuid), related_job_id (uuid), created_at (timestamp with time zone), description (text), location (text), related_order_id (uuid), assigned_to_team_id (uuid), customer_email_sent (boolean), meeting_link (text), google_event_id (text)"
+TABLE,public,chat_channels,"id (uuid), organisation_id (uuid), name (text), type (text), created_at (timestamp with time zone)"
+TABLE,public,chat_messages,"id (uuid), channel_id (uuid), sender_user_id (uuid), content (text), created_at (timestamp with time zone)"
+TABLE,public,communications,"id (uuid), organisation_id (uuid), order_id (uuid), type (USER-DEFINED), recipient (text), subject (text), content (text), status (USER-DEFINED), sent_at (timestamp with time zone), delivered_at (timestamp with time zone), read_at (timestamp with time zone), created_by_user_id (uuid), created_at (timestamp with time zone), error_message (text)"
+TABLE,public,credit_notes,"id (uuid), organisation_id (uuid), job_id (uuid), customer_id (uuid), invoice_number (text), status (USER-DEFINED), due_date (date), amount (numeric), created_at (timestamp with time zone), order_id (uuid), assigned_team_id (uuid), assigned_user_id (uuid), job_description (text), job_type (USER-DEFINED), team_members_involved (jsonb), work_summary (text), email_sent (boolean), email_sent_at (timestamp with time zone), email_recipient (text), assignment_type (USER-DEFINED), is_credit_note (boolean), original_invoice_id (uuid), credit_reason (text), credit_note_number (text), credited_amount (numeric), net_amount (numeric), original_invoice_number (text), original_amount (numeric), original_invoice_date (timestamp with time zone), customer_name (text), customer_email (text)"
+TABLE,public,customers,"id (uuid), organisation_id (uuid), name (text), email (text), phone_number (text), address (text), postal_code (text), city (text), created_at (timestamp with time zone), include_rot (boolean), rot_personnummer (text), rot_organisationsnummer (text), rot_fastighetsbeteckning (text), rot_amount (numeric), sales_area (text), vat_handling (text), e_invoice_address (text), invoice_delivery_method (text), org_number (text), customer_type (text), fortnox_customer_number (text)"
+TABLE,public,document_downloads,"id (uuid), document_id (uuid), user_id (uuid), downloaded_at (timestamp with time zone), ip_address (text), user_agent (text)"
+TABLE,public,documents,"id (uuid), organisation_id (uuid), filename (text), file_path (text), file_size (bigint), file_type (text), category (text), description (text), uploaded_by_user_id (uuid), view_permissions (jsonb), download_count (integer), is_active (boolean), created_at (timestamp with time zone), updated_at (timestamp with time zone)"
+TABLE,public,intranet_comments,"id (uuid), post_id (uuid), author_user_id (uuid), content (text), parent_comment_id (uuid), is_approved (boolean), created_at (timestamp with time zone), updated_at (timestamp with time zone)"
+TABLE,public,intranet_post_likes,"id (uuid), post_id (uuid), user_id (uuid), created_at (timestamp with time zone)"
+TABLE,public,intranet_post_views,"id (uuid), post_id (uuid), user_id (uuid), viewed_at (timestamp with time zone), ip_address (text), user_agent (text)"
+TABLE,public,intranet_posts,"id (uuid), organisation_id (uuid), title (text), content (text), excerpt (text), author_user_id (uuid), featured_image_url (text), category (text), is_pinned (boolean), is_published (boolean), is_urgent (boolean), scheduled_publish_at (timestamp with time zone), view_count (integer), like_count (integer), comment_count (integer), created_at (timestamp with time zone), updated_at (timestamp with time zone)"
+TABLE,public,invoice_emails,"id (uuid), organisation_id (uuid), invoice_id (uuid), recipient_email (text), subject (text), email_body (text), attachments (jsonb), status (text), sent_at (timestamp with time zone), delivered_at (timestamp with time zone), opened_at (timestamp with time zone), error_message (text), created_at (timestamp with time zone)"
+TABLE,public,invoice_line_items,"id (uuid), invoice_id (uuid), description (text), quantity (numeric), unit_price (numeric), total (numeric), created_at (timestamp with time zone)"
+TABLE,public,invoices,"id (uuid), organisation_id (uuid), job_id (uuid), customer_id (uuid), invoice_number (text), status (USER-DEFINED), due_date (date), amount (numeric), created_at (timestamp with time zone), order_id (uuid), assigned_team_id (uuid), assigned_user_id (uuid), job_description (text), job_type (USER-DEFINED), team_members_involved (jsonb), work_summary (text), email_sent (boolean), email_sent_at (timestamp with time zone), email_recipient (text), assignment_type (USER-DEFINED), is_credit_note (boolean), original_invoice_id (uuid), credit_reason (text), credit_note_number (text), credited_amount (numeric), net_amount (numeric), include_rot (boolean), rot_personnummer (text), rot_organisationsnummer (text), rot_fastighetsbeteckning (text), rot_amount (numeric), ocr_number (text), guest_info (jsonb), fortnox_invoice_number (text), fortnox_synced_at (timestamp with time zone)"
+TABLE,public,job_activities,"id (uuid), job_id (uuid), user_id (uuid), activity_type (text), description (text), old_value (text), new_value (text), created_at (timestamp with time zone)"
+TABLE,public,jobs,"id (uuid), organisation_id (uuid), customer_id (uuid), quote_id (uuid), assigned_to_user_id (uuid), title (text), description (text), status (USER-DEFINED), value (numeric), created_at (timestamp with time zone), job_number (text), priority (text), deadline (date), progress (integer)"
+TABLE,public,lead_activities,"id (uuid), lead_id (uuid), user_id (uuid), activity_type (text), description (text), created_at (timestamp with time zone)"
+TABLE,public,lead_notes,"id (uuid), lead_id (uuid), user_id (uuid), content (text), created_at (timestamp with time zone)"
+TABLE,public,leads,"id (uuid), organisation_id (uuid), customer_id (uuid), assigned_to_user_id (uuid), title (text), description (text), source (text), status (USER-DEFINED), estimated_value (numeric), created_at (timestamp with time zone), lead_score (integer), last_activity_at (timestamp with time zone)"
+TABLE,public,notifications,"id (uuid), user_id (uuid), type (USER-DEFINED), title (text), message (text), is_read (boolean), action_url (text), created_at (timestamp with time zone)"
+TABLE,public,order_activities,"id (uuid), order_id (uuid), user_id (uuid), activity_type (text), description (text), old_value (text), new_value (text), created_at (timestamp with time zone)"
+TABLE,public,order_attachments,"id (uuid), order_id (uuid), uploaded_by_user_id (uuid), file_path (text), file_name (text), file_type (text), description (text), created_at (timestamp with time zone), include_in_invoice (boolean)"
+TABLE,public,order_notes,"id (uuid), order_id (uuid), user_id (uuid), content (text), created_at (timestamp with time zone), include_in_invoice (boolean)"
+TABLE,public,orders,"id (uuid), organisation_id (uuid), customer_id (uuid), title (text), description (text), value (numeric), assigned_to_user_id (uuid), status (USER-DEFINED), source (text), created_at (timestamp with time zone), assigned_to_team_id (uuid), assignment_type (USER-DEFINED), job_description (text), job_type (USER-DEFINED), estimated_hours (numeric), complexity_level (integer), include_rot (boolean), rot_personnummer (text), rot_organisationsnummer (text), rot_fastighetsbeteckning (text), rot_amount (numeric), primary_salesperson_id (uuid), secondary_salesperson_id (uuid), commission_split_percentage (numeric), commission_amount (numeric), commission_paid (boolean), region (text)"
+TABLE,public,organisations,"id (uuid), name (text), org_number (text), created_at (timestamp with time zone), email (text), phone (text), address (text), postal_code (text), city (text), website (text), logo_url (text), bank_account (text), bank_name (text), vat_number (text), description (text), fortnox_access_token (text), fortnox_refresh_token (text), fortnox_token_expires_at (timestamp with time zone), fortnox_client_id (text), fortnox_client_secret (text), sms_provider (text), sms_api_username (text), sms_api_password (text), sms_sender_name (text)"
+TABLE,public,payroll_adjustments,"id (uuid), organisation_id (uuid), user_id (uuid), amount (numeric), description (text), date (date), type (text), created_at (timestamp with time zone), created_by (uuid)"
+TABLE,public,payroll_status,"id (uuid), organisation_id (uuid), user_id (uuid), month (character varying), status (text), paid_at (timestamp with time zone), updated_at (timestamp with time zone), updated_by (uuid)"
+TABLE,public,quick_texts,"id (uuid), organisation_id (uuid), title (text), content (text), shortcut (text), category (text), created_at (timestamp with time zone)"
+TABLE,public,quote_line_items,"id (uuid), quote_id (uuid), description (text), quantity (numeric), unit_price (numeric), total (numeric), sort_order (integer), created_at (timestamp with time zone), name (text), unit (USER-DEFINED), category (text), is_library_item (boolean), organisation_id (uuid), vat_rate (integer)"
+TABLE,public,quote_templates,"id (uuid), organisation_id (uuid), name (text), description (text), default_line_items (jsonb), settings (jsonb), created_at (timestamp with time zone), sort_order (integer), content_structure (jsonb)"
+TABLE,public,quotes,"id (uuid), organisation_id (uuid), customer_id (uuid), lead_id (uuid), title (text), description (text), total_amount (numeric), status (USER-DEFINED), valid_until (date), created_at (timestamp with time zone), quote_number (text), subtotal (numeric), vat_amount (numeric), order_id (uuid), include_rot (boolean), rot_personnummer (text), rot_organisationsnummer (text), rot_fastighetsbeteckning (text), rot_amount (numeric), acceptance_token (text), token_expires_at (timestamp with time zone), accepted_at (timestamp with time zone), accepted_by_ip (text), signing_details (jsonb)"
+TABLE,public,reminder_logs,"id (uuid), organisation_id (uuid), quote_id (uuid), invoice_id (uuid), reminder_type (text), days_offset (integer), email_sent (boolean), email_error (text), sent_at (timestamp with time zone), created_at (timestamp with time zone)"
+TABLE,public,role_change_logs,"id (uuid), organisation_id (uuid), user_id (uuid), old_role (USER-DEFINED), new_role (USER-DEFINED), changed_by_user_id (uuid), reason (text), created_at (timestamp with time zone)"
+TABLE,public,rot_report,"id (uuid), invoice_number (text), amount (numeric), rot_amount (numeric), rot_personnummer (text), rot_organisationsnummer (text), rot_fastighetsbeteckning (text), customer_name (text), address (text), postal_code (text), city (text), created_at (timestamp with time zone), tax_year (numeric), organisation_id (uuid)"
+TABLE,public,rss_feeds,"id (uuid), organisation_id (uuid), name (text), url (text), is_active (boolean), last_fetched_at (timestamp with time zone), created_at (timestamp with time zone)"
+TABLE,public,sales_tasks,"id (uuid), organisation_id (uuid), user_id (uuid), title (text), description (text), due_date (date), is_completed (boolean), created_at (timestamp with time zone), completed_at (timestamp with time zone), notes (text), status (text), created_by (uuid), order_id (uuid)"
+TABLE,public,saved_line_items,"id (uuid), organisation_id (uuid), name (text), description (text), unit_price (numeric), created_at (timestamp with time zone), item_type (text), metadata (jsonb)"
+TABLE,public,system_settings,"id (uuid), organisation_id (uuid), logo_url (text), default_payment_terms (integer), late_fee (numeric), invoice_footer_text (text), invoice_number_format (text), invoice_number_prefix (text), invoice_number_start (integer), quote_number_format (text), quote_number_prefix (text), quote_number_start (integer), default_vat_rate (numeric), currency (text), date_format (text), time_format (text), fiscal_year_start (text), created_at (timestamp with time zone), updated_at (timestamp with time zone)"
+TABLE,public,task_notes,"id (uuid), task_id (uuid), user_id (uuid), content (text), created_at (timestamp with time zone)"
+TABLE,public,team_job_participation,"id (uuid), organisation_id (uuid), invoice_id (uuid), user_id (uuid), hours_worked (numeric), role_in_job (text), commission_percentage (numeric), work_description (text), quality_rating (integer), created_at (timestamp with time zone)"
+TABLE,public,team_members,"id (uuid), organisation_id (uuid), team_id (uuid), user_id (uuid), role_in_team (USER-DEFINED), joined_date (date), is_active (boolean), created_at (timestamp with time zone)"
+TABLE,public,team_settings,"id (uuid), organisation_id (uuid), max_leads_per_person (integer), max_jobs_per_person (integer), auto_reassign_enabled (boolean), workload_threshold_warning (integer), workload_threshold_critical (integer), performance_review_frequency (integer), created_at (timestamp with time zone), updated_at (timestamp with time zone)"
+TABLE,public,teams,"id (uuid), organisation_id (uuid), name (text), description (text), specialty (USER-DEFINED), team_leader_id (uuid), is_active (boolean), hourly_rate (numeric), created_at (timestamp with time zone), cities (ARRAY)"
+TABLE,public,time_logs,"id (uuid), order_id (uuid), user_id (uuid), start_time (timestamp with time zone), end_time (timestamp with time zone), break_duration (integer), notes (text), is_approved (boolean), hourly_rate (numeric), total_amount (numeric), location_lat (numeric), location_lng (numeric), photo_urls (jsonb), materials_used (jsonb), travel_time_minutes (integer), work_type (text), weather_conditions (text), created_at (timestamp with time zone), updated_at (timestamp with time zone)"
+TABLE,public,user_profiles,"id (uuid), organisation_id (uuid), full_name (text), phone_number (text), role (USER-DEFINED), is_active (boolean), created_at (timestamp with time zone), email (text), address (text), postal_code (text), city (text), avatar_url (text), base_hourly_rate (numeric), base_monthly_salary (numeric), commission_rate (numeric), employment_type (USER-DEFINED), has_commission (boolean), personnummer (text), bank_account_number (text), cities (ARRAY), weekly_hours (integer), work_days (ARRAY), google_calendar_sync_enabled (boolean), google_calendar_id (text), dashboard_settings (jsonb)"
+TABLE, public.user_smtp_settings (
+  user_id uuid not null,
+  smtp_host text not null,
+  smtp_port integer not null,
+  smtp_user text not null,
+  smtp_pass text not null,
+  created_at timestamp with time zone null default now(),
+  constraint user_smtp_settings_pkey primary key (user_id),
+  constraint user_smtp_settings_user_id_fkey foreign KEY (user_id) references auth.users (id)
+) TABLESPACE pg_default;
+TABLE,public,view_dashboard_kpis,"organisation_id (uuid), total_sales (numeric), active_leads (bigint), active_jobs (bigint), overdue_invoices (bigint)"
+TABLE,public,webhook_logs,"id (uuid), webhook_id (uuid), organisation_id (uuid), event_type (text), payload (jsonb), response_status (integer), response_body (text), success (boolean), error_message (text), duration_ms (integer), created_at (timestamp with time zone)"
+TABLE,public,webhooks,"id (uuid), organisation_id (uuid), name (text), event_type (text), target_url (text), secret (text), is_active (boolean), headers (jsonb), created_at (timestamp with time zone), updated_at (timestamp with time zone), created_by_user_id (uuid)"
+TABLE,public,workload_assignments,"id (uuid), organisation_id (uuid), from_user_id (uuid), to_user_id (uuid), lead_id (uuid), job_id (uuid), assignment_type (text), reason (text), assigned_by_user_id (uuid), created_at (timestamp with time zone)"
+TABLE,realtime,messages,"topic (text), extension (text), payload (jsonb), event (text), private (boolean), updated_at (timestamp without time zone), inserted_at (timestamp without time zone), id (uuid)"
+TABLE,realtime,messages_2026_01_10,"topic (text), extension (text), payload (jsonb), event (text), private (boolean), updated_at (timestamp without time zone), inserted_at (timestamp without time zone), id (uuid)"
+TABLE,realtime,messages_2026_01_11,"topic (text), extension (text), payload (jsonb), event (text), private (boolean), updated_at (timestamp without time zone), inserted_at (timestamp without time zone), id (uuid)"
+TABLE,realtime,messages_2026_01_12,"topic (text), extension (text), payload (jsonb), event (text), private (boolean), updated_at (timestamp without time zone), inserted_at (timestamp without time zone), id (uuid)"
+TABLE,realtime,messages_2026_01_13,"topic (text), extension (text), payload (jsonb), event (text), private (boolean), updated_at (timestamp without time zone), inserted_at (timestamp without time zone), id (uuid)"
+TABLE,realtime,messages_2026_01_14,"topic (text), extension (text), payload (jsonb), event (text), private (boolean), updated_at (timestamp without time zone), inserted_at (timestamp without time zone), id (uuid)"
+TABLE,realtime,messages_2026_01_15,"topic (text), extension (text), payload (jsonb), event (text), private (boolean), updated_at (timestamp without time zone), inserted_at (timestamp without time zone), id (uuid)"
+TABLE,realtime,messages_2026_01_16,"topic (text), extension (text), payload (jsonb), event (text), private (boolean), updated_at (timestamp without time zone), inserted_at (timestamp without time zone), id (uuid)"
+TABLE,realtime,schema_migrations,"version (bigint), inserted_at (timestamp without time zone)"
+TABLE,realtime,subscription,"id (bigint), subscription_id (uuid), entity (regclass), filters (ARRAY), claims (jsonb), claims_role (regrole), created_at (timestamp without time zone)"
+TABLE,supabase_migrations,schema_migrations,"version (text), statements (ARRAY), name (text)"
+TABLE,vault,decrypted_secrets,"id (uuid), name (text), description (text), secret (text), decrypted_secret (text), key_id (uuid), nonce (bytea), created_at (timestamp with time zone), updated_at (timestamp with time zone)"
+TABLE,vault,secrets,"id (uuid), name (text), description (text), secret (text), key_id (uuid), nonce (bytea), created_at (timestamp with time zone), updated_at (timestamp with time zone)"
+TRIGGER,public,trigger_calculate_net_amount,ON invoices DURING BEFORE UPDATE
+TRIGGER,public,trigger_calculate_net_amount,ON invoices DURING BEFORE INSERT
+TRIGGER,public,trigger_calculate_order_commission,ON orders DURING BEFORE INSERT
+TRIGGER,public,trigger_calculate_order_commission,ON orders DURING BEFORE UPDATE
+TRIGGER,public,trigger_calculate_time_log_amount,ON time_logs DURING BEFORE UPDATE
+TRIGGER,public,trigger_calculate_time_log_amount,ON time_logs DURING BEFORE INSERT
+TRIGGER,public,trigger_create_order_from_quote,ON quotes DURING AFTER UPDATE
+TRIGGER,public,trigger_populate_invoice_from_order,ON invoices DURING AFTER INSERT
+TRIGGER,public,trigger_update_comment_count,ON intranet_comments DURING AFTER INSERT
+TRIGGER,public,trigger_update_comment_count,ON intranet_comments DURING AFTER DELETE
+TRIGGER,public,trigger_update_comment_count,ON intranet_comments DURING AFTER UPDATE
+TRIGGER,public,trigger_update_documents_updated_at,ON documents DURING BEFORE UPDATE
+TRIGGER,public,trigger_update_download_count,ON document_downloads DURING AFTER INSERT
+TRIGGER,public,trigger_update_intranet_comments_updated_at,ON intranet_comments DURING BEFORE UPDATE
+TRIGGER,public,trigger_update_intranet_posts_updated_at,ON intranet_posts DURING BEFORE UPDATE
+TRIGGER,public,trigger_update_invoice_rot_amount,ON invoices DURING BEFORE UPDATE
+TRIGGER,public,trigger_update_invoice_rot_amount,ON invoices DURING BEFORE INSERT
+TRIGGER,public,trigger_update_like_count,ON intranet_post_likes DURING AFTER INSERT
+TRIGGER,public,trigger_update_like_count,ON intranet_post_likes DURING AFTER DELETE
+TRIGGER,public,trigger_update_order_rot_amount,ON orders DURING BEFORE UPDATE
+TRIGGER,public,trigger_update_order_rot_amount,ON orders DURING BEFORE INSERT
+TRIGGER,public,trigger_update_original_invoice,ON invoices DURING AFTER INSERT
+TRIGGER,public,trigger_update_quote_rot_amount,ON quotes DURING BEFORE UPDATE
+TRIGGER,public,trigger_update_quote_rot_amount,ON quotes DURING BEFORE INSERT
+TRIGGER,public,trigger_update_view_count,ON intranet_post_views DURING AFTER INSERT
+TRIGGER,public,update_team_settings_updated_at,ON team_settings DURING BEFORE UPDATE
+TRIGGER,realtime,tr_check_filters,ON subscription DURING BEFORE UPDATE
+TRIGGER,realtime,tr_check_filters,ON subscription DURING BEFORE INSERT

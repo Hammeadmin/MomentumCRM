@@ -52,9 +52,11 @@ interface AuthContextType {
   loading: boolean;
   profileLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: AuthError | null; needsEmailVerification?: boolean }>;
+  signInWithGoogle: (redirectTo?: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  isNewOAuthUser: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -78,6 +80,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [organisation, setOrganisation] = useState<Organisation | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [isNewOAuthUser, setIsNewOAuthUser] = useState(false);
 
   // Fetch user profile and organisation from database
   const fetchUserProfile = async (userId: string) => {
@@ -116,6 +119,59 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  // Handle auth state changes asynchronously (non-blocking)
+  const handleAuthChange = async (authUser: User) => {
+    console.log('[AuthContext] handleAuthChange for user:', authUser.id);
+
+    // Check if profile exists
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('id', authUser.id)
+      .single();
+
+    if (profileError && profileError.code !== 'PGRST116') {
+      console.warn('[AuthContext] Profile check error:', profileError.message);
+    }
+
+    if (!profile) {
+      // No profile exists - check if there's pending signup data
+      const metadata = authUser.user_metadata;
+
+      if (metadata?.pending_org_name && metadata?.pending_full_name) {
+        console.log('[AuthContext] Found pending signup data, completing registration...');
+
+        try {
+          const { error: rpcError } = await supabase.rpc('complete_organization_signup', {
+            org_name: metadata.pending_org_name,
+            org_number: metadata.pending_org_number || null,
+            user_full_name: metadata.pending_full_name,
+            user_phone_number: metadata.pending_phone_number || null,
+          });
+
+          if (rpcError) {
+            console.error('[AuthContext] Failed to complete pending signup:', rpcError);
+          } else {
+            console.log('[AuthContext] Pending signup completed successfully!');
+            await supabase.auth.refreshSession();
+            await fetchUserProfile(authUser.id);
+            setIsNewOAuthUser(false);
+            return;
+          }
+        } catch (err) {
+          console.error('[AuthContext] Error completing pending signup:', err);
+        }
+      }
+
+      // Either no pending data or RPC failed - treat as new OAuth user
+      setIsNewOAuthUser(true);
+    } else {
+      // Profile exists - fetch the full profile data
+      setIsNewOAuthUser(false);
+      await fetchUserProfile(authUser.id);
+    }
+  };
+
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -133,16 +189,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Update state immediately (synchronous)
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
 
-      // Fetch or clear profile based on session
+      // Handle profile fetch in a non-blocking way
       if (session?.user) {
-        fetchUserProfile(session.user.id);
+        // Run async operations without awaiting in the callback
+        handleAuthChange(session.user).catch(err => {
+          console.error('[AuthContext] Error in handleAuthChange:', err);
+        });
       } else {
         setUserProfile(null);
         setOrganisation(null);
+        setIsNewOAuthUser(false);
       }
     });
 
@@ -150,17 +211,51 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+    console.log('[AuthContext] signIn called with:', email);
+    try {
+      // Add timeout to detect hanging Supabase connection
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Login request timed out. Please check your internet connection.')), 15000);
+      });
+
+      const signInPromise = supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      const { error } = await Promise.race([signInPromise, timeoutPromise]);
+      console.log('[AuthContext] signIn result:', error ? 'error' : 'success', error?.message);
+      return { error };
+    } catch (err) {
+      console.error('[AuthContext] signIn exception:', err);
+      // Return as AuthError format
+      return { error: { message: err instanceof Error ? err.message : 'Unknown error' } as any };
+    }
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
+    });
+
+    // Check if email confirmation is required
+    // When email confirmation is enabled, user will have identities but session may be null
+    const needsEmailVerification = !error && !!data.user && !data.session;
+
+    return { error, needsEmailVerification };
+  };
+
+  const signInWithGoogle = async (redirectTo?: string) => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectTo || `${window.location.origin}/complete-signup`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account',
+        },
+      },
     });
     return { error };
   };
@@ -181,8 +276,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     profileLoading,
     signIn,
     signUp,
+    signInWithGoogle,
     signOut,
     refreshProfile,
+    isNewOAuthUser,
   };
 
   return (

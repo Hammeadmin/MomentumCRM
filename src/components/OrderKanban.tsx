@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   Plus,
   Search,
@@ -60,8 +60,10 @@ import OrderStatusBadge from './OrderStatusBadge';
 import StatusChangeHistory from './StatusChangeHistory';
 import { useNavigate } from 'react-router-dom'; // Add this line
 import { getOrderCommunications } from "../lib/communications";
-import EmailComposer from "./EmailComposer";
-import SMSComposer from "./SMSComposer";
+
+// Lazy load heavy modal components to reduce initial bundle size
+const EmailComposer = lazy(() => import("./EmailComposer"));
+const SMSComposer = lazy(() => import("./SMSComposer"));
 import ROTFields from '../components/ROTFields';
 import ROTInformation from '../components/ROTInformation';
 import CommissionAssignmentForm from './CommissionAssignmentForm';
@@ -133,10 +135,15 @@ function OrderKanban() {
     customers,
     teamMembers,
     teams,
+    orderCountsByStatus,
     isLoading: loading,
     error: dataError,
     refetch: loadData,
+    loadMoreOrders,
   } = useKanbanData(filters);
+
+  // Track which column is currently loading more items
+  const [loadingMoreColumn, setLoadingMoreColumn] = useState<string | null>(null);
 
   // Convert error to string for display
   const error = dataError?.message || null;
@@ -215,14 +222,18 @@ function OrderKanban() {
   const [newNote, setNewNote] = useState('');
   const [addingNote, setAddingNote] = useState(false);
 
+  // Render capping: track how many items to show per column (prevents DOM overload)
+  const ITEMS_PER_PAGE = 20;
+  const [columnVisibleCounts, setColumnVisibleCounts] = useState<Record<string, number>>({});
+
   const kanbanColumns = [
-    { status: 'förfrågan', title: kanban.COLUMNS.INQUIRIES, color: 'border-gray-200 bg-gray-50', type: 'lead', navigateTo: '/leads' },
-    { status: 'offert_utkast', title: kanban.COLUMNS.QUOTES_DRAFT, color: 'border-warning-100 bg-warning-50', type: 'quote', navigateTo: '/offerter' },
-    { status: 'öppen_order', title: kanban.COLUMNS.OPEN_ORDERS, color: 'border-primary-200 bg-primary-50', type: 'order', navigateTo: '/Orderhantering' },
-    { status: 'bokad_bekräftad', title: kanban.COLUMNS.BOOKED_ORDERS, color: 'border-success-100 bg-success-50', type: 'order', navigateTo: '/Orderhantering' },
-    { status: 'ej_slutfört', title: kanban.COLUMNS.NOT_COMPLETED, color: 'border-warning-100 bg-warning-50', type: 'order', navigateTo: '/Orderhantering' },
-    { status: 'redo_fakturera', title: kanban.COLUMNS.READY_TO_INVOICE, color: 'border-primary-200 bg-primary-50', type: 'order', navigateTo: '/fakturor' },
-    { status: 'avbokad_kund', title: kanban.COLUMNS.CANCELLED, color: 'border-error-100 bg-error-50', type: 'order', navigateTo: '/Orderhantering' }
+    { status: 'förfrågan', title: kanban.COLUMNS.INQUIRIES, bgColor: 'bg-slate-50', headerColor: 'bg-emerald-600', badgeColor: 'bg-emerald-100 text-emerald-800', type: 'lead', navigateTo: '/leads' },
+    { status: 'offert_utkast', title: kanban.COLUMNS.QUOTES_DRAFT, bgColor: 'bg-slate-50', headerColor: 'bg-amber-500', badgeColor: 'bg-amber-100 text-amber-800', type: 'quote', navigateTo: '/offerter' },
+    { status: 'öppen_order', title: kanban.COLUMNS.OPEN_ORDERS, bgColor: 'bg-slate-50', headerColor: 'bg-blue-600', badgeColor: 'bg-blue-100 text-blue-800', type: 'order', navigateTo: '/Orderhantering' },
+    { status: 'bokad_bekräftad', title: kanban.COLUMNS.BOOKED_ORDERS, bgColor: 'bg-slate-50', headerColor: 'bg-teal-600', badgeColor: 'bg-teal-100 text-teal-800', type: 'order', navigateTo: '/Orderhantering' },
+    { status: 'ej_slutfört', title: kanban.COLUMNS.NOT_COMPLETED, bgColor: 'bg-slate-50', headerColor: 'bg-orange-500', badgeColor: 'bg-orange-100 text-orange-800', type: 'order', navigateTo: '/Orderhantering' },
+    { status: 'redo_fakturera', title: kanban.COLUMNS.READY_TO_INVOICE, bgColor: 'bg-slate-50', headerColor: 'bg-indigo-600', badgeColor: 'bg-indigo-100 text-indigo-800', type: 'order', navigateTo: '/fakturor' },
+    { status: 'avbokad_kund', title: kanban.COLUMNS.CANCELLED, bgColor: 'bg-slate-50', headerColor: 'bg-rose-600', badgeColor: 'bg-rose-100 text-rose-800', type: 'order', navigateTo: '/Orderhantering' }
   ];
 
   // Removed manual useEffect for data fetching - now handled by useKanbanData hook
@@ -761,91 +772,162 @@ function OrderKanban() {
           return (
             <div
               key={column.status}
-              className={`kanban-column rounded-lg border-2 border-dashed ${column.color} min-h-[calc(100vh-200px)] w-[85vw] sm:w-80 flex-none snap-center lg:min-h-96 lg:w-auto transition-all`}
+              className={`kanban-column rounded-xl border border-slate-200 shadow-sm ${column.bgColor} min-h-[calc(100vh-200px)] w-[85vw] sm:w-80 flex-none snap-center lg:min-h-96 lg:w-auto transition-all hover:shadow-md`}
               onDragOver={handleDragOver}
-              onDragEnter={(e) => e.currentTarget.classList.add('drag-over')}
-              onDragLeave={(e) => e.currentTarget.classList.remove('drag-over')}
+              onDragEnter={(e) => e.currentTarget.classList.add('ring-2', 'ring-blue-400', 'ring-offset-2')}
+              onDragLeave={(e) => e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-2')}
               onDrop={(e) => {
-                e.currentTarget.classList.remove('drag-over');
+                e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-2');
                 handleDrop(e, column.status, column.type as 'order' | 'quote' | 'lead');
               }}
             >
-              <div className="p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                  <h3 className="font-semibold text-gray-900 flex items-center">
-                    <button
-                      onClick={() => navigate(column.navigateTo)}
-                      className="break-words hover:text-primary-600 hover:underline transition-colors cursor-pointer"
-                      title={`Gå till ${column.title}`}
-                    >
-                      {column.title}
-                    </button>
-                    <span className="ml-2 bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded-full">
+              {/* Column Header */}
+              <div className={`${column.headerColor} rounded-t-xl px-4 py-3`}>
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => navigate(column.navigateTo)}
+                    className="text-white font-semibold text-sm truncate hover:underline transition-colors"
+                    title={`Gå till ${column.title}`}
+                  >
+                    {column.title}
+                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                       {items.length}
                     </span>
-                  </h3>
-                  <div className="text-sm font-semibold text-gray-600">
-                    {formatCurrency(totalValue)}
                   </div>
                 </div>
+                <div className="text-white/80 text-xs font-medium mt-1">
+                  {formatCurrency(totalValue)}
+                </div>
+              </div>
 
-                <div className="space-y-3">
+              {/* Column Content */}
+              <div className="p-3">
+                <div className="space-y-2.5">
                   {items.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                       <Package className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                       <p className="text-sm">{kanban.NO_ITEMS}</p>
                     </div>
-                  ) : (
-                    <>
-                      {/* Render Leads */}
-                      {columnLeads.map((lead) => (
-                        <KanbanCard
-                          key={lead.id}
-                          type="lead"
-                          data={lead}
-                          onDragStart={(e) => handleDragStart(e, lead, 'lead')}
-                          onClick={() => {
-                            setSelectedLead(lead);
-                            setShowLeadEditModal(true);
-                          }}
-                          onCreateQuote={() => handleCreateQuote(lead)}
-                        />
-                      ))}
+                  ) : (() => {
+                    // Render capping: limit items to prevent DOM overload
+                    const visibleCount = columnVisibleCounts[column.status] || ITEMS_PER_PAGE;
+                    const visibleLeads = columnLeads.slice(0, visibleCount);
+                    const remainingAfterLeads = Math.max(0, visibleCount - columnLeads.length);
+                    const visibleQuotes = columnQuotes.slice(0, remainingAfterLeads);
+                    const remainingAfterQuotes = Math.max(0, remainingAfterLeads - columnQuotes.length);
+                    const visibleOrders = columnOrders.slice(0, remainingAfterQuotes);
 
-                      {/* Render Quotes */}
-                      {columnQuotes.map((quote) => (
-                        <KanbanCard
-                          key={quote.id}
-                          type="quote"
-                          data={quote}
-                          onDragStart={(e) => handleDragStart(e, quote, 'quote')}
-                          onClick={() => {
-                            setSelectedQuote(quote);
-                            setShowQuoteEditModal(true);
-                          }}
-                        />
-                      ))}
+                    const totalVisible = visibleLeads.length + visibleQuotes.length + visibleOrders.length;
 
-                      {/* Render Orders */}
-                      {columnOrders.map((order) => (
-                        <KanbanCard
-                          key={order.id}
-                          type="order"
-                          data={order}
-                          onDragStart={(e) => handleDragStart(e, order, 'order')}
-                          onClick={() => handleOrderClick(order)}
-                          onEdit={() => {
-                            setSelectedOrder(order);
-                            setShowEditModal(true);
-                          }}
-                          onDelete={() => {
-                            setOrderToDelete(order);
-                            setShowDeleteDialog(true);
-                          }}
-                        />
-                      ))}
-                    </>
-                  )}
+                    return (
+                      <>
+                        {/* Render Leads */}
+                        {visibleLeads.map((lead) => (
+                          <KanbanCard
+                            key={lead.id}
+                            type="lead"
+                            data={lead}
+                            onDragStart={(e) => handleDragStart(e, lead, 'lead')}
+                            onClick={() => {
+                              setSelectedLead(lead);
+                              setShowLeadEditModal(true);
+                            }}
+                            onCreateQuote={() => handleCreateQuote(lead)}
+                          />
+                        ))}
+
+                        {/* Render Quotes */}
+                        {visibleQuotes.map((quote) => (
+                          <KanbanCard
+                            key={quote.id}
+                            type="quote"
+                            data={quote}
+                            onDragStart={(e) => handleDragStart(e, quote, 'quote')}
+                            onClick={() => {
+                              setSelectedQuote(quote);
+                              setShowQuoteEditModal(true);
+                            }}
+                          />
+                        ))}
+
+                        {/* Render Orders */}
+                        {visibleOrders.map((order) => (
+                          <KanbanCard
+                            key={order.id}
+                            type="order"
+                            data={order}
+                            onDragStart={(e) => handleDragStart(e, order, 'order')}
+                            onClick={() => handleOrderClick(order)}
+                            onEdit={() => {
+                              setSelectedOrder(order);
+                              setShowEditModal(true);
+                            }}
+                            onDelete={() => {
+                              setOrderToDelete(order);
+                              setShowDeleteDialog(true);
+                            }}
+                          />
+                        ))}
+
+                        {/* Load More button */}
+                        {(() => {
+                          // For order columns, check if there are more in the database
+                          const totalInDb = column.type === 'order'
+                            ? (orderCountsByStatus[column.status] || 0)
+                            : items.length;
+                          const hasMoreLocal = totalVisible < items.length;
+                          const hasMoreInDb = column.type === 'order' && columnOrders.length < totalInDb;
+                          const showLoadMore = hasMoreLocal || hasMoreInDb;
+                          const remainingCount = column.type === 'order'
+                            ? totalInDb - visibleOrders.length
+                            : items.length - totalVisible;
+                          const isColumnLoading = loadingMoreColumn === column.status;
+
+                          if (!showLoadMore) return null;
+
+                          return (
+                            <button
+                              onClick={async () => {
+                                if (column.type === 'order' && hasMoreInDb) {
+                                  // Fetch more orders from the database
+                                  setLoadingMoreColumn(column.status);
+                                  try {
+                                    await loadMoreOrders(column.status as import('../types/database').OrderStatus, columnOrders.length);
+                                    // Also increase visible count to show the new items
+                                    setColumnVisibleCounts((prev: Record<string, number>) => ({
+                                      ...prev,
+                                      [column.status]: (prev[column.status] || ITEMS_PER_PAGE) + ITEMS_PER_PAGE
+                                    }));
+                                  } finally {
+                                    setLoadingMoreColumn(null);
+                                  }
+                                } else {
+                                  // Just show more of already-loaded items
+                                  setColumnVisibleCounts(prev => ({
+                                    ...prev,
+                                    [column.status]: (prev[column.status] || ITEMS_PER_PAGE) + ITEMS_PER_PAGE
+                                  }));
+                                }
+                              }}
+                              disabled={isColumnLoading}
+                              className="w-full py-2.5 px-3 text-sm font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-lg shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                              {isColumnLoading ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Laddar...
+                                </>
+                              ) : (
+                                `Visa fler (${remainingCount} kvar)`
+                              )}
+                            </button>
+                          );
+                        })()}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -1766,6 +1848,23 @@ function OrderKanban() {
           description="Kom igång genom att lägga till din första order eller vänta på att accepterade offerter automatiskt skapar ordrar."
           actionText="Lägg till Order"
           onAction={() => setShowCreateModal(true)}
+        />
+      )}
+
+      {/* Quote Detail Modal - for clicking on quotes in the kanban */}
+      {showQuoteEditModal && selectedQuote && (
+        <QuoteDetailModal
+          isOpen={showQuoteEditModal}
+          onClose={() => {
+            setShowQuoteEditModal(false);
+            setSelectedQuote(null);
+          }}
+          onQuoteUpdated={() => {
+            loadData();
+            setShowQuoteEditModal(false);
+            setSelectedQuote(null);
+          }}
+          quoteId={selectedQuote.id}
         />
       )}
 

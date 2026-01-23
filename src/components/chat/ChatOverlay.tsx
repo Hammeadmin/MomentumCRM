@@ -5,7 +5,7 @@
  * Supports direct messages, team chats, and order-specific chats.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     X,
     Send,
@@ -63,6 +63,9 @@ export function ChatOverlay({ isOpen, onClose }: ChatOverlayProps) {
     const [sendingMessage, setSendingMessage] = useState(false);
     const [showNewChatModal, setShowNewChatModal] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Cache for user profiles to prevent re-fetching on every message
+    const userProfileCacheRef = useRef<Map<string, { id: string; full_name: string; avatar_url?: string }>>(new Map());
 
     // Fetch channels when panel opens
     useEffect(() => {
@@ -124,23 +127,40 @@ export function ChatOverlay({ isOpen, onClose }: ChatOverlayProps) {
                     filter: `channel_id=eq.${channelId}`
                 },
                 async (payload) => {
-                    // Fetch sender info for the new message
                     const newMsg = payload.new as any;
-                    let enrichedMessage = { ...newMsg, sender: null };
+                    let senderProfile = null;
 
                     if (newMsg.sender_user_id) {
-                        const { data: senderProfile } = await supabase
-                            .from('user_profiles')
-                            .select('id, full_name, avatar_url')
-                            .eq('id', newMsg.sender_user_id)
-                            .single();
+                        // Check cache first to avoid N+1 fetches
+                        const cached = userProfileCacheRef.current.get(newMsg.sender_user_id);
 
-                        if (senderProfile) {
-                            enrichedMessage.sender = senderProfile;
+                        if (cached) {
+                            // Use cached profile
+                            senderProfile = cached;
+                        } else {
+                            // Only fetch if not in cache
+                            const { data: fetchedProfile } = await supabase
+                                .from('user_profiles')
+                                .select('id, full_name, avatar_url')
+                                .eq('id', newMsg.sender_user_id)
+                                .single();
+
+                            if (fetchedProfile) {
+                                // Add to cache for future messages
+                                userProfileCacheRef.current.set(newMsg.sender_user_id, fetchedProfile);
+                                senderProfile = fetchedProfile;
+                            }
                         }
                     }
 
-                    setMessages(prev => [...prev, enrichedMessage as ChatMessage]);
+                    const enrichedMessage: ChatMessage = {
+                        id: newMsg.id,
+                        content: newMsg.content,
+                        created_at: newMsg.created_at,
+                        sender: senderProfile || { id: newMsg.sender_user_id, full_name: 'Unknown' }
+                    };
+
+                    setMessages(prev => [...prev, enrichedMessage]);
                 }
             )
             .subscribe();

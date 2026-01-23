@@ -128,14 +128,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     // Handle new real-time notification
     const handleNewNotification = useCallback((newNotification: Notification) => {
-        setNotifications(prev => [newNotification, ...prev]);
+        // Cap at 100 items to prevent unbounded memory growth
+        setNotifications(prev => [newNotification, ...prev].slice(0, 100));
 
         if (!newNotification.is_read) {
             setUnreadCount(prev => prev + 1);
         }
 
-        // Show toast notification for new notifications
-        setToastNotifications(prev => [...prev, newNotification]);
+        // Show toast notification for new notifications (also cap at 5 simultaneous)
+        setToastNotifications(prev => [...prev, newNotification].slice(-5));
 
         // Show browser notification if permission granted
         if ('Notification' in window && Notification.permission === 'granted') {

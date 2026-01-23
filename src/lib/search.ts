@@ -27,6 +27,7 @@ interface SearchOptions {
 
 /**
  * Search customers by name, email, or phone
+ * Optimized: Uses single .or() query and starts-with pattern for index utilization
  */
 async function searchCustomers(
     query: string,
@@ -34,63 +35,39 @@ async function searchCustomers(
     limit: number
 ): Promise<SearchResult[]> {
     try {
-        // Use separate queries and combine - more reliable than .or() with ilike
-        const searchPattern = `%${query}%`;
+        // Use starts-with pattern for index utilization, fallback to contains if no results
+        const startsWithPattern = `${query}%`;
+        const containsPattern = `%${query}%`;
 
-        console.log('[searchCustomers] Searching with:', {
-            pattern: searchPattern,
-            organisationId,
-            query
-        });
-
+        // Single query with .or() instead of daisy-chaining multiple queries
         const { data, error } = await supabase
             .from('customers')
             .select('id, name, email, city, phone_number')
             .eq('organisation_id', organisationId)
-            .ilike('name', searchPattern)
+            .or(`name.ilike.${startsWithPattern},email.ilike.${startsWithPattern},phone_number.ilike.${startsWithPattern}`)
             .limit(limit);
 
-        console.log('[searchCustomers] Query result:', {
-            error: error ? { message: error.message, code: error.code, hint: error.hint, details: error.details } : null,
-            dataCount: data?.length,
-            data
-        });
-
         if (error) {
-            console.error('Error searching customers by name:', error.message, error.code, error.hint);
+            console.error('Error searching customers:', error.message);
         }
 
-        // Also search by email if name search returns few results
-        let emailResults: any[] = [];
-        if ((data?.length || 0) < limit) {
-            const { data: emailData } = await supabase
+        // If starts-with returns few results, try contains pattern (slower but more thorough)
+        let allResults = data || [];
+        if (allResults.length < limit) {
+            const { data: containsData } = await supabase
                 .from('customers')
                 .select('id, name, email, city, phone_number')
                 .eq('organisation_id', organisationId)
-                .ilike('email', searchPattern)
-                .limit(limit - (data?.length || 0));
-            emailResults = emailData || [];
+                .or(`name.ilike.${containsPattern},email.ilike.${containsPattern},phone_number.ilike.${containsPattern}`)
+                .limit(limit);
+
+            // Merge and dedupe
+            const existingIds = new Set(allResults.map((r: any) => r.id));
+            const newResults = (containsData || []).filter((r: any) => !existingIds.has(r.id));
+            allResults = [...allResults, ...newResults];
         }
 
-        // Also search by phone
-        let phoneResults: any[] = [];
-        if ((data?.length || 0) + emailResults.length < limit) {
-            const { data: phoneData } = await supabase
-                .from('customers')
-                .select('id, name, email, city, phone_number')
-                .eq('organisation_id', organisationId)
-                .ilike('phone_number', searchPattern)
-                .limit(limit - (data?.length || 0) - emailResults.length);
-            phoneResults = phoneData || [];
-        }
-
-        // Combine and dedupe by id
-        const allResults = [...(data || []), ...emailResults, ...phoneResults];
-        const uniqueResults = allResults.filter((item, index, self) =>
-            index === self.findIndex(t => t.id === item.id)
-        );
-
-        return uniqueResults.slice(0, limit).map(customer => ({
+        return allResults.slice(0, limit).map((customer: any) => ({
             id: customer.id,
             type: 'customer' as const,
             title: customer.name || 'Okänd kund',
@@ -104,7 +81,9 @@ async function searchCustomers(
 }
 
 /**
- * Search orders by title or order number
+ * Search orders by title
+ * Optimized: Uses starts-with pattern for index utilization
+ * Note: orders table has 'title' column, NOT 'order_number'
  */
 async function searchOrders(
     query: string,
@@ -112,40 +91,38 @@ async function searchOrders(
     limit: number
 ): Promise<SearchResult[]> {
     try {
-        const searchPattern = `%${query}%`;
+        const startsWithPattern = `${query}%`;
+        const containsPattern = `%${query}%`;
 
-        // Search by title
-        const { data: titleData, error: titleError } = await supabase
+        // Search by title only (no order_number column exists)
+        const { data, error } = await supabase
             .from('orders')
-            .select('id, title, order_number, status, customer_id')
+            .select('id, title, status, customer_id')
             .eq('organisation_id', organisationId)
-            .ilike('title', searchPattern)
+            .ilike('title', startsWithPattern)
             .limit(limit);
 
-        if (titleError) {
-            console.error('Error searching orders by title:', titleError);
+        if (error) {
+            console.error('Error searching orders:', error);
         }
 
-        // Search by order number
-        let orderNumResults: any[] = [];
-        if ((titleData?.length || 0) < limit) {
-            const { data: orderData } = await supabase
+        // Fallback to contains if starts-with returns few results
+        let allResults = data || [];
+        if (allResults.length < limit) {
+            const { data: containsData } = await supabase
                 .from('orders')
-                .select('id, title, order_number, status, customer_id')
+                .select('id, title, status, customer_id')
                 .eq('organisation_id', organisationId)
-                .ilike('order_number', searchPattern)
-                .limit(limit - (titleData?.length || 0));
-            orderNumResults = orderData || [];
-        }
+                .ilike('title', containsPattern)
+                .limit(limit);
 
-        // Combine and dedupe
-        const allResults = [...(titleData || []), ...orderNumResults];
-        const uniqueResults = allResults.filter((item, index, self) =>
-            index === self.findIndex(t => t.id === item.id)
-        );
+            const existingIds = new Set(allResults.map((r: any) => r.id));
+            const newResults = (containsData || []).filter((r: any) => !existingIds.has(r.id));
+            allResults = [...allResults, ...newResults];
+        }
 
         // Get customer names for results
-        const customerIds = uniqueResults.map(o => o.customer_id).filter(Boolean);
+        const customerIds = allResults.map((o: any) => o.customer_id).filter(Boolean);
         let customerMap: Record<string, string> = {};
 
         if (customerIds.length > 0) {
@@ -154,16 +131,16 @@ async function searchOrders(
                 .select('id, name')
                 .in('id', customerIds);
 
-            customerMap = (customers || []).reduce((acc, c) => {
+            customerMap = (customers || []).reduce((acc: Record<string, string>, c: any) => {
                 acc[c.id] = c.name;
                 return acc;
-            }, {} as Record<string, string>);
+            }, {});
         }
 
-        return uniqueResults.slice(0, limit).map(order => ({
+        return allResults.slice(0, limit).map((order: any) => ({
             id: order.id,
             type: 'order' as const,
-            title: order.order_number || order.title || 'Order',
+            title: order.title || 'Order',
             subtitle: customerMap[order.customer_id] || order.status || undefined,
             url: `/Orderhantering?order=${order.id}`
         }));
@@ -175,6 +152,7 @@ async function searchOrders(
 
 /**
  * Search leads by title or description
+ * Optimized: Uses single .or() query and starts-with pattern
  */
 async function searchLeads(
     query: string,
@@ -182,40 +160,38 @@ async function searchLeads(
     limit: number
 ): Promise<SearchResult[]> {
     try {
-        const searchPattern = `%${query}%`;
+        const startsWithPattern = `${query}%`;
+        const containsPattern = `%${query}%`;
 
-        // Search by title
-        const { data: titleData, error } = await supabase
+        // Single query with .or() for title and description
+        const { data, error } = await supabase
             .from('leads')
             .select('id, title, status, customer_id, description')
             .eq('organisation_id', organisationId)
-            .ilike('title', searchPattern)
+            .or(`title.ilike.${startsWithPattern},description.ilike.${startsWithPattern}`)
             .limit(limit);
 
         if (error) {
             console.error('Error searching leads:', error);
         }
 
-        // Search by description if needed
-        let descResults: any[] = [];
-        if ((titleData?.length || 0) < limit) {
-            const { data: descData } = await supabase
+        // Fallback to contains if starts-with returns few results
+        let allResults = data || [];
+        if (allResults.length < limit) {
+            const { data: containsData } = await supabase
                 .from('leads')
                 .select('id, title, status, customer_id, description')
                 .eq('organisation_id', organisationId)
-                .ilike('description', searchPattern)
-                .limit(limit - (titleData?.length || 0));
-            descResults = descData || [];
+                .or(`title.ilike.${containsPattern},description.ilike.${containsPattern}`)
+                .limit(limit);
+
+            const existingIds = new Set(allResults.map((r: any) => r.id));
+            const newResults = (containsData || []).filter((r: any) => !existingIds.has(r.id));
+            allResults = [...allResults, ...newResults];
         }
 
-        // Combine and dedupe
-        const allResults = [...(titleData || []), ...descResults];
-        const uniqueResults = allResults.filter((item, index, self) =>
-            index === self.findIndex(t => t.id === item.id)
-        );
-
         // Get customer names
-        const customerIds = uniqueResults.map(l => l.customer_id).filter(Boolean);
+        const customerIds = allResults.map((l: any) => l.customer_id).filter(Boolean);
         let customerMap: Record<string, string> = {};
 
         if (customerIds.length > 0) {
@@ -224,10 +200,10 @@ async function searchLeads(
                 .select('id, name')
                 .in('id', customerIds);
 
-            customerMap = (customers || []).reduce((acc, c) => {
+            customerMap = (customers || []).reduce((acc: Record<string, string>, c: any) => {
                 acc[c.id] = c.name;
                 return acc;
-            }, {} as Record<string, string>);
+            }, {});
         }
 
         const statusLabels: Record<string, string> = {
@@ -240,7 +216,7 @@ async function searchLeads(
             'lost': 'Förlorad'
         };
 
-        return uniqueResults.slice(0, limit).map(lead => ({
+        return allResults.slice(0, limit).map((lead: any) => ({
             id: lead.id,
             type: 'lead' as const,
             title: lead.title || 'Lead',
@@ -255,6 +231,7 @@ async function searchLeads(
 
 /**
  * Search invoices by invoice number
+ * Optimized: Uses starts-with pattern for index utilization
  */
 async function searchInvoices(
     query: string,
@@ -262,13 +239,15 @@ async function searchInvoices(
     limit: number
 ): Promise<SearchResult[]> {
     try {
-        const searchPattern = `%${query}%`;
+        const startsWithPattern = `${query}%`;
+        const containsPattern = `%${query}%`;
 
-        const { data, error } = await supabase
+        // Try starts-with first for index utilization
+        let { data, error } = await supabase
             .from('invoices')
             .select('id, invoice_number, status, amount, customer_id')
             .eq('organisation_id', organisationId)
-            .ilike('invoice_number', searchPattern)
+            .ilike('invoice_number', startsWithPattern)
             .limit(limit);
 
         if (error) {
@@ -276,8 +255,23 @@ async function searchInvoices(
             return [];
         }
 
+        // Fallback to contains if starts-with returns few results
+        let allResults = data || [];
+        if (allResults.length < limit) {
+            const { data: containsData } = await supabase
+                .from('invoices')
+                .select('id, invoice_number, status, amount, customer_id')
+                .eq('organisation_id', organisationId)
+                .ilike('invoice_number', containsPattern)
+                .limit(limit);
+
+            const existingIds = new Set(allResults.map((r: any) => r.id));
+            const newResults = (containsData || []).filter((r: any) => !existingIds.has(r.id));
+            allResults = [...allResults, ...newResults];
+        }
+
         // Get customer names
-        const customerIds = (data || []).map(i => i.customer_id).filter(Boolean);
+        const customerIds = allResults.map((i: any) => i.customer_id).filter(Boolean);
         let customerMap: Record<string, string> = {};
 
         if (customerIds.length > 0) {
@@ -286,10 +280,10 @@ async function searchInvoices(
                 .select('id, name')
                 .in('id', customerIds);
 
-            customerMap = (customers || []).reduce((acc, c) => {
+            customerMap = (customers || []).reduce((acc: Record<string, string>, c: any) => {
                 acc[c.id] = c.name;
                 return acc;
-            }, {} as Record<string, string>);
+            }, {});
         }
 
         const formatAmount = (amount: number | null) => {
@@ -309,7 +303,7 @@ async function searchInvoices(
             'cancelled': 'Avbruten'
         };
 
-        return (data || []).map(invoice => ({
+        return allResults.slice(0, limit).map((invoice: any) => ({
             id: invoice.id,
             type: 'invoice' as const,
             title: invoice.invoice_number || 'Faktura',

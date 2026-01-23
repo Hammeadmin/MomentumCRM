@@ -1,10 +1,10 @@
 /*
-# Send Email Edge Function - Production Resend Integration
+# Send Email Edge Function - BYOE (Bring Your Own Email) System
 
-1. Production Email Sending
-   - Real email delivery via Resend API (https://api.resend.com/emails)
-   - Supports HTML and plain text content
-   - Attachment support for invoices and documents
+1. Smart Email Sending
+   - Uses user's custom SMTP settings if configured
+   - Falls back to system Resend account if no custom settings
+   - Forces Reply-To header to user's email for customer replies
 
 2. Features
    - CC and BCC recipient support
@@ -13,12 +13,13 @@
    - Comprehensive error handling
 
 3. Security
-   - Validates RESEND_API_KEY environment variable
-   - Validates user permissions via communication record
+   - Validates user authentication via JWT
+   - Users can only access their own SMTP settings (RLS)
    - Rate limiting protection
 */
 
-import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+import nodemailer from 'npm:nodemailer@6.9.13';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,27 +33,23 @@ interface EmailAttachment {
 }
 
 interface EmailRequest {
-  communication_id: string;
+  communication_id?: string;
   to: string;
   subject: string;
-  content: string;       // Plain text content
-  html?: string;         // HTML content (optional)
+  content?: string;       // Plain text content
+  html?: string;          // HTML content
   from_name?: string;
-  from_email?: string;
   cc?: string[];
   bcc?: string[];
   attachments?: EmailAttachment[];
 }
 
-interface ResendEmailPayload {
-  from: string;
-  to: string[];
-  subject: string;
-  text?: string;
-  html?: string;
-  cc?: string[];
-  bcc?: string[];
-  attachments?: { filename: string; content: string }[];
+interface SmtpSettings {
+  user_id: string;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user: string;
+  smtp_pass: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -62,28 +59,34 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Validate RESEND_API_KEY exists
-    const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-    if (!RESEND_API_KEY) {
-      console.error('RESEND_API_KEY not configured');
+    // Initialize Supabase Admin client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get user from Auth header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Email service not configured. RESEND_API_KEY is missing.'
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500
-        }
+        JSON.stringify({ success: false, error: 'Missing authorization header' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid or expired token' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
 
+    const userEmail = user.email;
+    console.log(`Processing email request for user: ${user.id} (${userEmail})`);
+
+    // Parse request body
     const {
       communication_id,
       to,
@@ -91,61 +94,126 @@ Deno.serve(async (req: Request) => {
       content,
       html,
       from_name,
-      from_email,
       cc,
       bcc,
       attachments
     }: EmailRequest = await req.json();
 
-    console.log('Sending email:', { communication_id, to, subject, hasHtml: !!html, attachmentCount: attachments?.length || 0 });
+    console.log('Email request:', { to, subject, hasHtml: !!html, attachmentCount: attachments?.length || 0 });
 
-    // Validate communication exists and user has permission
-    const { data: communication, error: commError } = await supabase
-      .from('communications')
-      .select(`
-        *,
-        order:orders(
-          title,
-          organisation:organisations(name, email, phone),
-          customer:customers(name)
-        )
-      `)
-      .eq('id', communication_id)
-      .eq('type', 'email')
+    // Query user_smtp_settings for this user
+    const { data: smtpSettings, error: smtpError } = await supabase
+      .from('user_smtp_settings')
+      .select('*')
+      .eq('user_id', user.id)
       .single();
 
-    if (commError || !communication) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Communication not found or access denied'
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 404
-        }
-      );
+    // Determine transporter configuration
+    let transporter: nodemailer.Transporter;
+    let fromAddress: string;
+    const senderName = from_name || 'MomentumCRM';
+
+    if (smtpSettings && !smtpError) {
+      // User has custom SMTP settings - use their server
+      console.log(`Using custom SMTP: ${smtpSettings.smtp_host}:${smtpSettings.smtp_port}`);
+
+      transporter = nodemailer.createTransport({
+        host: smtpSettings.smtp_host,
+        port: smtpSettings.smtp_port,
+        secure: smtpSettings.smtp_port === 465, // true for 465, false for other ports
+        auth: {
+          user: smtpSettings.smtp_user,
+          pass: smtpSettings.smtp_pass,
+        },
+      });
+
+      fromAddress = `"${senderName}" <${smtpSettings.smtp_user}>`;
+    } else {
+      // No custom settings - fallback to Resend via SMTP
+      const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+      if (!RESEND_API_KEY) {
+        console.error('RESEND_API_KEY not configured and no custom SMTP settings');
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Email service not configured. Please add SMTP settings or configure RESEND_API_KEY.'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      console.log('Using Resend SMTP fallback');
+
+      transporter = nodemailer.createTransport({
+        host: 'smtp.resend.com',
+        port: 465,
+        secure: true,
+        auth: {
+          user: 'resend',
+          pass: RESEND_API_KEY,
+        },
+      });
+
+      fromAddress = `"${senderName}" <system@momentumcrm.com>`;
     }
 
-    // Get organisation details for sender info
-    const orgName = communication.order?.organisation?.name || 'Företaget';
-    const orgEmail = communication.order?.organisation?.email || Deno.env.get('DEFAULT_FROM_EMAIL') || 'noreply@example.com';
+    // Build email options
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: fromAddress,
+      to: to,
+      subject: subject,
+      replyTo: userEmail, // CRITICAL: Always set reply-to to user's email
+    };
 
-    // Send email via Resend
-    const emailResult = await sendWithResend(RESEND_API_KEY, {
-      to,
-      subject,
-      content,
-      html,
-      from_name: from_name || orgName,
-      from_email: from_email || orgEmail,
-      cc,
-      bcc,
-      attachments
+    // Add text content
+    if (content) {
+      mailOptions.text = content;
+    }
+
+    // Add HTML content
+    if (html) {
+      mailOptions.html = html;
+    } else if (content) {
+      // Convert plain text to basic HTML with preserved whitespace
+      mailOptions.html = `<div style="font-family: Arial, sans-serif; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(content)}</div>`;
+    }
+
+    // Add CC recipients
+    if (cc && cc.length > 0) {
+      mailOptions.cc = cc;
+    }
+
+    // Add BCC recipients
+    if (bcc && bcc.length > 0) {
+      mailOptions.bcc = bcc;
+    }
+
+    // Add attachments
+    if (attachments && attachments.length > 0) {
+      mailOptions.attachments = attachments.map(att => ({
+        filename: att.filename,
+        content: att.content,
+        encoding: 'base64'
+      }));
+    }
+
+    console.log('Sending email with options:', {
+      from: mailOptions.from,
+      to: mailOptions.to,
+      replyTo: mailOptions.replyTo,
+      subject: mailOptions.subject,
+      hasHtml: !!mailOptions.html,
+      ccCount: cc?.length || 0,
+      bccCount: bcc?.length || 0,
+      attachmentCount: attachments?.length || 0
     });
 
-    if (emailResult.success) {
-      // Update communication status
+    // Send the email
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`Email sent successfully, messageId: ${info.messageId}`);
+
+    // Update communication status if communication_id was provided
+    if (communication_id) {
       await supabase
         .from('communications')
         .update({
@@ -153,41 +221,16 @@ Deno.serve(async (req: Request) => {
           sent_at: new Date().toISOString()
         })
         .eq('id', communication_id);
-
-      console.log(`Email sent successfully to ${to}, message_id: ${emailResult.message_id}`);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: 'Email sent successfully',
-          message_id: emailResult.message_id
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200
-        }
-      );
-    } else {
-      // Update communication with error
-      await supabase
-        .from('communications')
-        .update({
-          status: 'failed',
-          error_message: emailResult.error
-        })
-        .eq('id', communication_id);
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: emailResult.error
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500
-        }
-      );
     }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Email sent successfully',
+        message_id: info.messageId
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+    );
 
   } catch (error) {
     console.error('Error in send-email function:', error);
@@ -195,106 +238,12 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message
+        error: error.message || 'Failed to send email'
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });
-
-async function sendWithResend(apiKey: string, emailData: {
-  to: string;
-  subject: string;
-  content: string;
-  html?: string;
-  from_name: string;
-  from_email: string;
-  cc?: string[];
-  bcc?: string[];
-  attachments?: EmailAttachment[];
-}): Promise<{ success: boolean; message_id?: string; error?: string }> {
-  try {
-    // Build the Resend API payload
-    const payload: ResendEmailPayload = {
-      from: `${emailData.from_name} <${emailData.from_email}>`,
-      to: [emailData.to],
-      subject: emailData.subject,
-    };
-
-    // Add text content
-    if (emailData.content) {
-      payload.text = emailData.content;
-    }
-
-    // Add HTML content (if provided, otherwise convert text to basic HTML)
-    if (emailData.html) {
-      payload.html = emailData.html;
-    } else if (emailData.content) {
-      // Convert plain text to basic HTML with preserved whitespace
-      payload.html = `<div style="font-family: Arial, sans-serif; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(emailData.content)}</div>`;
-    }
-
-    // Add CC recipients
-    if (emailData.cc && emailData.cc.length > 0) {
-      payload.cc = emailData.cc;
-    }
-
-    // Add BCC recipients
-    if (emailData.bcc && emailData.bcc.length > 0) {
-      payload.bcc = emailData.bcc;
-    }
-
-    // Add attachments
-    if (emailData.attachments && emailData.attachments.length > 0) {
-      payload.attachments = emailData.attachments.map(att => ({
-        filename: att.filename,
-        content: att.content // Base64 encoded
-      }));
-    }
-
-    console.log('Sending to Resend API:', {
-      to: payload.to,
-      subject: payload.subject,
-      hasHtml: !!payload.html,
-      ccCount: payload.cc?.length || 0,
-      bccCount: payload.bcc?.length || 0,
-      attachmentCount: payload.attachments?.length || 0
-    });
-
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseData = await response.json();
-
-    if (!response.ok) {
-      console.error('Resend API error:', responseData);
-      return {
-        success: false,
-        error: `Resend API error: ${responseData.message || JSON.stringify(responseData)}`
-      };
-    }
-
-    return {
-      success: true,
-      message_id: responseData.id
-    };
-  } catch (error) {
-    console.error('Error sending email via Resend:', error);
-    return {
-      success: false,
-      error: error.message
-    };
-  }
-}
 
 function escapeHtml(text: string): string {
   return text

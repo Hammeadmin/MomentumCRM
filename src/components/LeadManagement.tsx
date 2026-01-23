@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
     Plus, X, Rss, Zap, Briefcase, Filter, User, Phone, Mail, MapPin, Edit, Trash2, Calendar,
     MessageSquare, DollarSign, ChevronDown, CheckSquare, Square, RefreshCw, AlertTriangle, Target, Loader2,
@@ -17,7 +18,7 @@ import {
     type LeadWithRelations, type SalesTask, type RSSArticle, type AILeadSuggestion,
     type LeadFilters
 } from '../lib/leads';
-import { formatDate, formatCurrency, getCustomers, getTeamMembers } from '../lib/database';
+import { formatDate, formatCurrency, getCustomers, getTeamMembers, createCustomer } from '../lib/database';
 import { supabase } from '../lib/supabase';
 import { createQuoteFromLead } from '../lib/quotes';
 import type { LeadStatus, Customer, UserProfile } from '../types/database';
@@ -38,14 +39,14 @@ interface LeadAnalytics {
     wonLeads: number;
 }
 
-// Status configuration - matches actual DB enum values
-const LEAD_STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bgColor: string }> = {
-    new: { label: 'Ny', color: 'text-blue-700', bgColor: 'bg-blue-100' },
-    contacted: { label: 'Kontaktad', color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
-    qualified: { label: 'Kvalificerad', color: 'text-purple-700', bgColor: 'bg-purple-100' },
-    proposal: { label: 'Offert', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
-    won: { label: 'Vunnen', color: 'text-green-700', bgColor: 'bg-green-100' },
-    lost: { label: 'Förlorad', color: 'text-red-700', bgColor: 'bg-red-100' }
+// Status configuration - matches actual DB enum values with SHARPER professional colors
+const LEAD_STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bgColor: string; headerColor: string }> = {
+    new: { label: 'Ny', color: 'text-emerald-800', bgColor: 'bg-emerald-100', headerColor: 'bg-emerald-600' },
+    contacted: { label: 'Kontaktad', color: 'text-amber-800', bgColor: 'bg-amber-100', headerColor: 'bg-amber-500' },
+    qualified: { label: 'Kvalificerad', color: 'text-violet-800', bgColor: 'bg-violet-100', headerColor: 'bg-violet-600' },
+    proposal: { label: 'Offert', color: 'text-indigo-800', bgColor: 'bg-indigo-100', headerColor: 'bg-indigo-600' },
+    won: { label: 'Vunnen', color: 'text-teal-800', bgColor: 'bg-teal-100', headerColor: 'bg-teal-600' },
+    lost: { label: 'Förlorad', color: 'text-rose-800', bgColor: 'bg-rose-100', headerColor: 'bg-rose-600' }
 };
 
 const PIPELINE_STAGES: LeadStatus[] = ['new', 'contacted', 'qualified', 'proposal', 'won', 'lost'];
@@ -120,7 +121,7 @@ const LeadKanbanView = ({ leads, onSelectLead, onStatusChange, leadsTranslations
 
     return (
         <div className="flex gap-4 overflow-x-auto pb-4 min-h-[500px]">
-            {PIPELINE_STAGES.filter(s => s !== 'lost').map(status => {
+            {PIPELINE_STAGES.map(status => {
                 const config = LEAD_STATUS_CONFIG[status];
                 const stageLeads = leads.filter(l => l.status === status);
                 const totalValue = stageLeads.reduce((sum, l) => sum + (l.estimated_value || 0), 0);
@@ -128,21 +129,27 @@ const LeadKanbanView = ({ leads, onSelectLead, onStatusChange, leadsTranslations
                 return (
                     <div
                         key={status}
-                        className="flex-shrink-0 w-72 bg-gray-50 rounded-xl p-3"
+                        className="flex-shrink-0 w-72 bg-slate-50 rounded-xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-all"
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, status)}
                     >
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 rounded-md text-xs font-semibold ${config.bgColor} ${config.color}`}>
+                        {/* Column Header with solid color bar */}
+                        <div className={`${config.headerColor} px-4 py-3`}>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-white font-semibold text-sm truncate">
                                     {config.label}
                                 </span>
-                                <span className="text-xs text-gray-500">{stageLeads.length}</span>
+                                <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                                    {stageLeads.length}
+                                </span>
                             </div>
-                            <span className="text-xs font-medium text-gray-500">{formatCurrency(totalValue)}</span>
+                            <div className="text-white/80 text-xs font-medium mt-1">
+                                {formatCurrency(totalValue)}
+                            </div>
                         </div>
 
-                        <div className="space-y-2">
+                        {/* Column Content */}
+                        <div className="p-3 space-y-2.5">
                             {stageLeads.map(lead => (
                                 <KanbanCard
                                     key={lead.id}
@@ -153,7 +160,7 @@ const LeadKanbanView = ({ leads, onSelectLead, onStatusChange, leadsTranslations
                                 />
                             ))}
                             {stageLeads.length === 0 && (
-                                <div className="text-center py-8 text-gray-400 text-sm">
+                                <div className="text-center py-8 text-slate-400 text-sm">
                                     {leadsTranslations.KANBAN.DRAG_HERE}
                                 </div>
                             )}
@@ -184,6 +191,8 @@ const LeadFormModal = ({ isOpen, onClose, onSave, leadToEdit, organisationId }: 
     const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
+    const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone_number: '' });
 
     useEffect(() => {
         if (isOpen) {
@@ -211,6 +220,42 @@ const LeadFormModal = ({ isOpen, onClose, onSave, leadToEdit, organisationId }: 
         e.preventDefault();
         if (!user) return showError(leadsText.MESSAGES.ERROR_TITLE, leadsText.MESSAGES.MUST_LOGIN);
 
+        setLoading(true);
+        setErrors({});
+
+        // If creating new customer, create it first
+        let customerId = formData.customer_id;
+        if (showNewCustomerForm && !customerId) {
+            if (!newCustomer.name.trim()) {
+                showError('Fel', 'Kundnamn är obligatoriskt');
+                setLoading(false);
+                return;
+            }
+            if (!newCustomer.email.trim()) {
+                showError('Fel', 'E-postadress är obligatorisk för att kunna kontakta kunden');
+                setLoading(false);
+                return;
+            }
+
+            const { data: createdCustomer, error: customerError } = await createCustomer({
+                organisation_id: organisationId!,
+                name: newCustomer.name.trim(),
+                email: newCustomer.email.trim(),
+                phone_number: newCustomer.phone_number.trim() || null,
+                customer_type: 'private',
+            } as Omit<Customer, 'id' | 'created_at'>);
+
+            if (customerError || !createdCustomer) {
+                showError('Fel', `Kunde inte skapa kund: ${customerError?.message || 'Okänt fel'}`);
+                setLoading(false);
+                return;
+            }
+
+            customerId = createdCustomer.id;
+            // Add to customers list for future reference
+            setCustomers(prev => [...prev, createdCustomer]);
+        }
+
         // Build payload for validation
         const dataPayload = {
             organisation_id: organisationId,
@@ -219,7 +264,7 @@ const LeadFormModal = ({ isOpen, onClose, onSave, leadToEdit, organisationId }: 
             source: formData.source || null,
             status: formData.status,
             estimated_value: formData.estimated_value ? parseFloat(formData.estimated_value) : null,
-            customer_id: formData.customer_id || null,
+            customer_id: customerId || null,
             assigned_to_user_id: formData.assigned_to_user_id || null,
         };
 
@@ -227,11 +272,9 @@ const LeadFormModal = ({ isOpen, onClose, onSave, leadToEdit, organisationId }: 
         const validation = parseLead(dataPayload);
         if (!validation.success) {
             setErrors(validation.errors);
+            setLoading(false);
             return;
         }
-
-        setLoading(true);
-        setErrors({});
 
         const result = leadToEdit
             ? await updateLead(leadToEdit.id, dataPayload)
@@ -278,12 +321,73 @@ const LeadFormModal = ({ isOpen, onClose, onSave, leadToEdit, organisationId }: 
                                 <label className="block text-sm font-medium text-gray-700 mb-1">{leadsText.FORM.VALUE_LABEL}</label>
                                 <input type="number" value={formData.estimated_value} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, estimated_value: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" placeholder="25000" />
                             </div>
-                            <div>
+                            <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">{leadsText.FORM.CUSTOMER_LABEL}</label>
-                                <select value={formData.customer_id} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, customer_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
-                                    <option value="">{leadsText.FORM.CUSTOMER_PLACEHOLDER}</option>
-                                    {customers.map((c: Customer) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
+
+                                {/* Toggle between existing and new customer */}
+                                <div className="flex items-center gap-4 mb-2">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            checked={!showNewCustomerForm}
+                                            onChange={() => setShowNewCustomerForm(false)}
+                                            className="text-primary-600"
+                                        />
+                                        <span className="text-sm text-gray-600">Välj befintlig kund</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            checked={showNewCustomerForm}
+                                            onChange={() => { setShowNewCustomerForm(true); setFormData({ ...formData, customer_id: '' }); }}
+                                            className="text-primary-600"
+                                        />
+                                        <span className="text-sm text-gray-600">Skapa ny kund</span>
+                                    </label>
+                                </div>
+
+                                {!showNewCustomerForm ? (
+                                    <select value={formData.customer_id} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, customer_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
+                                        <option value="">{leadsText.FORM.CUSTOMER_PLACEHOLDER}</option>
+                                        {customers.map((c: Customer) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                ) : (
+                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Kundnamn *</label>
+                                            <input
+                                                type="text"
+                                                value={newCustomer.name}
+                                                onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                                                placeholder="Företagsnamn eller personnamn"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">E-post *</label>
+                                                <input
+                                                    type="email"
+                                                    value={newCustomer.email}
+                                                    onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                                                    placeholder="kund@foretag.se"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">Telefon</label>
+                                                <input
+                                                    type="tel"
+                                                    value={newCustomer.phone_number}
+                                                    onChange={(e) => setNewCustomer({ ...newCustomer, phone_number: e.target.value })}
+                                                    placeholder="070-123 45 67"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                                />
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-blue-700">Kunden skapas automatiskt när du sparar leaden.</p>
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">{leadsText.FORM.SALESPERSON_LABEL}</label>
@@ -311,6 +415,7 @@ const LeadFormModal = ({ isOpen, onClose, onSave, leadToEdit, organisationId }: 
 
 const LeadManagement: React.FC = () => {
     const { user, organisationId } = useAuth();
+    const location = useLocation();
     const { success, error: showError } = useToast();
     const { leads: leadsTranslations } = useTranslation();
     const [filters, setFilters] = useState<LeadFilters>({});
@@ -366,6 +471,17 @@ const LeadManagement: React.FC = () => {
         if (selectedLead) loadAISuggestions(selectedLead.id);
         else setAiSuggestions([]);
     }, [selectedLead]);
+
+    // Handle navigation state for creating lead from customer page
+    useEffect(() => {
+        const state = location.state as { createForCustomer?: { id: string; name: string } } | null;
+        if (state?.createForCustomer) {
+            // Open lead creation modal - customer will be pre-selected in the form
+            setIsModalOpen(true);
+            // Clear the navigation state so it doesn't re-trigger
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state]);
 
     // Update selected lead when leads change
     useEffect(() => {
@@ -449,23 +565,15 @@ const LeadManagement: React.FC = () => {
         loadAnalytics();
     };
 
-    // Create quote from a lead - update status to 'proposal' and open quote modal
-    const handleCreateQuote = async (lead: LeadWithRelations) => {
+    // Create quote from a lead - open quote modal WITHOUT changing status
+    // Status will be updated to 'proposal' only after quote is successfully created
+    const handleCreateQuote = (lead: LeadWithRelations) => {
         if (!organisationId) return;
 
-        // Update lead status to 'proposal' (Offert stage)
-        const { error } = await updateLead(lead.id, { status: 'proposal' });
-        if (error) {
-            showError(leadsTranslations.MESSAGES.ERROR_TITLE, leadsTranslations.MESSAGES.ERROR_STATUS);
-            return;
-        }
-
         // Store the lead and open the quote creation modal
+        // Status update happens in onQuoteCreated callback
         setQuoteLead(lead);
         setIsQuoteModalOpen(true);
-
-        refetchLeads();
-        loadAnalytics();
     };
 
     const handleCreateFromArticle = async (article: RSSArticle) => {

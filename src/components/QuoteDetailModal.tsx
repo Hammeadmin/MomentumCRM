@@ -488,7 +488,7 @@ export function QuoteDetailModal({
                                                 </div>
                                             </button>
 
-                                            {/* Accept & Create Order */}
+                                            {/* Accept & Create Order - Direct */}
                                             <button
                                                 onClick={handleAccept}
                                                 disabled={saving || quote.status === 'accepted'}
@@ -498,10 +498,30 @@ export function QuoteDetailModal({
                                                     <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
                                                 </div>
                                                 <div className="text-left">
-                                                    <p className="font-medium text-green-700 dark:text-green-300">Acceptera & skapa order</p>
-                                                    <p className="text-sm text-green-600 dark:text-green-400">Markera som accepterad och skapa order</p>
+                                                    <p className="font-medium text-green-700 dark:text-green-300">Acceptera direkt</p>
+                                                    <p className="text-sm text-green-600 dark:text-green-400">Skapa order utan ändringar</p>
                                                 </div>
                                             </button>
+
+                                            {/* Edit first, then Accept */}
+                                            {quote.status !== 'accepted' && (
+                                                <button
+                                                    onClick={() => {
+                                                        setIsEditing(true);
+                                                        setActiveTab('items');
+                                                    }}
+                                                    disabled={saving}
+                                                    className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                                                >
+                                                    <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/50 rounded-lg flex items-center justify-center">
+                                                        <Edit className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                                                    </div>
+                                                    <div className="text-left">
+                                                        <p className="font-medium text-amber-700 dark:text-amber-300">Redigera först</p>
+                                                        <p className="text-sm text-amber-600 dark:text-amber-400">Ändra offerten innan acceptera</p>
+                                                    </div>
+                                                </button>
+                                            )}
 
                                             {/* Copy Link */}
                                             {quote.acceptance_token && (

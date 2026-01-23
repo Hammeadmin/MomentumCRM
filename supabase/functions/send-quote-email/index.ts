@@ -1,10 +1,10 @@
 /*
-# Send Quote Email with Acceptance Link - Production Resend Integration
+# Send Quote Email with Acceptance Link - BYOE System
 
-1. Production Email Sending
-   - Real email delivery via Resend API
-   - Branded HTML template with ROT information
-   - Secure acceptance token generation
+1. Smart Email Sending
+   - Uses user's custom SMTP settings if configured
+   - Falls back to system Resend account if no custom settings
+   - Forces Reply-To header to user's email for customer replies
 
 2. Features
    - "Accept Quote" button with secure link
@@ -13,12 +13,13 @@
    - Automatic token expiration
 
 3. Security
-   - Validates RESEND_API_KEY environment variable
+   - Validates user authentication via JWT
    - Secure token generation for quote acceptance
    - Rate limiting protection
 */
 
-import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+import nodemailer from 'npm:nodemailer@6.9.13';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,7 +34,14 @@ interface QuoteEmailRequest {
   body: string;
   include_acceptance_link: boolean;
   from_name?: string;
-  from_email?: string;
+}
+
+interface SmtpSettings {
+  user_id: string;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user: string;
+  smtp_pass: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -43,27 +51,32 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Validate RESEND_API_KEY exists
-    const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-    if (!RESEND_API_KEY) {
-      console.error('RESEND_API_KEY not configured');
+    // Initialize Supabase Admin client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get user from Auth header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Email service not configured. RESEND_API_KEY is missing.'
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500
-        }
+        JSON.stringify({ success: false, error: 'Missing authorization header' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid or expired token' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
+    const userEmail = user.email;
+    console.log(`Processing quote email for user: ${user.id} (${userEmail})`);
 
     const {
       quote_id,
@@ -71,8 +84,7 @@ Deno.serve(async (req: Request) => {
       subject,
       body,
       include_acceptance_link,
-      from_name,
-      from_email
+      from_name
     }: QuoteEmailRequest = await req.json();
 
     console.log('Sending quote email:', { quote_id, recipient_email, include_acceptance_link });
@@ -130,54 +142,116 @@ Deno.serve(async (req: Request) => {
       acceptanceUrl = `${siteUrl}/quote-accept/${token}`;
     }
 
-    // Generate email content with acceptance link
-    const emailContent = generateQuoteEmailContent(quote, body, acceptanceUrl);
+    // Generate tracking pixel URL (supabaseUrl from line 55)
+    const trackingPixelUrl = acceptanceToken
+      ? `${supabaseUrl}/functions/v1/track-quote-view?token=${acceptanceToken}`
+      : null;
 
-    // Send email via Resend
-    const orgEmail = quote.organisation?.email || Deno.env.get('DEFAULT_FROM_EMAIL') || 'noreply@example.com';
-    const emailResult = await sendWithResend(RESEND_API_KEY, {
+    // Generate email content with acceptance link
+    let emailContent = generateQuoteEmailContent(quote, body, acceptanceUrl);
+
+    // Embed tracking pixel in HTML (before closing body tag)
+    if (trackingPixelUrl && emailContent.html) {
+      const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" alt="" style="display:none;border:0;width:1px;height:1px;" />`;
+      emailContent.html = emailContent.html.replace('</body>', `${trackingPixel}</body>`);
+    }
+
+    // Query user_smtp_settings for this user
+    const { data: smtpSettings, error: smtpError } = await supabase
+      .from('user_smtp_settings')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    // Determine transporter configuration
+    let transporter: nodemailer.Transporter;
+    let fromAddress: string;
+    const senderName = from_name || quote.organisation?.name || 'Företaget';
+
+    if (smtpSettings && !smtpError) {
+      // User has custom SMTP settings - use their server
+      console.log(`Using custom SMTP: ${smtpSettings.smtp_host}:${smtpSettings.smtp_port}`);
+
+      transporter = nodemailer.createTransport({
+        host: smtpSettings.smtp_host,
+        port: smtpSettings.smtp_port,
+        secure: smtpSettings.smtp_port === 465,
+        auth: {
+          user: smtpSettings.smtp_user,
+          pass: smtpSettings.smtp_pass,
+        },
+      });
+
+      fromAddress = `"${senderName}" <${smtpSettings.smtp_user}>`;
+    } else {
+      // No custom settings - fallback to Resend via SMTP
+      const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+      if (!RESEND_API_KEY) {
+        console.error('RESEND_API_KEY not configured and no custom SMTP settings');
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Email service not configured. Please add SMTP settings or configure RESEND_API_KEY.'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      console.log('Using Resend SMTP fallback');
+
+      transporter = nodemailer.createTransport({
+        host: 'smtp.resend.com',
+        port: 465,
+        secure: true,
+        auth: {
+          user: 'resend',
+          pass: RESEND_API_KEY,
+        },
+      });
+
+      fromAddress = `"${senderName}" <system@momentumcrm.com>`;
+    }
+
+    // Build email options
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: fromAddress,
       to: recipient_email,
-      subject,
-      html: emailContent.html,
+      subject: subject,
+      replyTo: userEmail, // CRITICAL: Always set reply-to to user's email
       text: emailContent.text,
-      from_name: from_name || quote.organisation?.name || 'Företaget',
-      from_email: from_email || orgEmail
+      html: emailContent.html,
+    };
+
+    console.log('Sending quote email with options:', {
+      from: mailOptions.from,
+      to: mailOptions.to,
+      replyTo: mailOptions.replyTo,
+      subject: mailOptions.subject
     });
 
-    if (emailResult.success) {
-      // Update quote status
-      await supabase
-        .from('quotes')
-        .update({ status: 'sent' })
-        .eq('id', quote_id);
+    // Send the email
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`Quote email sent successfully, messageId: ${info.messageId}`);
 
-      console.log(`Quote email sent successfully to ${recipient_email}, message_id: ${emailResult.message_id}`);
+    // Update quote status
+    await supabase
+      .from('quotes')
+      .update({ status: 'sent' })
+      .eq('id', quote_id);
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: 'Quote email sent successfully',
-          acceptance_token: acceptanceToken,
-          acceptance_url: acceptanceUrl,
-          message_id: emailResult.message_id
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200
-        }
-      );
-    } else {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: emailResult.error
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500
-        }
-      );
-    }
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Quote email sent successfully',
+        acceptance_token: acceptanceToken,
+        acceptance_url: acceptanceUrl,
+        message_id: info.messageId
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    );
 
   } catch (error) {
     console.error('Error in send-quote-email function:', error);
@@ -194,60 +268,6 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
-
-async function sendWithResend(apiKey: string, emailData: {
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-  from_name: string;
-  from_email: string;
-}): Promise<{ success: boolean; message_id?: string; error?: string }> {
-  try {
-    const payload = {
-      from: `${emailData.from_name} <${emailData.from_email}>`,
-      to: [emailData.to],
-      subject: emailData.subject,
-      html: emailData.html,
-      text: emailData.text,
-    };
-
-    console.log('Sending quote email to Resend API:', {
-      to: payload.to,
-      subject: payload.subject
-    });
-
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseData = await response.json();
-
-    if (!response.ok) {
-      console.error('Resend API error:', responseData);
-      return {
-        success: false,
-        error: `Resend API error: ${responseData.message || JSON.stringify(responseData)}`
-      };
-    }
-
-    return {
-      success: true,
-      message_id: responseData.id
-    };
-  } catch (error) {
-    console.error('Error sending quote email via Resend:', error);
-    return {
-      success: false,
-      error: error.message
-    };
-  }
-}
 
 function generateQuoteEmailContent(quote: any, bodyText: string, acceptanceUrl?: string | null) {
   const companyName = quote.organisation?.name || 'Momentum CRM';

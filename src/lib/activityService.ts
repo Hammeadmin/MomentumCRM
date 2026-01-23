@@ -228,8 +228,7 @@ export async function getChatMessages(
     limit: number = 50
 ): Promise<{ data: any[] | null; error: Error | null }> {
     try {
-        // Note: No FK from chat_messages to user_profiles exists, 
-        // so we fetch messages first then enrich with user data
+        // Fetch LAST N messages by ordering descending, then reverse for display
         const { data: messages, error } = await supabase
             .from('chat_messages')
             .select(`
@@ -238,9 +237,9 @@ export async function getChatMessages(
                 created_at,
                 sender_user_id
             `)
-            .eq('channel_id', channelId)
-            .order('created_at', { ascending: true })
-            .limit(limit);
+            .eq('channel_id', channelId)  // Uses idx_chat_messages_channel_date index
+            .order('created_at', { ascending: false })  // Get newest first
+            .limit(limit);  // Limit to last N messages
 
         if (error) throw error;
 
@@ -266,7 +265,8 @@ export async function getChatMessages(
             sender: userMap.get(msg.sender_user_id) || null
         }));
 
-        return { data: enrichedMessages, error: null };
+        // Reverse to chronological order (oldest first) for display
+        return { data: enrichedMessages.reverse(), error: null };
     } catch (error) {
         return { data: null, error: error as Error };
     }

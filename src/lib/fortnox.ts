@@ -485,9 +485,43 @@ export async function markFortnoxInvoicePaid(
 // ============================================================================
 
 /**
- * Sync all unsynced customers to Fortnox
+ * Sync all unsynced customers to Fortnox (using Edge Function)
  */
 export async function syncAllCustomers(
+    organisationId: string
+): Promise<{ success: number; failed: number; errors: string[] }> {
+    try {
+        // Try the optimized Edge Function first
+        const { data, error } = await supabase.functions.invoke('sync-fortnox', {
+            body: {
+                action: 'sync-customers',
+                organisation_id: organisationId,
+            },
+        });
+
+        if (!error && data) {
+            console.info('Using optimized sync-fortnox Edge Function');
+            return {
+                success: data.success || 0,
+                failed: data.failed || 0,
+                errors: data.errors || []
+            };
+        }
+
+        // Fallback to legacy implementation
+        console.info('Edge Function not available, using legacy sync');
+        return syncAllCustomersLegacy(organisationId);
+    } catch (err) {
+        console.error('Error in syncAllCustomers:', err);
+        // Fallback to legacy on any error
+        return syncAllCustomersLegacy(organisationId);
+    }
+}
+
+/**
+ * Legacy: Sync all unsynced customers to Fortnox (client-side loop)
+ */
+export async function syncAllCustomersLegacy(
     organisationId: string
 ): Promise<{ success: number; failed: number; errors: string[] }> {
     const { data: customers, error } = await supabase
@@ -518,9 +552,43 @@ export async function syncAllCustomers(
 }
 
 /**
- * Sync all unsynced invoices to Fortnox
+ * Sync all unsynced invoices to Fortnox (using Edge Function)
  */
 export async function syncAllInvoices(
+    organisationId: string
+): Promise<{ success: number; failed: number; errors: string[] }> {
+    try {
+        // Try the optimized Edge Function first
+        const { data, error } = await supabase.functions.invoke('sync-fortnox', {
+            body: {
+                action: 'sync-invoices',
+                organisation_id: organisationId,
+            },
+        });
+
+        if (!error && data) {
+            console.info('Using optimized sync-fortnox Edge Function');
+            return {
+                success: data.success || 0,
+                failed: data.failed || 0,
+                errors: data.errors || []
+            };
+        }
+
+        // Fallback to legacy implementation
+        console.info('Edge Function not available, using legacy sync');
+        return syncAllInvoicesLegacy(organisationId);
+    } catch (err) {
+        console.error('Error in syncAllInvoices:', err);
+        // Fallback to legacy on any error
+        return syncAllInvoicesLegacy(organisationId);
+    }
+}
+
+/**
+ * Legacy: Sync all unsynced invoices to Fortnox (client-side loop)
+ */
+export async function syncAllInvoicesLegacy(
     organisationId: string
 ): Promise<{ success: number; failed: number; errors: string[] }> {
     const { data: invoices, error } = await supabase
@@ -553,3 +621,4 @@ export async function syncAllInvoices(
 
     return { success: successCount, failed: failedCount, errors };
 }
+

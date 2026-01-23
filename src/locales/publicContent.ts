@@ -430,61 +430,113 @@ export const sv = {
     legal: {
         privacy: {
             title: 'Integritetspolicy',
-            lastUpdated: 'Senast uppdaterad: 8 januari 2026',
+            lastUpdated: 'Senast uppdaterad: 20 januari 2026',
             sections: [
                 {
-                    heading: '1. Inledning',
-                    content: 'Momentum CRM AB ("vi", "oss", "vår") värnar om din integritet. Denna policy beskriver hur vi samlar in, använder och skyddar dina personuppgifter i enlighet med EU:s dataskyddsförordning (GDPR).',
+                    heading: '1. Personuppgiftsansvarig',
+                    content: 'Momentum CRM AB, org.nr 559XXX-XXXX, Birger Jarlsgatan 57, 113 56 Stockholm, ansvarar för behandlingen av dina personuppgifter. För frågor om personuppgiftshantering, kontakta privacy@momentum-crm.se.',
                 },
                 {
-                    heading: '2. Vilka uppgifter vi samlar in',
-                    content: 'Vi samlar in uppgifter som du lämnar när du registrerar dig, såsom namn, e-postadress och företagsinformation. Vi samlar även in teknisk data som IP-adresser och cookies för att förbättra vår tjänst.',
+                    heading: '2. Kategorier av personuppgifter',
+                    content: 'Vi behandlar följande uppgifter: Kontouppgifter (namn, e-post, telefon, lösenord i krypterad form). Företagsinformation (företagsnamn, org.nr, adress, bransch). Användningsdata (inloggningar, aktivitetsloggar, funktioner som används). Tekniska uppgifter (IP-adress, enhetstyp, webbläsare, operativsystem). Supportärenden (korrespondens, bifogade filer). Faktureringsdata (betalningshistorik, faktureringsadress – vi lagrar inga kortuppgifter).',
                 },
                 {
-                    heading: '3. Hur vi använder dina uppgifter',
-                    content: 'Dina uppgifter används för att tillhandahålla och förbättra våra tjänster, kommunicera med dig om ditt konto, och uppfylla våra juridiska skyldigheter.',
+                    heading: '3. Ändamål och rättslig grund',
+                    content: 'Avtal: Vi behandlar uppgifter för att tillhandahålla tjänsten du beställt, hantera ditt konto, skicka transaktionsmail och fakturera. Rättslig förpliktelse: Vi sparar bokföringsunderlag enligt bokföringslagen (7 år) och uppfyller krav från Skatteverket. Berättigat intresse: Vi analyserar aggregerad användningsdata för att förbättra tjänsten, skickar relevanta produktuppdateringar och förebygger bedrägerier. Samtycke: Marknadsföringsutskick kräver ditt aktiva samtycke och du kan när som helst avregistrera dig.',
                 },
                 {
-                    heading: '4. Delning av uppgifter',
-                    content: 'Vi delar inte dina personuppgifter med tredje part förutom när det krävs för att leverera tjänsten (t.ex. betaltjänster) eller när lagen kräver det.',
+                    heading: '4. Lagringstid',
+                    content: 'Kontouppgifter sparas så länge kontot är aktivt plus 30 dagar efter avslut för att möjliggöra återaktivering. Bokföringsmaterial sparas i 7 år enligt lag. Aktivitetsloggar sparas i 12 månader. Supportärenden sparas i 24 månader. Efter dessa perioder raderas eller anonymiseras uppgifterna.',
                 },
                 {
-                    heading: '5. Dina rättigheter',
-                    content: 'Du har rätt att begära tillgång till, rättelse av, eller radering av dina personuppgifter. Du kan även motsätta dig viss behandling eller begära dataportabilitet.',
+                    heading: '5. Mottagare av uppgifter',
+                    content: 'Vi delar uppgifter med: Stripe (betalningshantering, egen integritetspolicy gäller). Fortnox (om du använder integrationen – endast de uppgifter du väljer att synka). AWS (hosting, data lagras inom EU). Resend (transaktionsmail). 46elks (SMS-tjänster, om aktiverat). Våra underleverantörer är bundna av personuppgiftsbiträdesavtal och får inte använda uppgifterna för egna ändamål.',
                 },
                 {
-                    heading: '6. Kontakt',
-                    content: 'Vid frågor om denna policy, kontakta oss på privacy@momentum-crm.se eller via post till Momentum CRM AB, Birger Jarlsgatan 57, 113 56 Stockholm.',
+                    heading: '6. Överföring till tredje land',
+                    content: 'Vår primära datalagring sker inom EU (AWS Frankfurt). Om data undantagsvis överförs till USA sker det med stöd av EU-kommissionens beslut om adekvat skyddsnivå (Data Privacy Framework) eller standardavtalsklausuler.',
+                },
+                {
+                    heading: '7. Säkerhetsåtgärder',
+                    content: 'Vi skyddar dina uppgifter genom: Kryptering av data i vila (AES-256) och under överföring (TLS 1.3). Tvåfaktorsautentisering för administratörer. Regelbundna säkerhetstester och penetrationstester. Åtkomstloggning och behörighetskontroll. Dagliga säkerhetskopior med geografisk redundans.',
+                },
+                {
+                    heading: '8. Dina rättigheter',
+                    content: 'Tillgång: Begär en kopia av dina personuppgifter via kontoinställningarna eller genom att kontakta oss. Rättelse: Korrigera felaktiga uppgifter direkt i tjänsten eller meddela oss. Radering: Begär radering av uppgifter som inte längre behövs – undantaget bokföringsmaterial. Begränsning: Be oss pausa behandlingen under utredning av invändning. Dataportabilitet: Exportera din data i JSON- eller CSV-format direkt från tjänsten. Invändning: Motsätt dig behandling baserad på berättigat intresse. Återkalla samtycke: Avregistrera dig från marknadsföringsutskick via länk i mailet eller i kontoinställningar.',
+                },
+                {
+                    heading: '9. Cookies',
+                    content: 'Vi använder nödvändiga cookies för autentisering och sessionhantering. Analytiska cookies (endast med samtycke) hjälper oss förstå hur tjänsten används. Du kan hantera cookieinställningar i din webbläsare eller via vår cookie-banner.',
+                },
+                {
+                    heading: '10. Ändringar i policyn',
+                    content: 'Vi kan uppdatera denna policy vid behov. Väsentliga ändringar meddelas via e-post minst 30 dagar i förväg. Fortsatt användning efter meddelande innebär godkännande av ändringarna.',
+                },
+                {
+                    heading: '11. Klagomål',
+                    content: 'Om du anser att vi hanterar dina uppgifter felaktigt, kontakta först oss på privacy@momentum-crm.se. Du har även rätt att lämna klagomål till Integritetsskyddsmyndigheten (IMY), imy.se.',
                 },
             ],
         },
         terms: {
             title: 'Användarvillkor',
-            lastUpdated: 'Senast uppdaterad: 8 januari 2026',
+            lastUpdated: 'Senast uppdaterad: 20 januari 2026',
             sections: [
                 {
-                    heading: '1. Acceptans av villkor',
-                    content: 'Genom att använda Momentum CRM godkänner du dessa användarvillkor. Om du inte accepterar villkoren, vänligen avstå från att använda tjänsten.',
+                    heading: '1. Parter och omfattning',
+                    content: 'Dessa villkor gäller mellan Momentum CRM AB, org.nr 559XXX-XXXX ("Momentum") och den organisation eller person som registrerar ett konto ("Kunden"). Villkoren reglerar användningen av Momentum-plattformen för kundrelationshantering, offertering, fakturering och tillhörande funktioner.',
                 },
                 {
-                    heading: '2. Tjänstebeskrivning',
-                    content: 'Momentum CRM är en SaaS-plattform för kundrelationshantering, offerthantering, fakturering och projektledning. Tjänsten tillhandahålls "som den är".',
+                    heading: '2. Registrering och konto',
+                    content: 'Kunden garanterar att angiven information är korrekt. Varje användare ska ha ett personligt konto – delning av inloggningsuppgifter är inte tillåtet. Kontoadministratören ansvarar för att hantera användarbehörigheter inom organisationen. Vi förbehåller oss rätten att neka registrering utan att ange skäl.',
                 },
                 {
-                    heading: '3. Användarkonton',
-                    content: 'Du är ansvarig för att skydda dina inloggningsuppgifter och för all aktivitet som sker under ditt konto. Meddela oss omedelbart vid misstänkt obehörig åtkomst.',
+                    heading: '3. Tjänstens tillhandahållande',
+                    content: 'Vi tillhandahåller tjänsten som en molnbaserad SaaS-lösning. Planerat underhåll aviseras minst 48 timmar i förväg via e-post eller i gränssnittet. Vårt tillgänglighetsmål är 99,5% månatlig drifttid (exklusive planerat underhåll). Vid driftstörningar publiceras statusuppdateringar på status.momentum-crm.se.',
                 },
                 {
-                    heading: '4. Betalning och fakturering',
-                    content: 'Avgifter faktureras i förskott. Vid utebliven betalning kan vi begränsa eller avsluta din åtkomst till tjänsten.',
+                    heading: '4. Acceptabel användning',
+                    content: 'Tjänsten får användas för legitima affärsändamål. Du får inte: Använda tjänsten för att skicka oönskade massutskick (spam). Försöka få obehörig åtkomst till andra kunders data. Reverse-engineera, kopiera eller vidaresälja tjänsten. Ladda upp skadlig kod eller material som kränker tredje parts rättigheter. Överskrida rimliga användningsvolymer som påverkar andra kunders upplevelse.',
                 },
                 {
-                    heading: '5. Uppsägning',
-                    content: 'Du kan säga upp ditt konto när som helst. Vi kan säga upp eller suspendera din åtkomst vid brott mot dessa villkor.',
+                    heading: '5. Kunddata och äganderätt',
+                    content: 'All data du lägger in i tjänsten tillhör dig. Vi gör inte anspråk på äganderätt till kunddata. Du ger oss licens att behandla data i den utsträckning som krävs för att tillhandahålla tjänsten. Vid kontots avslut kan du exportera din data under 30 dagar innan den raderas permanent.',
                 },
                 {
-                    heading: '6. Ansvarsbegränsning',
-                    content: 'Momentum CRM ansvarar inte för indirekta skador eller förluster som uppstår genom användning av tjänsten.',
+                    heading: '6. Pris och betalning',
+                    content: 'Priser anges exklusive moms om inget annat framgår. Månadsplaner faktureras i förskott. Årsplaner betalas för hela perioden vid beställning. Prisändringar aviseras minst 30 dagar i förväg och gäller från nästa faktureringsperiod. Vid utebliven betalning skickar vi påminnelse efter 10 dagar och kan begränsa åtkomsten efter 30 dagar.',
+                },
+                {
+                    heading: '7. Uppsägning',
+                    content: 'Du kan säga upp ditt abonnemang när som helst via kontoinställningarna. Uppsägningen träder i kraft vid innevarande periods slut – ingen återbetalning sker för oanvänd tid. Vi kan säga upp avtalet omedelbart vid väsentligt avtalsbrott. Vid uppsägning behåller du tillgång till läsläge i 30 dagar för dataexport.',
+                },
+                {
+                    heading: '8. Ansvarsbegränsning',
+                    content: 'Momentums totala skadeståndsansvar är begränsat till de avgifter Kunden betalat under de senaste 12 månaderna. Vi ansvarar inte för indirekta skador, utebliven vinst, dataförlust orsakad av kundens handlingar, eller driftstopp hos tredje part (Fortnox, betalningsleverantörer). Kunden ansvarar för att uppfylla bokföringslagens krav och att verifiera fakturadata innan den synkas till externa system.',
+                },
+                {
+                    heading: '9. Immaterialrätt',
+                    content: 'Momentum äger alla rättigheter till plattformen, inklusive källkod, design, varumärken och dokumentation. Kunden erhåller en icke-exklusiv, icke-överförbar rätt att använda tjänsten under avtalstiden. Feedback och förslag du lämnar kan vi fritt använda för att förbättra tjänsten.',
+                },
+                {
+                    heading: '10. Sekretess',
+                    content: 'Vi behandlar Kundens affärsinformation konfidentiellt och lämnar inte ut den till tredje part, förutom till underleverantörer som är nödvändiga för tjänstens tillhandahållande och som är bundna av sekretessavtal.',
+                },
+                {
+                    heading: '11. Force majeure',
+                    content: 'Ingen part ansvarar för förseningar eller utebliven prestation orsakad av omständigheter utanför rimlig kontroll, såsom naturkatastrofer, krig, pandemi, strejk, myndighetsåtgärder eller avbrott i internet-infrastruktur.',
+                },
+                {
+                    heading: '12. Ändringar i villkoren',
+                    content: 'Vi kan uppdatera dessa villkor. Väsentliga ändringar meddelas via e-post minst 30 dagar före ikraftträdande. Fortsatt användning efter ändringstidpunkten innebär godkännande. Tidigare versioner arkiveras och finns tillgängliga på begäran.',
+                },
+                {
+                    heading: '13. Tillämplig lag och tvist',
+                    content: 'Svensk lag tillämpas, utan hänsyn till lagvalsregler. Tvister ska i första hand lösas genom förhandling. Om enighet inte nås inom 30 dagar avgörs tvisten av svensk allmän domstol med Stockholms tingsrätt som första instans.',
+                },
+                {
+                    heading: '14. Kontakt',
+                    content: 'Frågor om dessa villkor besvaras av Momentum CRM AB, Birger Jarlsgatan 57, 113 56 Stockholm. E-post: juridik@momentum-crm.se. Telefon: +46 8 123 45 67 (vardagar 09–17).',
                 },
             ],
         },

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { usePrefetch, type PrefetchRoute } from '../hooks/usePrefetch';
 import {
   Zap,
   ChevronLeft,
@@ -13,6 +14,17 @@ import {
 } from 'lucide-react';
 import { navigation } from '../config/navigation';
 import { getOrganisation } from '../lib/database';
+
+// Map navigation hrefs to prefetch routes
+const PREFETCH_MAP: Record<string, PrefetchRoute> = {
+  '/app/orders': 'orders',
+  '/app/Orderhantering': 'orders',
+  '/app/leads': 'leads',
+  '/app/offerter': 'quotes',
+  '/app/fakturor': 'invoices',
+  '/app/kunder': 'customers',
+  '/app/team': 'teams',
+};
 
 interface SidebarProps {
   collapsed: boolean;
@@ -35,6 +47,7 @@ const isActiveRoute = (currentPath: string, itemHref: string): boolean => {
 function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
   const { signOut, user, organisationId } = useAuth();
+  const { prefetch } = usePrefetch();
   const [organisationName, setOrganisationName] = useState<string>('');
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -50,10 +63,21 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     loadOrganisation();
   }, [organisationId]);
 
-  const handleMouseEnter = (e: React.MouseEvent<HTMLElement>, content: string) => {
-    if (!collapsed) return;
+  const handleMouseEnter = (e: React.MouseEvent<HTMLElement>, content: string, href?: string) => {
+    if (!collapsed) {
+      // Still prefetch even when not collapsed
+      if (href && PREFETCH_MAP[href]) {
+        prefetch(PREFETCH_MAP[href]);
+      }
+      return;
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     setTooltip({ visible: true, content, top: rect.top + rect.height / 2 });
+
+    // Prefetch data for hovered route
+    if (href && PREFETCH_MAP[href]) {
+      prefetch(PREFETCH_MAP[href]);
+    }
   };
 
   const handleMouseLeave = () => {
@@ -158,7 +182,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <div key={item.name} className="relative">
                 <Link
                   to={item.href}
-                  onMouseEnter={(e) => handleMouseEnter(e, item.name)}
+                  onMouseEnter={(e) => handleMouseEnter(e, item.name, item.href)}
                   className={`flex items-center py-2.5 px-3 text-sm font-medium rounded-lg transition-all duration-200 ${isActive
                     ? 'text-white bg-cyan-600'
                     : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'

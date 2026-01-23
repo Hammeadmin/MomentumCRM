@@ -190,12 +190,13 @@ export const updateUserProfile = async (userId: string, updates: Partial<UserPro
 // Customer functions
 export const getCustomers = async (organisationId: string): Promise<DatabaseListResult<Customer & { total_leads?: number; total_jobs?: number; last_contact?: string }>> => {
   try {
+    // Use Supabase count aggregation to avoid downloading nested arrays
     const { data, error } = await supabase
       .from('customers')
       .select(`
         *,
-        leads!left(id, created_at),
-        jobs!left(id)
+        leads:leads(count),
+        jobs:jobs(count)
       `)
       .eq('organisation_id', organisationId)
       .order('created_at', { ascending: false });
@@ -204,21 +205,17 @@ export const getCustomers = async (organisationId: string): Promise<DatabaseList
       return { data: null, error: handleDatabaseError(error) };
     }
 
-    // Process the data to include counts and last contact
-    const processedData = (data || []).map(customer => {
-      const leads = customer.leads || [];
-      const jobs = customer.jobs || [];
+    // Process the data to map aggregated counts
+    const processedData = (data || []).map((customer: any) => {
+      // Supabase returns count as an array with a single object: [{ count: N }]
+      const leadsCount = customer.leads?.[0]?.count ?? 0;
+      const jobsCount = customer.jobs?.[0]?.count ?? 0;
 
       return {
         ...customer,
-        total_leads: leads.length,
-        total_jobs: jobs.length,
-        last_contact: leads.length > 0
-          ? leads.reduce((latest, lead) =>
-            !latest || new Date(lead.created_at) > new Date(latest)
-              ? lead.created_at
-              : latest, null)
-          : null,
+        total_leads: leadsCount,
+        total_jobs: jobsCount,
+        last_contact: null, // Removed to avoid additional query overhead
         leads: undefined, // Remove the nested data
         jobs: undefined
       };
@@ -410,39 +407,48 @@ export const checkDuplicateCustomer = async (
   excludeId?: string
 ): Promise<{ isDuplicate: boolean; duplicateField?: string; error: Error | null }> => {
   try {
-    let query = supabase
-      .from('customers')
-      .select('id, name, email')
-      .eq('organisation_id', organisationId);
-
-    if (excludeId) {
-      query = query.neq('id', excludeId);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      return { isDuplicate: false, error: handleDatabaseError(error) };
-    }
-
-    const customers = data || [];
-
-    // Check for email duplicate
+    // Check email duplicate using count-only query (no data downloaded)
     if (email && email.trim()) {
-      const emailDuplicate = customers.find(c =>
-        c.email && c.email.toLowerCase() === email.toLowerCase()
-      );
-      if (emailDuplicate) {
+      let emailQuery = supabase
+        .from('customers')
+        .select('id', { count: 'exact', head: true })
+        .eq('organisation_id', organisationId)
+        .ilike('email', email.trim());
+
+      if (excludeId) {
+        emailQuery = emailQuery.neq('id', excludeId);
+      }
+
+      const { count: emailCount, error: emailError } = await emailQuery;
+
+      if (emailError) {
+        return { isDuplicate: false, error: handleDatabaseError(emailError) };
+      }
+
+      if (emailCount && emailCount > 0) {
         return { isDuplicate: true, duplicateField: 'email', error: null };
       }
     }
 
-    // Check for name duplicate
+    // Check name duplicate using count-only query
     if (name && name.trim()) {
-      const nameDuplicate = customers.find(c =>
-        c.name && c.name.toLowerCase() === name.toLowerCase()
-      );
-      if (nameDuplicate) {
+      let nameQuery = supabase
+        .from('customers')
+        .select('id', { count: 'exact', head: true })
+        .eq('organisation_id', organisationId)
+        .ilike('name', name.trim());
+
+      if (excludeId) {
+        nameQuery = nameQuery.neq('id', excludeId);
+      }
+
+      const { count: nameCount, error: nameError } = await nameQuery;
+
+      if (nameError) {
+        return { isDuplicate: false, error: handleDatabaseError(nameError) };
+      }
+
+      if (nameCount && nameCount > 0) {
         return { isDuplicate: true, duplicateField: 'name', error: null };
       }
     }
@@ -1606,9 +1612,12 @@ export const convertJobToInvoice = async (jobId: string): Promise<DatabaseResult
 };
 
 // Calendar Event functions
-export const getCalendarEvents = async (organisationId: string): Promise<DatabaseListResult<CalendarEvent & { assigned_to?: UserProfile; related_lead?: Lead; related_job?: Job }>> => {
+export const getCalendarEvents = async (
+  organisationId: string,
+  filters?: { startDate?: string; endDate?: string }
+): Promise<DatabaseListResult<CalendarEvent & { assigned_to?: UserProfile; related_lead?: Lead; related_job?: Job }>> => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('calendar_events')
       .select(`
         *,
@@ -1616,8 +1625,17 @@ export const getCalendarEvents = async (organisationId: string): Promise<Databas
         related_lead:leads(*),
         related_job:jobs(*)
       `)
-      .eq('organisation_id', organisationId)
-      .order('start_time', { ascending: true });
+      .eq('organisation_id', organisationId);
+
+    // Apply date range filters to prevent fetching entire history
+    if (filters?.startDate) {
+      query = query.gte('start_time', filters.startDate);
+    }
+    if (filters?.endDate) {
+      query = query.lte('end_time', filters.endDate);
+    }
+
+    const { data, error } = await query.order('start_time', { ascending: true });
 
     if (error) {
       return { data: null, error: handleDatabaseError(error) };
@@ -1858,39 +1876,65 @@ export const getWorkloadDistribution = async (
   error: Error | null;
 }> => {
   try {
-    // Get team members
-    const { data: members, error: membersError } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('organisation_id', organisationId)
-      .eq('is_active', true);
+    // Fetch all data in parallel with just 3 queries total (instead of 2*N)
+    const [membersResult, leadsResult, jobsResult] = await Promise.all([
+      // 1. Get all active team members
+      supabase
+        .from('user_profiles')
+        .select('id, full_name, role')
+        .eq('organisation_id', organisationId)
+        .eq('is_active', true),
 
-    if (membersError) {
-      return { data: null, error: new Error(membersError.message) };
+      // 2. Get all active leads with their assigned user
+      supabase
+        .from('leads')
+        .select('assigned_to_user_id')
+        .eq('organisation_id', organisationId)
+        .not('status', 'in', '("won","lost")'),
+
+      // 3. Get all active jobs with their assigned user
+      supabase
+        .from('jobs')
+        .select('assigned_to_user_id')
+        .eq('organisation_id', organisationId)
+        .not('status', 'in', '("completed","invoiced")')
+    ]);
+
+    if (membersResult.error) {
+      return { data: null, error: new Error(membersResult.error.message) };
     }
 
-    if (!members || members.length === 0) {
+    const members = membersResult.data || [];
+    if (members.length === 0) {
       return { data: [], error: null };
     }
 
-    // Get workload data for each member
-    const workloadPromises = members.map(async (member) => {
-      // Get active leads
-      const { data: leads } = await supabase
-        .from('leads')
-        .select('id')
-        .eq('assigned_to_user_id', member.id)
-        .not('status', 'in', '("won","lost")');
+    // Group leads and jobs by user_id in JavaScript (O(n) operation)
+    const leadsCountByUser = new Map<string, number>();
+    const jobsCountByUser = new Map<string, number>();
 
-      // Get active jobs
-      const { data: jobs } = await supabase
-        .from('jobs')
-        .select('id')
-        .eq('assigned_to_user_id', member.id)
-        .not('status', 'in', '("completed","invoiced")');
+    (leadsResult.data || []).forEach((lead: { assigned_to_user_id: string | null }) => {
+      if (lead.assigned_to_user_id) {
+        leadsCountByUser.set(
+          lead.assigned_to_user_id,
+          (leadsCountByUser.get(lead.assigned_to_user_id) || 0) + 1
+        );
+      }
+    });
 
-      const activeLeads = leads?.length || 0;
-      const activeJobs = jobs?.length || 0;
+    (jobsResult.data || []).forEach((job: { assigned_to_user_id: string | null }) => {
+      if (job.assigned_to_user_id) {
+        jobsCountByUser.set(
+          job.assigned_to_user_id,
+          (jobsCountByUser.get(job.assigned_to_user_id) || 0) + 1
+        );
+      }
+    });
+
+    // Map members to workload data
+    const workloadData = members.map((member: { id: string; full_name: string; role: UserRole }) => {
+      const activeLeads = leadsCountByUser.get(member.id) || 0;
+      const activeJobs = jobsCountByUser.get(member.id) || 0;
 
       // Calculate capacity based on role
       const capacity = member.role === 'sales' ? 20 : member.role === 'admin' ? 15 : 10;
@@ -1907,7 +1951,6 @@ export const getWorkloadDistribution = async (
       };
     });
 
-    const workloadData = await Promise.all(workloadPromises);
     return { data: workloadData, error: null };
   } catch (err) {
     console.error('Error fetching workload distribution:', err);
@@ -2146,9 +2189,30 @@ export const getJobPriorityDistribution = async (organisationId: string) => {
   }
 };
 
-// Get recent activity across all tables
+// Get recent activity across all tables - OPTIMIZED to use SQL view when available
 export const getRecentActivity = async (organisationId: string, limit: number = 10) => {
   try {
+    // First try the optimized SQL view
+    const { data: viewData, error: viewError } = await supabase
+      .from('view_recent_activity')
+      .select('*')
+      .eq('organisation_id', organisationId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (!viewError && viewData) {
+      // Transform view data to match expected format
+      return viewData.map(item => ({
+        id: `${item.activity_type}-${item.id}`,
+        type: item.activity_type as 'lead' | 'order' | 'invoice' | 'job',
+        title: `${item.activity_type === 'lead' ? 'Ny lead' : item.activity_type === 'order' ? 'Order' : item.activity_type === 'invoice' ? 'Faktura' : 'Jobb'}: ${item.title}`,
+        subtitle: '',
+        time: item.created_at || '',
+        status: item.status
+      }));
+    }
+
+    // Fallback: fetch from individual tables
     const [leadsResult, quotesResult, jobsResult, invoicesResult] = await Promise.all([
       supabase
         .from('leads')
@@ -2179,14 +2243,14 @@ export const getRecentActivity = async (organisationId: string, limit: number = 
         .limit(3)
     ]);
 
-    const activities = [];
+    const activities: Array<{ id: string; type: string; title: string; subtitle: string; time: string; status: string }> = [];
 
     // Process leads
     if (leadsResult.data) {
-      leadsResult.data.forEach(lead => {
+      leadsResult.data.forEach((lead: any) => {
         activities.push({
           id: `lead-${lead.id}`,
-          type: 'lead' as const,
+          type: 'lead',
           title: `Ny lead: ${lead.title}`,
           subtitle: lead.customer?.name || 'Okänd kund',
           time: lead.created_at || '',
@@ -2197,13 +2261,13 @@ export const getRecentActivity = async (organisationId: string, limit: number = 
 
     // Process quotes
     if (quotesResult.data) {
-      quotesResult.data.forEach(quote => {
+      quotesResult.data.forEach((quote: any) => {
         const statusText = quote.status === 'accepted' ? 'accepterad' :
           quote.status === 'sent' ? 'skickad' :
             quote.status === 'declined' ? 'avvisad' : 'skapad';
         activities.push({
           id: `quote-${quote.id}`,
-          type: 'quote' as const,
+          type: 'quote',
           title: `Offert ${statusText}: ${quote.title}`,
           subtitle: quote.customer?.name || 'Okänd kund',
           time: quote.created_at || '',
@@ -2214,13 +2278,13 @@ export const getRecentActivity = async (organisationId: string, limit: number = 
 
     // Process jobs
     if (jobsResult.data) {
-      jobsResult.data.forEach(job => {
+      jobsResult.data.forEach((job: any) => {
         const statusText = job.status === 'completed' ? 'slutfört' :
           job.status === 'in_progress' ? 'påbörjat' :
             job.status === 'invoiced' ? 'fakturerat' : 'skapat';
         activities.push({
           id: `job-${job.id}`,
-          type: 'job' as const,
+          type: 'job',
           title: `Jobb ${statusText}: ${job.title}`,
           subtitle: job.customer?.name || 'Okänd kund',
           time: job.created_at || '',
@@ -2231,13 +2295,13 @@ export const getRecentActivity = async (organisationId: string, limit: number = 
 
     // Process invoices
     if (invoicesResult.data) {
-      invoicesResult.data.forEach(invoice => {
+      invoicesResult.data.forEach((invoice: any) => {
         const statusText = invoice.status === 'paid' ? 'betald' :
           invoice.status === 'sent' ? 'skickad' :
             invoice.status === 'overdue' ? 'förfallen' : 'skapad';
         activities.push({
           id: `invoice-${invoice.id}`,
-          type: 'invoice' as const,
+          type: 'invoice',
           title: `Faktura ${statusText}: ${invoice.invoice_number}`,
           subtitle: invoice.customer?.name || 'Okänd kund',
           time: invoice.created_at || '',
@@ -2320,4 +2384,83 @@ export const getCustomerCities = async (
   } catch (err) {
     return { data: null, error: handleDatabaseError(err) };
   }
+};
+
+// ============================================================================
+// ACTIVITY TYPES AND SUMMARY FUNCTION (using SQL RPC)
+// ============================================================================
+
+export interface ActivityItem {
+  id: string;
+  created_at: string;
+  activity_type: 'lead' | 'order' | 'invoice' | 'job';
+  title: string;
+  user_id: string | null;
+  organisation_id: string;
+  status: string;
+}
+
+export interface ActivitySummary {
+  new_leads: number;
+  new_orders: number;
+  new_invoices: number;
+  completed_jobs: number;
+  period_days: number;
+}
+
+/**
+ * Fetches activity summary using the get_activity_summary RPC.
+ * Returns counts of new leads, orders, invoices, and completed jobs.
+ */
+export const getActivitySummary = async (
+  organisationId: string,
+  daysBack: number = 7
+): Promise<{ data: ActivitySummary | null; error: Error | null }> => {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_activity_summary', { org_id: organisationId, days_back: daysBack });
+
+    if (error) {
+      console.warn('get_activity_summary RPC not available, using fallback');
+      return getActivitySummaryFallback(organisationId, daysBack);
+    }
+
+    return { data: data as ActivitySummary, error: null };
+  } catch (err) {
+    return { data: null, error: handleDatabaseError(err) };
+  }
+};
+
+/**
+ * Fallback for activity summary when RPC is not available
+ */
+const getActivitySummaryFallback = async (
+  organisationId: string,
+  daysBack: number
+): Promise<{ data: ActivitySummary | null; error: Error | null }> => {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - daysBack);
+  const dateFilter = startDate.toISOString();
+
+  const [leadsCount, ordersCount, invoicesCount, jobsCount] = await Promise.all([
+    supabase.from('leads').select('id', { count: 'exact', head: true })
+      .eq('organisation_id', organisationId).gte('created_at', dateFilter),
+    supabase.from('orders').select('id', { count: 'exact', head: true })
+      .eq('organisation_id', organisationId).gte('created_at', dateFilter),
+    supabase.from('invoices').select('id', { count: 'exact', head: true })
+      .eq('organisation_id', organisationId).gte('created_at', dateFilter),
+    supabase.from('jobs').select('id', { count: 'exact', head: true })
+      .eq('organisation_id', organisationId).eq('status', 'completed').gte('updated_at', dateFilter)
+  ]);
+
+  return {
+    data: {
+      new_leads: leadsCount.count || 0,
+      new_orders: ordersCount.count || 0,
+      new_invoices: invoicesCount.count || 0,
+      completed_jobs: jobsCount.count || 0,
+      period_days: daysBack
+    },
+    error: null
+  };
 };

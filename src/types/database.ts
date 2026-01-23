@@ -819,3 +819,64 @@ export const getJobProgressColor = (progress: number): string => {
   if (progress >= 25) return 'bg-orange-500';
   return 'bg-red-500';
 };
+
+// ============================================================================
+// RPC Return Type Interfaces
+// These match the return types of Supabase RPC functions for type safety
+// ============================================================================
+
+/**
+ * Return type for get_payroll_summary RPC
+ * Each item represents one employee's payroll data for the period
+ */
+export interface PayrollSummaryRPCRow {
+  employee_id: string;
+  full_name: string;
+  email: string | null;
+  employment_type: EmploymentType | null;
+  base_hourly_rate: number | null;
+  base_monthly_salary: number | null;
+  has_commission: boolean | null;
+  commission_rate: number | null;
+  regular_hours: number;
+  overtime_hours: number;
+  base_pay: number;
+  overtime_pay: number;
+  sick_pay: number;
+  sick_days: number;
+  commission_earnings: number;
+  total_gross_pay: number;
+  estimated_tax: number;
+}
+
+/**
+ * Return type for get_activity_summary RPC
+ */
+export interface ActivitySummaryRPCRow {
+  activity_type: string;
+  activity_date: string;
+  count: number;
+  description: string | null;
+}
+
+/**
+ * Return type for get_document_stats RPC
+ */
+export interface DocumentStatsRPC {
+  total_documents: number;
+  documents_by_type: Record<string, number>;
+  total_size_bytes: number;
+}
+
+/**
+ * Return type for get_sales_leaderboard RPC
+ */
+export interface SalesLeaderboardRPCRow {
+  user_id: string;
+  full_name: string;
+  avatar_url: string | null;
+  total_sales: number;
+  order_count: number;
+  commission_earned: number;
+  rank: number;
+}

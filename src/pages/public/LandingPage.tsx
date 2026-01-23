@@ -65,7 +65,7 @@ export default function LandingPage() {
                     <div className="glass-card-premium p-8 sm:p-10 md:p-12 relative">
                         {/* Animated Brand */}
                         <AnimatedMomentum
-                            className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl font-black text-gradient-hero justify-center text-premium-display"
+                            className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl font-black text-white justify-center text-premium-display"
                             delay={200}
                         />
                     </div>

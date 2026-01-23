@@ -343,8 +343,96 @@ export const getEmployeePayrollSummary = async (
   }
 };
 
-// Get payroll summary for organization
+// Get payroll summary for organization using RPC (optimized)
 export const getPayrollSummary = async (
+  organisationId: string,
+  period: PayrollPeriod
+): Promise<{ data: PayrollSummary | null; error: Error | null }> => {
+  try {
+    // Try the optimized RPC first
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_payroll_summary', {
+      org_id: organisationId,
+      start_date: period.startDate,
+      end_date: period.endDate
+    });
+
+    // If RPC succeeded, transform the data to match the expected format
+    // Cast to typed interface for autocomplete and error checking
+    if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
+      console.info('Using optimized payroll RPC');
+
+      // Type the RPC data for better autocomplete
+      const typedRpcData = rpcData as import('../types/database').PayrollSummaryRPCRow[];
+
+      const employeeSummaries: EmployeePayrollSummary[] = typedRpcData.map((emp) => {
+        const totalGrossPay = emp.total_gross_pay || 0;
+        const estimatedTax = emp.estimated_tax || 0;
+
+        return {
+          employee: {
+            id: emp.employee_id,
+            full_name: emp.full_name,
+            email: emp.email,
+            employment_type: emp.employment_type,
+            base_hourly_rate: emp.base_hourly_rate,
+            base_monthly_salary: emp.base_monthly_salary,
+            has_commission: emp.has_commission,
+            commission_rate: emp.commission_rate,
+          } as PayrollEmployee,
+          period,
+          regularHours: emp.regular_hours || 0,
+          overtimeHours: emp.overtime_hours || 0,
+          totalHours: (emp.regular_hours || 0) + (emp.overtime_hours || 0),
+          basePay: emp.base_pay || 0,
+          overtimePay: emp.overtime_pay || 0,
+          sickPay: emp.sick_pay || 0,
+          vacationPay: 0, // Not calculated in RPC yet
+          commissionEarnings: emp.commission_earnings || 0,
+          totalGrossPay,
+          estimatedTax,
+          estimatedNetPay: totalGrossPay - estimatedTax,
+          timeLogs: [], // Not included in RPC for performance
+          commissionOrders: [], // Not included in RPC for performance
+          sickDays: emp.sick_days || 0,
+          karensDays: emp.sick_days > 0 ? 1 : 0,
+          status: 'pending' as const
+        };
+      });
+
+      const totalHours = employeeSummaries.reduce((sum, e) => sum + e.totalHours, 0);
+      const totalGrossPay = employeeSummaries.reduce((sum, e) => sum + e.totalGrossPay, 0);
+      const totalCommissions = employeeSummaries.reduce((sum, e) => sum + e.commissionEarnings, 0);
+      const totalEstimatedTax = employeeSummaries.reduce((sum, e) => sum + e.estimatedTax, 0);
+      const totalNetPay = employeeSummaries.reduce((sum, e) => sum + e.estimatedNetPay, 0);
+
+      return {
+        data: {
+          period,
+          totalEmployees: employeeSummaries.length,
+          totalHours: Math.round(totalHours * 100) / 100,
+          totalGrossPay,
+          totalCommissions,
+          totalEstimatedTax,
+          totalNetPay,
+          employeeSummaries,
+          pendingApprovals: employeeSummaries.length // All start as pending
+        },
+        error: null
+      };
+    }
+
+    // Fallback to legacy implementation if RPC fails or returns empty
+    console.info('RPC not available, using fallback payroll calculation');
+    return getPayrollSummaryLegacy(organisationId, period);
+  } catch (err) {
+    console.error('Error in payroll summary:', err);
+    // Fallback to legacy on any error
+    return getPayrollSummaryLegacy(organisationId, period);
+  }
+};
+
+// Legacy implementation: loops through each employee (kept as fallback)
+export const getPayrollSummaryLegacy = async (
   organisationId: string,
   period: PayrollPeriod
 ): Promise<{ data: PayrollSummary | null; error: Error | null }> => {
@@ -421,6 +509,7 @@ export const getPayrollSummary = async (
     return { data: null, error: err as Error };
   }
 };
+
 
 // Get commission report for salesperson
 export const getCommissionReport = async (

@@ -8,6 +8,7 @@ import {
     Edit,
     FileText,
     Trash2,
+    GripVertical,
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../lib/database';
 import {
@@ -58,34 +59,78 @@ interface CardFieldProps {
     className?: string;
 }
 
-const CardField = memo(({ icon, children, className = 'text-gray-600' }: CardFieldProps) => (
-    <div className={`flex items-center text-sm ${className}`}>
-        <span className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0">{icon}</span>
-        <span className="truncate">{children}</span>
+const CardField = memo(({ icon, children, className = 'text-slate-600' }: CardFieldProps) => (
+    <div className={`flex items-center text-sm gap-2 ${className}`}>
+        <span className="w-4 h-4 text-slate-400 flex-shrink-0">{icon}</span>
+        <span className="truncate font-medium">{children}</span>
     </div>
 ));
 CardField.displayName = 'CardField';
+
+// ============================================================================
+// Shared Card Wrapper - Cleaner base styling
+// ============================================================================
+
+interface CardWrapperProps {
+    children: React.ReactNode;
+    onDragStart: (e: React.DragEvent) => void;
+    onClick: () => void;
+    accentColor: string; // Tailwind color class for left border
+    hoverAccentColor: string;
+}
+
+const CardWrapper = memo(({ children, onDragStart, onClick, accentColor, hoverAccentColor }: CardWrapperProps) => (
+    <div
+        draggable
+        onDragStart={onDragStart}
+        onClick={onClick}
+        className={`
+            group relative
+            bg-white rounded-lg
+            border border-slate-200 
+            shadow-sm hover:shadow-lg
+            transition-all duration-200 ease-out
+            cursor-pointer
+            hover:border-slate-300
+            overflow-hidden
+        `}
+    >
+        {/* Left accent bar */}
+        <div className={`absolute left-0 top-0 bottom-0 w-1 ${accentColor} group-hover:${hoverAccentColor} transition-colors`} />
+
+        {/* Drag handle indicator */}
+        <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-40 transition-opacity">
+            <GripVertical className="w-4 h-4 text-slate-400" />
+        </div>
+
+        <div className="p-4 pl-5">
+            {children}
+        </div>
+    </div>
+));
+CardWrapper.displayName = 'CardWrapper';
 
 // ============================================================================
 // Individual Card Components
 // ============================================================================
 
 const LeadCard = memo(({ data, onDragStart, onClick, onCreateQuote }: Omit<LeadCardProps, 'type'>) => (
-    <div
-        draggable
+    <CardWrapper
         onDragStart={onDragStart}
         onClick={onClick}
-        className="kanban-card bg-white rounded-lg p-4 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer hover:border-gray-300 group"
+        accentColor="bg-emerald-500"
+        hoverAccentColor="bg-emerald-600"
     >
-        <div className="flex items-start justify-between mb-3">
-            <h4 className="font-medium text-gray-900 truncate">{data.title}</h4>
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+            <h4 className="font-semibold text-slate-900 text-sm leading-tight line-clamp-2">{data.title}</h4>
         </div>
 
         {data.description && (
-            <p className="text-sm text-gray-600 mb-3 line-clamp-1 sm:line-clamp-2 break-words">{data.description}</p>
+            <p className="text-xs text-slate-500 mb-3 line-clamp-2 leading-relaxed">{data.description}</p>
         )}
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
             {data.customer && (
                 <CardField icon={<Users className="w-4 h-4" />}>
                     {data.customer.name}
@@ -93,12 +138,12 @@ const LeadCard = memo(({ data, onDragStart, onClick, onCreateQuote }: Omit<LeadC
             )}
 
             {data.estimated_value && (
-                <CardField icon={<DollarSign className="w-4 h-4" />}>
+                <CardField icon={<DollarSign className="w-4 h-4" />} className="text-emerald-700 font-semibold">
                     {formatCurrency(data.estimated_value)}
                 </CardField>
             )}
 
-            <CardField icon={<Clock className="w-4 h-4" />} className="text-gray-500 hidden sm:flex">
+            <CardField icon={<Clock className="w-4 h-4" />} className="text-slate-400 text-xs">
                 {formatDate(data.created_at || '')}
             </CardField>
 
@@ -108,33 +153,37 @@ const LeadCard = memo(({ data, onDragStart, onClick, onCreateQuote }: Omit<LeadC
                         e.stopPropagation();
                         onCreateQuote();
                     }}
-                    className="mt-3 w-full flex items-center justify-center px-3 py-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                    className="mt-3 w-full flex items-center justify-center px-3 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md transition-colors shadow-sm"
                 >
-                    <FileText className="w-3 h-3 mr-1.5" />
+                    <FileText className="w-3.5 h-3.5 mr-1.5" />
                     Skapa Offert
                 </button>
             )}
         </div>
-    </div>
+    </CardWrapper>
 ));
 LeadCard.displayName = 'LeadCard';
 
 const QuoteCard = memo(({ data, onDragStart, onClick }: Omit<QuoteCardProps, 'type'>) => (
-    <div
-        draggable
+    <CardWrapper
         onDragStart={onDragStart}
         onClick={onClick}
-        className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer hover:border-yellow-300 group"
+        accentColor="bg-amber-500"
+        hoverAccentColor="bg-amber-600"
     >
-        <div className="flex items-start justify-between mb-3">
-            <h4 className="font-medium text-gray-900 truncate">{data.title}</h4>
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+            <h4 className="font-semibold text-slate-900 text-sm leading-tight line-clamp-2">{data.title}</h4>
+            <span className="flex-shrink-0 px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 rounded">
+                Offert
+            </span>
         </div>
 
         {data.description && (
-            <p className="text-sm text-gray-600 mb-3 line-clamp-1 sm:line-clamp-2 break-words">{data.description}</p>
+            <p className="text-xs text-slate-500 mb-3 line-clamp-2 leading-relaxed">{data.description}</p>
         )}
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
             {data.customer && (
                 <CardField icon={<Users className="w-4 h-4" />}>
                     {data.customer.name}
@@ -142,62 +191,66 @@ const QuoteCard = memo(({ data, onDragStart, onClick }: Omit<QuoteCardProps, 'ty
             )}
 
             {data.total_amount && (
-                <CardField icon={<DollarSign className="w-4 h-4" />}>
+                <CardField icon={<DollarSign className="w-4 h-4" />} className="text-amber-700 font-semibold">
                     {formatCurrency(data.total_amount)}
                 </CardField>
             )}
 
-            <CardField icon={<Clock className="w-4 h-4" />} className="text-gray-500 hidden sm:flex">
+            <CardField icon={<Clock className="w-4 h-4" />} className="text-slate-400 text-xs">
                 {formatDate(data.created_at || '')}
             </CardField>
         </div>
-    </div>
+    </CardWrapper>
 ));
 QuoteCard.displayName = 'QuoteCard';
 
 const OrderCard = memo(({ data, onDragStart, onClick, onEdit, onDelete }: Omit<OrderCardProps, 'type'>) => (
-    <div
-        draggable
+    <CardWrapper
         onDragStart={onDragStart}
         onClick={onClick}
-        className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-300 group"
+        accentColor="bg-blue-500"
+        hoverAccentColor="bg-blue-600"
     >
-        <div className="flex items-start justify-between mb-3">
-            <h4 className="font-medium text-gray-900 truncate flex-1">{data.title}</h4>
-            <OrderStatusBadge status={data.status} size="sm" />
-            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                {onEdit && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit();
-                        }}
-                        className="ml-2 p-1 text-gray-400 hover:text-blue-600"
-                        title="Redigera Order"
-                    >
-                        <Edit className="w-4 h-4" />
-                    </button>
-                )}
-                {onDelete && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete();
-                        }}
-                        className="ml-1 p-1 text-gray-400 hover:text-red-600"
-                        title="Ta bort Order"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </button>
-                )}
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+            <h4 className="font-semibold text-slate-900 text-sm leading-tight line-clamp-2 flex-1">{data.title}</h4>
+            <div className="flex items-center gap-1 flex-shrink-0">
+                <OrderStatusBadge status={data.status} size="sm" />
+                {/* Action buttons - visible on hover */}
+                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-1">
+                    {onEdit && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onEdit();
+                            }}
+                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Redigera Order"
+                        >
+                            <Edit className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                    {onDelete && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onDelete();
+                            }}
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Ta bort Order"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
 
         {data.description && (
-            <p className="text-sm text-gray-600 mb-3 line-clamp-1 sm:line-clamp-2 break-words">{data.description}</p>
+            <p className="text-xs text-slate-500 mb-3 line-clamp-2 leading-relaxed">{data.description}</p>
         )}
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
             {data.customer && (
                 <CardField icon={<Users className="w-4 h-4" />}>
                     {data.customer.name}
@@ -205,14 +258,14 @@ const OrderCard = memo(({ data, onDragStart, onClick, onEdit, onDelete }: Omit<O
             )}
 
             {data.value && (
-                <CardField icon={<DollarSign className="w-4 h-4" />}>
+                <CardField icon={<DollarSign className="w-4 h-4" />} className="text-blue-700 font-semibold">
                     {formatCurrency(data.value)}
                 </CardField>
             )}
 
             {data.job_type && (
-                <div className="flex items-center text-sm text-gray-600">
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getJobTypeColor(data.job_type)}`}>
+                <div className="flex items-center">
+                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded ${getJobTypeColor(data.job_type)}`}>
                         {JOB_TYPE_LABELS[data.job_type]}
                     </span>
                 </div>
@@ -230,19 +283,11 @@ const OrderCard = memo(({ data, onDragStart, onClick, onEdit, onDelete }: Omit<O
                 </CardField>
             )}
 
-            <CardField icon={<Clock className="w-4 h-4" />} className="text-gray-500 hidden sm:flex">
+            <CardField icon={<Clock className="w-4 h-4" />} className="text-slate-400 text-xs">
                 {formatDate(data.created_at || '')}
             </CardField>
         </div>
-
-        {/* Hover hint */}
-        <div className="mt-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <div className="flex items-center justify-between text-xs text-gray-500">
-                <span>Dra för att ändra status</span>
-                <span>Klicka för detaljer</span>
-            </div>
-        </div>
-    </div>
+    </CardWrapper>
 ));
 OrderCard.displayName = 'OrderCard';
 
@@ -255,25 +300,6 @@ OrderCard.displayName = 'OrderCard';
  *
  * Uses a discriminated union type to render the correct card variant
  * based on the `type` prop. Wrapped in React.memo for performance.
- *
- * @example
- * // Lead card
- * <KanbanCard
- *   type="lead"
- *   data={lead}
- *   onDragStart={handleDragStart}
- *   onClick={() => openLeadModal(lead)}
- *   onCreateQuote={() => createQuoteFromLead(lead)}
- * />
- *
- * // Order card
- * <KanbanCard
- *   type="order"
- *   data={order}
- *   onDragStart={handleDragStart}
- *   onClick={() => openOrderDetails(order)}
- *   onEdit={() => openEditModal(order)}
- * />
  */
 const KanbanCard = memo((props: KanbanCardProps) => {
     switch (props.type) {
@@ -313,3 +339,4 @@ const KanbanCard = memo((props: KanbanCardProps) => {
 KanbanCard.displayName = 'KanbanCard';
 
 export default KanbanCard;
+export { KanbanCard };

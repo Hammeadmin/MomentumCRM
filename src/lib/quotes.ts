@@ -8,6 +8,7 @@ export interface QuoteWithRelations extends Quote {
   lead?: Lead;
   line_items?: QuoteLineItem[];
   order?: any;
+  organisation?: { id: string; name: string; email?: string; phone?: string; org_number?: string };
 }
 
 export interface QuoteFilters {
@@ -28,8 +29,10 @@ export interface QuoteEmailData {
 // Database operations
 export const getQuotes = async (
   organisationId: string,
-  filters: QuoteFilters = {}
-): Promise<{ data: QuoteWithRelations[] | null; error: Error | null }> => {
+  filters: QuoteFilters = {},
+  page: number = 0,
+  pageSize: number = 20
+): Promise<{ data: QuoteWithRelations[] | null; count: number; error: Error | null }> => {
   try {
     let query = supabase
       .from('quotes')
@@ -39,7 +42,7 @@ export const getQuotes = async (
         lead:leads(id, title),
         quote_line_items(*),
         order:orders(id, title, status)
-      `)
+      `, { count: 'exact' })
       .eq('organisation_id', organisationId);
 
     // Apply filters
@@ -63,10 +66,15 @@ export const getQuotes = async (
       query = query.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%,quote_number.ilike.%${filters.search}%`);
     }
 
-    const { data, error } = await query.order('created_at', { ascending: false });
+    // Apply pagination
+    const from = page * pageSize;
+    const to = (page + 1) * pageSize - 1;
+    query = query.range(from, to);
+
+    const { data, error, count } = await query.order('created_at', { ascending: false });
 
     if (error) {
-      return { data: null, error: new Error(error.message) };
+      return { data: null, count: 0, error: new Error(error.message) };
     }
 
     // Map quote_line_items to line_items
@@ -75,10 +83,10 @@ export const getQuotes = async (
       line_items: q.quote_line_items
     }));
 
-    return { data: quotes, error: null };
+    return { data: quotes, count: count || 0, error: null };
   } catch (err) {
     console.error('Error fetching quotes:', err);
-    return { data: null, error: err as Error };
+    return { data: null, count: 0, error: err as Error };
   }
 };
 
@@ -300,38 +308,32 @@ export const sendQuoteEmail = async (
   emailData: QuoteEmailData
 ): Promise<{ data: any | null; error: Error | null }> => {
   try {
-    // Generate acceptance token if including acceptance link
-    let acceptanceToken = null;
-    if (emailData.include_acceptance_link) {
-      const tokenResult = await generateAcceptanceToken(quoteId, 30);
-      if (tokenResult.error) {
-        return { data: null, error: tokenResult.error };
+    // Call the send-quote-email edge function
+    const { data, error } = await supabase.functions.invoke('send-quote-email', {
+      body: {
+        quote_id: quoteId,
+        recipient_email: emailData.recipient_email,
+        subject: emailData.subject,
+        body: emailData.body,
+        include_acceptance_link: emailData.include_acceptance_link ?? true,
       }
-      acceptanceToken = tokenResult.data;
+    });
+
+    if (error) {
+      console.error('Error invoking send-quote-email:', error);
+      return { data: null, error: new Error(error.message || 'Failed to send email') };
     }
 
-    // Update quote status to sent
-    const { error: updateError } = await supabase
-      .from('quotes')
-      .update({
-        status: 'sent',
-        ...(acceptanceToken && { acceptance_token: acceptanceToken })
-      })
-      .eq('id', quoteId);
-
-    if (updateError) {
-      return { data: null, error: new Error(updateError.message) };
+    if (!data?.success) {
+      return { data: null, error: new Error(data?.error || 'Failed to send email') };
     }
-
-    // TODO: Integrate with actual email service
-    // For now, simulate email sending
-    await new Promise(resolve => setTimeout(resolve, 1000));
 
     return {
       data: {
         success: true,
-        acceptance_token: acceptanceToken,
-        acceptance_url: acceptanceToken ? `${window.location.origin}/quote-accept/${acceptanceToken}` : null
+        acceptance_token: data.acceptance_token,
+        acceptance_url: data.acceptance_url,
+        message_id: data.message_id
       },
       error: null
     };
@@ -352,7 +354,7 @@ export const generateQuoteEmailTemplate = (
   const amount = quote.total_amount;
   const rotAmount = quote.rot_amount || 0;
   const netAmount = amount - rotAmount;
-  const companyName = 'Momentum CRM';
+  const companyName = quote.organisation?.name || 'Ditt Företag';
   const formatMoney = (val: number) => new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK' }).format(val);
 
   let subject = '';

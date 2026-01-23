@@ -290,83 +290,91 @@ export const downloadDocument = async (
 
 export const getDocumentStats = async (
   organisationId: string,
-  dateFrom?: string,
-  dateTo?: string
+  _dateFrom?: string,
+  _dateTo?: string
 ): Promise<{ data: DocumentStats | null; error: Error | null }> => {
   try {
-    let query = supabase
-      .from('documents')
-      .select(`
-        *,
-        uploaded_by:user_profiles(id, full_name, email)
-      `)
-      .eq('organisation_id', organisationId)
-      .eq('is_active', true);
+    // Use the optimized RPC function instead of client-side aggregation
+    const { data: rpcData, error: rpcError } = await supabase
+      .rpc('get_document_stats', { org_id: organisationId });
 
-    if (dateFrom) {
-      query = query.gte('created_at', dateFrom);
+    if (rpcError) {
+      console.error('RPC error, falling back to client-side:', rpcError);
+      // Fallback to client-side if RPC fails (e.g., function not deployed)
+      return getDocumentStatsFallback(organisationId);
     }
 
-    if (dateTo) {
-      query = query.lte('created_at', dateTo);
-    }
-
-    const { data, error } = await query.order('created_at', { ascending: false });
-
-    if (error) {
-      return { data: null, error: new Error(error.message) };
-    }
-
-    const documents = data || [];
-    const totalDocuments = documents.length;
-    const totalDownloads = documents.reduce((sum, doc) => sum + doc.download_count, 0);
-
-    const categoryBreakdown = documents.reduce((acc, doc) => {
-      acc[doc.category] = (acc[doc.category] || 0) + 1;
-      return acc;
-    }, {} as Record<DocumentCategory, number>);
-
-    const recentUploads = documents.slice(0, 5);
-    const topDownloaded = [...documents]
-      .sort((a, b) => b.download_count - a.download_count)
-      .slice(0, 5);
-
-    return {
-      data: {
-        totalDocuments,
-        totalDownloads,
-        categoryBreakdown,
-        recentUploads,
-        topDownloaded
-      },
-      error: null
+    // Transform RPC response to match DocumentStats interface
+    const stats: DocumentStats = {
+      totalDocuments: rpcData?.total_documents || 0,
+      totalDownloads: rpcData?.total_downloads || 0,
+      categoryBreakdown: (rpcData?.category_counts || {}) as Record<DocumentCategory, number>,
+      recentUploads: (rpcData?.recent_uploads || []) as DocumentWithRelations[],
+      topDownloaded: (rpcData?.top_downloaded || []) as DocumentWithRelations[]
     };
+
+    return { data: stats, error: null };
   } catch (err) {
     console.error('Error fetching document stats:', err);
     return { data: null, error: err as Error };
   }
 };
 
+// Fallback for when RPC is not available
+const getDocumentStatsFallback = async (
+  organisationId: string
+): Promise<{ data: DocumentStats | null; error: Error | null }> => {
+  const { data, error } = await supabase
+    .from('documents')
+    .select(`*, uploaded_by:user_profiles(id, full_name, email)`)
+    .eq('organisation_id', organisationId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return { data: null, error: new Error(error.message) };
+  }
+
+  const documents = data || [];
+  const totalDocuments = documents.length;
+  const totalDownloads = documents.reduce((sum, doc) => sum + doc.download_count, 0);
+  const categoryBreakdown = documents.reduce((acc, doc) => {
+    acc[doc.category] = (acc[doc.category] || 0) + 1;
+    return acc;
+  }, {} as Record<DocumentCategory, number>);
+
+  return {
+    data: {
+      totalDocuments,
+      totalDownloads,
+      categoryBreakdown,
+      recentUploads: documents.slice(0, 5),
+      topDownloaded: [...documents].sort((a, b) => b.download_count - a.download_count).slice(0, 5)
+    },
+    error: null
+  };
+};
+
 // Utility functions
 export const getFileIcon = (fileType?: string | null): string => {
   if (!fileType) return '📄';
-  
+
   if (fileType.includes('pdf')) return '📕';
   if (fileType.includes('word') || fileType.includes('document')) return '📘';
   if (fileType.includes('excel') || fileType.includes('sheet')) return '📗';
   if (fileType.includes('image')) return '🖼️';
   if (fileType.includes('text')) return '📄';
-  
+
   return '📄';
 };
 
 export const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes';
-  
+
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
@@ -406,10 +414,10 @@ export const getCategoryIcon = (category: DocumentCategory): string => {
 
 export const isPreviewableFile = (fileType?: string | null): boolean => {
   if (!fileType) return false;
-  
-  return fileType.includes('pdf') || 
-         fileType.includes('image') || 
-         fileType.includes('text');
+
+  return fileType.includes('pdf') ||
+    fileType.includes('image') ||
+    fileType.includes('text');
 };
 
 export const getDocumentPreviewUrl = async (filePath: string): Promise<string | null> => {

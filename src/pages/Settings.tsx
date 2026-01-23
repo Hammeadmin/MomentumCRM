@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings as SettingsIcon, User, Users2, Bell, Shield, CreditCard, Mail, Building, Asterisk as System, Zap, FormInput, FileText, Package } from 'lucide-react';
+import { Settings as SettingsIcon, User, Users2, Bell, Shield, CreditCard, Mail, Building, Asterisk as System, Zap, FormInput, FileText, Package, Send } from 'lucide-react';
 import ReminderManagement from '../components/ReminderManagement';
 import CompanyProfileSettings from '../components/settings/CompanyProfileSettings';
 import UserProfileSettings from '../components/settings/UserProfileSettings';
@@ -8,12 +8,13 @@ import IntegrationSettings from '../components/settings/IntegrationSettings';
 import LeadFormBuilder from '../components/settings/LeadFormBuilder';
 import TemplateBuilder from '../components/settings/TemplateBuilder';
 import ProductLibrarySettings from '../components/settings/ProductLibrarySettings';
+import EmailSettings from '../components/settings/EmailSettings';
 import TeamManagement from '../components/TeamManagement';
 import ROTReport from '../components/ROTReport';
 import { Calculator } from 'lucide-react';
 
 function Settings() {
-  const [activeTab, setActiveTab] = React.useState<'company' | 'user' | 'system' | 'integrations' | 'forms' | 'templates' | 'products' | 'reminders' | 'rot' | 'general'>('company');
+  const [activeTab, setActiveTab] = React.useState<'company' | 'user' | 'system' | 'integrations' | 'email' | 'forms' | 'templates' | 'products' | 'reminders' | 'rot' | 'general'>('company');
 
   const settingsCategories = [
     {
@@ -61,6 +62,7 @@ function Settings() {
             { id: 'teams', label: 'Team', icon: Users2 },
             { id: 'system', label: 'System', icon: SettingsIcon },
             { id: 'integrations', label: 'Integrationer', icon: Zap },
+            { id: 'email', label: 'E-post', icon: Send },
             { id: 'forms', label: 'Formulär', icon: FormInput },
             { id: 'templates', label: 'Mallar', icon: FileText },
             { id: 'products', label: 'Artiklar', icon: Package },
@@ -101,6 +103,7 @@ function Settings() {
       {activeTab === 'teams' && <TeamManagement />}
       {activeTab === 'system' && <SystemSettings />}
       {activeTab === 'integrations' && <IntegrationSettings />}
+      {activeTab === 'email' && <EmailSettings />}
       {activeTab === 'forms' && <LeadFormBuilder />}
       {activeTab === 'templates' && <TemplateBuilder />}
       {activeTab === 'products' && <ProductLibrarySettings />}

@@ -1,10 +1,10 @@
 /*
-# Auto Reminder System for Quotes and Invoices
+# Auto Reminder System for Quotes and Invoices - BYOE System
 
-1. New Edge Function
+1. Edge Function
    - `send-reminders` function to check and send email reminders
    - Handles both quote follow-ups and invoice payment reminders
-   - Configurable reminder intervals and templates
+   - Uses Nodemailer with Resend SMTP fallback
 
 2. Features
    - Quote follow-up reminders (after 3, 7, 14 days)
@@ -19,7 +19,8 @@
    - Audit trail of all sent reminders
 */
 
-import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+import nodemailer from 'npm:nodemailer@6.9.13';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -47,6 +48,25 @@ const DEFAULT_SETTINGS: ReminderSettings = {
   fromName: 'Momentum CRM'
 };
 
+// Create transporter - uses Resend SMTP
+function createEmailTransporter(): nodemailer.Transporter {
+  const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+
+  if (!RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY not configured');
+  }
+
+  return nodemailer.createTransport({
+    host: 'smtp.resend.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: 'resend',
+      pass: RESEND_API_KEY,
+    },
+  });
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -57,7 +77,7 @@ Deno.serve(async (req: Request) => {
     // Initialize Supabase client with service role key
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get request body for manual triggers or settings
@@ -72,9 +92,20 @@ Deno.serve(async (req: Request) => {
       errors: [] as string[]
     };
 
+    // Create transporter once for all emails
+    let transporter: nodemailer.Transporter | null = null;
+    if (!dryRun) {
+      try {
+        transporter = createEmailTransporter();
+      } catch (error) {
+        results.errors.push(`Failed to create email transporter: ${error.message}`);
+        console.error('Transporter creation failed:', error);
+      }
+    }
+
     // Process quote reminders
     if (!type || type === 'quotes') {
-      const quoteResults = await processQuoteReminders(supabase, organizationId, dryRun);
+      const quoteResults = await processQuoteReminders(supabase, transporter, organizationId, dryRun);
       results.quotesProcessed = quoteResults.processed;
       results.emailsSent += quoteResults.emailsSent;
       results.errors.push(...quoteResults.errors);
@@ -82,7 +113,7 @@ Deno.serve(async (req: Request) => {
 
     // Process invoice reminders
     if (!type || type === 'invoices') {
-      const invoiceResults = await processInvoiceReminders(supabase, organizationId, dryRun);
+      const invoiceResults = await processInvoiceReminders(supabase, transporter, organizationId, dryRun);
       results.invoicesProcessed = invoiceResults.processed;
       results.emailsSent += invoiceResults.emailsSent;
       results.errors.push(...invoiceResults.errors);
@@ -104,7 +135,7 @@ Deno.serve(async (req: Request) => {
 
   } catch (error) {
     console.error('Error in send-reminders function:', error);
-    
+
     return new Response(
       JSON.stringify({
         success: false,
@@ -118,7 +149,7 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-async function processQuoteReminders(supabase: any, organizationId?: string, dryRun = false) {
+async function processQuoteReminders(supabase: any, transporter: nodemailer.Transporter | null, organizationId?: string, dryRun = false) {
   const results = { processed: 0, emailsSent: 0, errors: [] as string[] };
 
   try {
@@ -164,10 +195,10 @@ async function processQuoteReminders(supabase: any, organizationId?: string, dry
 
         if (existingReminder) continue; // Already sent
 
-        if (!dryRun) {
+        if (!dryRun && transporter) {
           // Send email reminder
-          const emailSent = await sendQuoteReminderEmail(quote);
-          
+          const emailSent = await sendQuoteReminderEmail(transporter, quote);
+
           if (emailSent) {
             // Log the reminder
             await supabase
@@ -201,7 +232,7 @@ async function processQuoteReminders(supabase: any, organizationId?: string, dry
   return results;
 }
 
-async function processInvoiceReminders(supabase: any, organizationId?: string, dryRun = false) {
+async function processInvoiceReminders(supabase: any, transporter: nodemailer.Transporter | null, organizationId?: string, dryRun = false) {
   const results = { processed: 0, emailsSent: 0, errors: [] as string[] };
 
   try {
@@ -257,10 +288,10 @@ async function processInvoiceReminders(supabase: any, organizationId?: string, d
             .eq('id', invoice.id);
         }
 
-        if (!dryRun) {
+        if (!dryRun && transporter) {
           // Send email reminder
-          const emailSent = await sendInvoiceReminderEmail(invoice, daysToDue);
-          
+          const emailSent = await sendInvoiceReminderEmail(transporter, invoice, daysToDue);
+
           if (emailSent) {
             // Log the reminder
             await supabase
@@ -294,7 +325,7 @@ async function processInvoiceReminders(supabase: any, organizationId?: string, d
   return results;
 }
 
-async function sendQuoteReminderEmail(quote: any): Promise<boolean> {
+async function sendQuoteReminderEmail(transporter: nodemailer.Transporter, quote: any): Promise<boolean> {
   try {
     if (!quote.customer?.email) {
       console.log(`No email address for quote ${quote.quote_number}`);
@@ -302,18 +333,21 @@ async function sendQuoteReminderEmail(quote: any): Promise<boolean> {
     }
 
     const template = getQuoteReminderTemplate(quote);
-    
-    // Here you would integrate with your email service (SendGrid, Resend, etc.)
-    // For now, we'll just log the email that would be sent
-    console.log('Quote reminder email:', {
-      to: quote.customer.email,
-      subject: template.subject,
-      html: template.html
-    });
+    const companyName = quote.organisation?.name || 'Momentum CRM';
+    const replyTo = quote.organisation?.email || DEFAULT_SETTINGS.fromEmail;
 
-    // Simulate email sending
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: `"${companyName}" <system@momentumcrm.com>`,
+      to: quote.customer.email,
+      replyTo: replyTo, // Replies go to company email
+      subject: template.subject,
+      text: template.text,
+      html: template.html,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`Quote reminder email sent, messageId: ${info.messageId}`);
+
     return true;
   } catch (error) {
     console.error('Error sending quote reminder email:', error);
@@ -321,7 +355,7 @@ async function sendQuoteReminderEmail(quote: any): Promise<boolean> {
   }
 }
 
-async function sendInvoiceReminderEmail(invoice: any, daysToDue: number): Promise<boolean> {
+async function sendInvoiceReminderEmail(transporter: nodemailer.Transporter, invoice: any, daysToDue: number): Promise<boolean> {
   try {
     if (!invoice.customer?.email) {
       console.log(`No email address for invoice ${invoice.invoice_number}`);
@@ -329,17 +363,21 @@ async function sendInvoiceReminderEmail(invoice: any, daysToDue: number): Promis
     }
 
     const template = getInvoiceReminderTemplate(invoice, daysToDue);
-    
-    // Here you would integrate with your email service
-    console.log('Invoice reminder email:', {
-      to: invoice.customer.email,
-      subject: template.subject,
-      html: template.html
-    });
+    const companyName = invoice.organisation?.name || 'Momentum CRM';
+    const replyTo = invoice.organisation?.email || DEFAULT_SETTINGS.fromEmail;
 
-    // Simulate email sending
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: `"${companyName}" <system@momentumcrm.com>`,
+      to: invoice.customer.email,
+      replyTo: replyTo, // Replies go to company email
+      subject: template.subject,
+      text: template.text,
+      html: template.html,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`Invoice reminder email sent, messageId: ${info.messageId}`);
+
     return true;
   } catch (error) {
     console.error('Error sending invoice reminder email:', error);

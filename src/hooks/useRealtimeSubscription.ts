@@ -111,7 +111,7 @@ export function useRealtimeSubscription(
         }
 
         // Create channel with unique name
-        const channelName = `realtime-${table}-${organisationId || 'global'}-${Date.now()}`;
+        const channelName = `realtime-${table}-${organisationId || 'global'}`;
 
         console.log(`[Realtime] Subscribing to ${table}...`);
 
@@ -221,7 +221,7 @@ export function useMultiTableSubscription(
                 filterString = `organisation_id=eq.${organisationId}`;
             }
 
-            const channelName = `rt-${table}-${Date.now()}`;
+            const channelName = `rt-${table}-${organisationId || 'global'}`;
             const channel = supabase.channel(channelName);
 
             // Subscribe to postgres changes

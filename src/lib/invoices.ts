@@ -12,6 +12,7 @@ export interface InvoiceWithRelations extends Invoice {
     team_leader?: UserProfile;
   };
   assigned_user?: UserProfile;
+  organisation?: { id: string; name: string; email?: string; phone?: string; org_number?: string };
   line_items?: InvoiceLineItem[];
   invoice_line_items?: InvoiceLineItem[];
   emails?: InvoiceEmail[];
@@ -449,7 +450,7 @@ export const sendInvoiceEmail = async (
       return { data: null, error: new Error('Faktura hittades inte') };
     }
 
-    // Create email record
+    // Create email record first (pending status)
     const { data: emailRecord, error: emailError } = await supabase
       .from('invoice_emails')
       .insert([{
@@ -468,11 +469,30 @@ export const sendInvoiceEmail = async (
       return { data: null, error: new Error(emailError.message) };
     }
 
-    // TODO: Integrate with actual email service (SendGrid, Resend, etc.)
-    // For now, simulate email sending
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Call the send-email edge function
+    const { data: sendResult, error: sendError } = await supabase.functions.invoke('send-email', {
+      body: {
+        to: emailData.recipient_email,
+        subject: emailData.subject,
+        html: emailData.email_body.replace(/\n/g, '<br>'),
+        content: emailData.email_body,
+      }
+    });
 
-    // Update email status and invoice
+    if (sendError || !sendResult?.success) {
+      // Update email record to failed status
+      await supabase
+        .from('invoice_emails')
+        .update({
+          status: 'failed',
+          error_message: sendError?.message || sendResult?.error || 'Unknown error'
+        })
+        .eq('id', emailRecord.id);
+
+      return { data: null, error: new Error(sendError?.message || sendResult?.error || 'Failed to send email') };
+    }
+
+    // Update email status to sent
     const { data: updatedEmail, error: updateError } = await supabase
       .from('invoice_emails')
       .update({
@@ -610,13 +630,14 @@ export const generateInvoiceEmailTemplate = (
   const invoiceNumber = invoice.invoice_number;
   const amount = formatCurrency(invoice.amount);
   const dueDate = invoice.due_date ? formatDate(invoice.due_date) : 'Enligt överenskommelse';
+  const companyName = invoice.organisation?.name || 'Ditt Företag';
 
   // Team/individual assignment info
   const assignmentInfo = invoice.assigned_team
     ? `Team: ${invoice.assigned_team.name} (${invoice.assigned_team.members?.filter(m => m.is_active).length || 0} personer)`
     : invoice.assigned_user
       ? `Utfört av: ${invoice.assigned_user.full_name}`
-      : 'Momentum CRM';
+      : companyName;
 
   const jobTypeLabel = invoice.job_type ? JOB_TYPE_LABELS[invoice.job_type] : 'Allmänt arbete';
 
@@ -648,7 +669,7 @@ Vid frågor om fakturan eller det utförda arbetet, kontakta gärna ${invoice.as
 Tack för förtroendet!
 
 Med vänliga hälsningar,
-Momentum CRM`;
+${companyName}`;
       break;
 
     case 'quality_assurance':
@@ -657,7 +678,7 @@ Momentum CRM`;
 
 Bifogat finner ni faktura för det ${jobTypeLabel.toLowerCase()} som ${assignmentInfo} har utfört.
 
-Vi på Momentum CRM står bakom kvaliteten på allt arbete som utförs av våra specialiserade team. ${invoice.assigned_team ? `Team ${invoice.assigned_team.name} har gedigen erfarenhet inom ${jobTypeLabel.toLowerCase()} och följer våra höga kvalitetsstandarder.` : ''}
+Vi på ${companyName} står bakom kvaliteten på allt arbete som utförs av våra specialiserade team. ${invoice.assigned_team ? `Team ${invoice.assigned_team.name} har gedigen erfarenhet inom ${jobTypeLabel.toLowerCase()} och följer våra höga kvalitetsstandarder.` : ''}
 
 Kvalitetsgaranti:
 - Professionellt utfört arbete enligt branschstandard
@@ -676,7 +697,7 @@ ${invoice.work_summary}
 ` : ''}Vi hoppas ni är nöjda med resultatet och ser fram emot framtida samarbeten.
 
 Med vänliga hälsningar,
-Momentum CRM`;
+${companyName}`;
       break;
 
     case 'follow_up':
@@ -700,14 +721,14 @@ ${invoice.work_summary}
 Tack för ert förtroende!
 
 Med vänliga hälsningar,
-Momentum CRM`;
+${companyName}`;
       break;
 
     default: // standard
-      subject = `Faktura ${invoiceNumber} från Momentum CRM`;
+      subject = `Faktura ${invoiceNumber} från ${companyName}`;
       body = `Hej ${customerName}!
 
-Tack för att ni valde Momentum CRM för ert ${jobTypeLabel.toLowerCase()}.
+Tack för att ni valde ${companyName} för ert ${jobTypeLabel.toLowerCase()}.
 
 Bifogat finner ni faktura för det utförda arbetet.
 
@@ -723,7 +744,7 @@ ${invoice.work_summary}
 ` : ''}Vid frågor om fakturan, kontakta oss gärna.
 
 Med vänliga hälsningar,
-Momentum CRM`;
+${companyName}`;
   }
 
   return { subject, body };

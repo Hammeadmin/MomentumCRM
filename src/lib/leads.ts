@@ -73,13 +73,15 @@ export interface AILeadSuggestion {
 // Lead operations
 export const getLeads = async (
   organisationId: string,
-  filters: LeadFilters = {}
-): Promise<{ data: LeadWithRelations[] | null; error: Error | null }> => {
+  filters: LeadFilters = {},
+  page: number = 0,
+  pageSize: number = 20
+): Promise<{ data: LeadWithRelations[] | null; count: number; error: Error | null }> => {
   try {
     // Fetch leads without FK joins to avoid PostgREST 400 errors
     let query = supabase
       .from('leads')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('organisation_id', organisationId);
 
     // Apply filters
@@ -119,14 +121,19 @@ export const getLeads = async (
       query = query.lte('lead_score', filters.maxScore);
     }
 
-    const { data: leads, error } = await query.order('created_at', { ascending: false });
+    // Apply pagination
+    const from = page * pageSize;
+    const to = (page + 1) * pageSize - 1;
+    query = query.range(from, to);
+
+    const { data: leads, error, count } = await query.order('created_at', { ascending: false });
 
     if (error) {
-      return { data: null, error: new Error(error.message) };
+      return { data: null, count: 0, error: new Error(error.message) };
     }
 
     if (!leads || leads.length === 0) {
-      return { data: [], error: null };
+      return { data: [], count: count || 0, error: null };
     }
 
     // Get unique customer and user IDs
@@ -160,10 +167,10 @@ export const getLeads = async (
       assigned_to: userMap.get(lead.assigned_to_user_id) || null
     }));
 
-    return { data: enrichedLeads, error: null };
+    return { data: enrichedLeads, count: count || 0, error: null };
   } catch (err) {
     console.error('Error fetching leads:', err);
-    return { data: null, error: err as Error };
+    return { data: null, count: 0, error: err as Error };
   }
 };
 

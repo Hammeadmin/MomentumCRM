@@ -1,0 +1,193 @@
+schemaname,tablename,policyname,permissive,roles,operation,using_expression,check_expression
+public,attendance,admins_delete_attendance,PERMISSIVE,{public},DELETE,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),null
+public,attendance,users_insert_attendance,PERMISSIVE,{public},INSERT,null,(organisation_id = get_my_org())
+public,attendance,users_update_attendance,PERMISSIVE,{public},UPDATE,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,attendance,users_view_attendance,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,calendar_events,users_delete_calendar_events,PERMISSIVE,{public},DELETE,(organisation_id = get_my_org()),null
+public,calendar_events,users_insert_calendar_events,PERMISSIVE,{public},INSERT,null,(organisation_id = get_my_org())
+public,calendar_events,users_update_calendar_events,PERMISSIVE,{public},UPDATE,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,calendar_events,users_view_calendar_events,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,communications,users_delete_own_communications,PERMISSIVE,{public},DELETE,(created_by_user_id = auth.uid()),null
+public,communications,users_insert_communications,PERMISSIVE,{public},INSERT,null,((organisation_id = get_my_org()) AND (created_by_user_id = auth.uid()))
+public,communications,users_update_own_communications,PERMISSIVE,{public},UPDATE,(created_by_user_id = auth.uid()),(created_by_user_id = auth.uid())
+public,communications,users_view_communications,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,customers,admins_delete_customers,PERMISSIVE,{public},DELETE,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),null
+public,customers,users_insert_customers,PERMISSIVE,{public},INSERT,null,(organisation_id = get_my_org())
+public,customers,users_update_customers,PERMISSIVE,{public},UPDATE,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,customers,users_view_customers,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,document_downloads,system_insert_downloads,PERMISSIVE,{public},INSERT,null,(user_id = auth.uid())
+public,document_downloads,users_view_own_downloads,PERMISSIVE,{public},SELECT,(user_id = auth.uid()),null
+public,documents,admins_delete_documents,PERMISSIVE,{public},DELETE,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),null
+public,documents,users_insert_documents,PERMISSIVE,{public},INSERT,null,((organisation_id = get_my_org()) AND (uploaded_by_user_id = auth.uid()))
+public,documents,users_update_own_documents,PERMISSIVE,{public},UPDATE,((organisation_id = get_my_org()) AND ((uploaded_by_user_id = auth.uid()) OR (get_my_role() = 'admin'::user_role))),(organisation_id = get_my_org())
+public,documents,users_view_documents,PERMISSIVE,{public},SELECT,((organisation_id = get_my_org()) AND ((get_my_role())::text IN ( SELECT jsonb_array_elements_text(documents.view_permissions) AS jsonb_array_elements_text))),null
+public,intranet_comments,admins_moderate_comments,PERMISSIVE,{public},ALL,"((post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE (intranet_posts.organisation_id = get_my_org()))) AND (get_my_role() = 'admin'::user_role))","(post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE (intranet_posts.organisation_id = get_my_org())))"
+public,intranet_comments,users_insert_comments,PERMISSIVE,{public},INSERT,null,"((author_user_id = auth.uid()) AND (post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE ((intranet_posts.organisation_id = get_my_org()) AND (intranet_posts.is_published = true)))))"
+public,intranet_comments,users_update_own_comments,PERMISSIVE,{public},UPDATE,(author_user_id = auth.uid()),(author_user_id = auth.uid())
+public,intranet_comments,users_view_approved_comments,PERMISSIVE,{public},SELECT,"((is_approved = true) AND (post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE ((intranet_posts.organisation_id = get_my_org()) AND (intranet_posts.is_published = true)))))",null
+public,intranet_post_likes,users_manage_own_likes,PERMISSIVE,{public},ALL,(user_id = auth.uid()),(user_id = auth.uid())
+public,intranet_post_likes,users_view_likes,PERMISSIVE,{public},SELECT,"(post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE (intranet_posts.organisation_id = get_my_org())))",null
+public,intranet_post_views,admins_view_all_views,PERMISSIVE,{public},SELECT,"((post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE (intranet_posts.organisation_id = get_my_org()))) AND (get_my_role() = 'admin'::user_role))",null
+public,intranet_post_views,users_insert_own_views,PERMISSIVE,{public},INSERT,null,"((user_id = auth.uid()) AND (post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE (intranet_posts.organisation_id = get_my_org()))))"
+public,intranet_post_views,users_view_own_views,PERMISSIVE,{public},SELECT,(user_id = auth.uid()),null
+public,intranet_posts,admins_manage_all_posts,PERMISSIVE,{public},ALL,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+public,intranet_posts,authors_manage_own_posts,PERMISSIVE,{public},ALL,(author_user_id = auth.uid()),(author_user_id = auth.uid())
+public,intranet_posts,users_view_published_posts,PERMISSIVE,{public},SELECT,((organisation_id = get_my_org()) AND (is_published = true)),null
+public,invoice_emails,users_manage_invoice_emails,PERMISSIVE,{public},ALL,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,invoice_emails,users_view_invoice_emails,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,invoice_line_items,finance_manage_invoice_line_items,PERMISSIVE,{public},ALL,"((invoice_id IN ( SELECT invoices.id
+   FROM invoices
+  WHERE (invoices.organisation_id = get_my_org()))) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))","((invoice_id IN ( SELECT invoices.id
+   FROM invoices
+  WHERE (invoices.organisation_id = get_my_org()))) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+public,invoice_line_items,users_view_invoice_line_items,PERMISSIVE,{public},SELECT,"((invoice_id IN ( SELECT invoices.id
+   FROM invoices
+  WHERE (invoices.organisation_id = get_my_org()))) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role, 'sales'::user_role])))",null
+public,invoices,finance_delete_invoices,PERMISSIVE,{public},DELETE,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))",null
+public,invoices,finance_insert_invoices,PERMISSIVE,{public},INSERT,null,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+public,invoices,finance_update_invoices,PERMISSIVE,{public},UPDATE,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))","((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+public,invoices,finance_view_invoices,PERMISSIVE,{public},SELECT,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role, 'sales'::user_role])))",null
+public,job_activities,users_insert_job_activities,PERMISSIVE,{public},INSERT,null,"(job_id IN ( SELECT jobs.id
+   FROM jobs
+  WHERE (jobs.organisation_id = get_my_org())))"
+public,job_activities,users_view_job_activities,PERMISSIVE,{public},SELECT,"(job_id IN ( SELECT jobs.id
+   FROM jobs
+  WHERE (jobs.organisation_id = get_my_org())))",null
+public,jobs,admins_delete_jobs,PERMISSIVE,{public},DELETE,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),null
+public,jobs,users_insert_jobs,PERMISSIVE,{public},INSERT,null,(organisation_id = get_my_org())
+public,jobs,users_update_jobs,PERMISSIVE,{public},UPDATE,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,jobs,users_view_jobs,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,lead_activities,system_insert_lead_activities,PERMISSIVE,{public},INSERT,null,true
+public,lead_activities,users_view_lead_activities,PERMISSIVE,{public},SELECT,"(lead_id IN ( SELECT leads.id
+   FROM leads
+  WHERE (leads.organisation_id = get_my_org())))",null
+public,lead_notes,users_delete_own_lead_notes,PERMISSIVE,{public},DELETE,(user_id = auth.uid()),null
+public,lead_notes,users_insert_lead_notes,PERMISSIVE,{public},INSERT,null,"((lead_id IN ( SELECT leads.id
+   FROM leads
+  WHERE (leads.organisation_id = get_my_org()))) AND (user_id = auth.uid()))"
+public,lead_notes,users_update_own_lead_notes,PERMISSIVE,{public},UPDATE,(user_id = auth.uid()),(user_id = auth.uid())
+public,lead_notes,users_view_lead_notes,PERMISSIVE,{public},SELECT,"(lead_id IN ( SELECT leads.id
+   FROM leads
+  WHERE (leads.organisation_id = get_my_org())))",null
+public,leads,admins_delete_leads,PERMISSIVE,{public},DELETE,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),null
+public,leads,admins_sales_view_all_leads,PERMISSIVE,{public},SELECT,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'sales'::user_role, 'finance'::user_role])))",null
+public,leads,users_insert_leads,PERMISSIVE,{public},INSERT,null,(organisation_id = get_my_org())
+public,leads,users_update_leads,PERMISSIVE,{public},UPDATE,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,leads,workers_view_assigned_leads,PERMISSIVE,{public},SELECT,((organisation_id = get_my_org()) AND (get_my_role() = 'worker'::user_role) AND (assigned_to_user_id = auth.uid())),null
+public,notifications,users_insert_notifications,PERMISSIVE,{public},INSERT,null,(user_id = auth.uid())
+public,notifications,users_update_own_notifications,PERMISSIVE,{public},UPDATE,(user_id = auth.uid()),(user_id = auth.uid())
+public,notifications,users_view_own_notifications,PERMISSIVE,{public},SELECT,(user_id = auth.uid()),null
+public,order_activities,users_insert_order_activities,PERMISSIVE,{public},INSERT,null,"(order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org())))"
+public,order_activities,users_view_order_activities,PERMISSIVE,{public},SELECT,"(order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org())))",null
+public,order_attachments,users_insert_order_attachments,PERMISSIVE,{public},INSERT,null,"((order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org()))) AND (uploaded_by_user_id = auth.uid()))"
+public,order_attachments,users_view_order_attachments,PERMISSIVE,{public},SELECT,"(order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org())))",null
+public,order_notes,users_delete_own_order_notes,PERMISSIVE,{public},DELETE,(user_id = auth.uid()),null
+public,order_notes,users_insert_order_notes,PERMISSIVE,{public},INSERT,null,"((order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org()))) AND (user_id = auth.uid()))"
+public,order_notes,users_update_own_order_notes,PERMISSIVE,{public},UPDATE,(user_id = auth.uid()),(user_id = auth.uid())
+public,order_notes,users_view_order_notes,PERMISSIVE,{public},SELECT,"(order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org())))",null
+public,orders,admins_delete_orders,PERMISSIVE,{public},DELETE,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),null
+public,orders,admins_sales_finance_view_all_orders,PERMISSIVE,{public},SELECT,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'sales'::user_role, 'finance'::user_role])))",null
+public,orders,users_insert_orders,PERMISSIVE,{public},INSERT,null,(organisation_id = get_my_org())
+public,orders,users_update_orders,PERMISSIVE,{public},UPDATE,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,orders,workers_view_assigned_orders,PERMISSIVE,{public},SELECT,"((organisation_id = get_my_org()) AND (get_my_role() = 'worker'::user_role) AND ((assigned_to_user_id = auth.uid()) OR (assigned_to_team_id IN ( SELECT team_members.team_id
+   FROM team_members
+  WHERE ((team_members.user_id = auth.uid()) AND (team_members.is_active = true))))))",null
+public,organisations,admins_update_org,PERMISSIVE,{public},UPDATE,((id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),(id = get_my_org())
+public,organisations,users_view_own_org,PERMISSIVE,{public},SELECT,(id = get_my_org()),null
+public,payroll_adjustments,finance_delete_payroll_adjustments,PERMISSIVE,{public},DELETE,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))",null
+public,payroll_adjustments,finance_insert_payroll_adjustments,PERMISSIVE,{public},INSERT,null,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+public,payroll_adjustments,finance_update_payroll_adjustments,PERMISSIVE,{public},UPDATE,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))","((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+public,payroll_adjustments,finance_view_payroll_adjustments,PERMISSIVE,{public},SELECT,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role, 'sales'::user_role])))",null
+public,payroll_status,finance_manage_payroll_status,PERMISSIVE,{public},ALL,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))","((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+public,payroll_status,finance_view_payroll_status,PERMISSIVE,{public},SELECT,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))",null
+public,quote_line_items,users_manage_quote_line_items,PERMISSIVE,{public},ALL,"((organisation_id = get_my_org()) OR (quote_id IN ( SELECT quotes.id
+   FROM quotes
+  WHERE (quotes.organisation_id = get_my_org()))))","((organisation_id = get_my_org()) OR (quote_id IN ( SELECT quotes.id
+   FROM quotes
+  WHERE (quotes.organisation_id = get_my_org()))))"
+public,quote_templates,users_manage_quote_templates,PERMISSIVE,{public},ALL,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,quote_templates,users_view_quote_templates,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,quotes,admins_delete_quotes,PERMISSIVE,{public},DELETE,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),null
+public,quotes,public_accept_quotes_with_token,PERMISSIVE,{public},UPDATE,((acceptance_token IS NOT NULL) AND (token_expires_at > now()) AND (status = 'sent'::quote_status)),((acceptance_token IS NOT NULL) AND (token_expires_at > now()) AND (status = 'accepted'::quote_status))
+public,quotes,public_view_quotes_with_token,PERMISSIVE,{public},SELECT,((acceptance_token IS NOT NULL) AND (token_expires_at > now())),null
+public,quotes,users_insert_quotes,PERMISSIVE,{public},INSERT,null,(organisation_id = get_my_org())
+public,quotes,users_update_quotes,PERMISSIVE,{public},UPDATE,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,quotes,users_view_quotes,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,reminder_logs,system_manage_reminder_logs,PERMISSIVE,{public},ALL,true,true
+public,reminder_logs,users_view_reminder_logs,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,role_change_logs,admins_insert_role_change_logs,PERMISSIVE,{public},INSERT,null,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+public,role_change_logs,users_view_role_change_logs,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,rss_feeds,users_manage_rss_feeds,PERMISSIVE,{public},ALL,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,sales_tasks,users_manage_sales_tasks,PERMISSIVE,{public},ALL,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,sales_tasks,users_view_sales_tasks,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,saved_line_items,users_manage_saved_line_items,PERMISSIVE,{public},ALL,(organisation_id = get_my_org()),(organisation_id = get_my_org())
+public,system_settings,admins_manage_settings,PERMISSIVE,{public},ALL,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+public,system_settings,users_view_settings,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,task_notes,users_manage_task_notes,PERMISSIVE,{public},ALL,"(task_id IN ( SELECT sales_tasks.id
+   FROM sales_tasks
+  WHERE (sales_tasks.organisation_id = get_my_org())))","(task_id IN ( SELECT sales_tasks.id
+   FROM sales_tasks
+  WHERE (sales_tasks.organisation_id = get_my_org())))"
+public,team_job_participation,admins_manage_team_job_participation,PERMISSIVE,{public},ALL,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+public,team_job_participation,users_view_team_job_participation,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,team_members,admins_manage_team_members,PERMISSIVE,{public},ALL,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+public,team_members,users_view_team_members,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,team_settings,admins_manage_team_settings,PERMISSIVE,{public},ALL,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+public,team_settings,users_view_team_settings,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,teams,admins_manage_teams,PERMISSIVE,{public},ALL,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+public,teams,users_view_teams,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null
+public,time_logs,admins_update_org_time_logs,PERMISSIVE,{public},UPDATE,"((get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])) AND (user_id IN ( SELECT user_profiles.id
+   FROM user_profiles
+  WHERE (user_profiles.organisation_id = get_my_org()))))","((get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])) AND (user_id IN ( SELECT user_profiles.id
+   FROM user_profiles
+  WHERE (user_profiles.organisation_id = get_my_org()))))"
+public,time_logs,admins_view_org_time_logs,PERMISSIVE,{public},SELECT,"((get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role, 'sales'::user_role])) AND (user_id IN ( SELECT user_profiles.id
+   FROM user_profiles
+  WHERE (user_profiles.organisation_id = get_my_org()))))",null
+public,time_logs,workers_manage_own_time_logs,PERMISSIVE,{public},ALL,(user_id = auth.uid()),(user_id = auth.uid())
+public,user_profiles,admins_manage_org_profiles,PERMISSIVE,{public},ALL,((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)),((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+public,user_profiles,users_select_own_profile,PERMISSIVE,{public},SELECT,((id = auth.uid()) OR (organisation_id = get_my_org())),null
+public,user_profiles,users_update_own_profile,PERMISSIVE,{public},UPDATE,(id = auth.uid()),(id = auth.uid())
+public,webhook_logs,Users can view their organisation's webhook logs,PERMISSIVE,{public},SELECT,"(organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE (user_profiles.id = auth.uid())))",null
+public,webhooks,Admins can delete webhooks,PERMISSIVE,{public},DELETE,"(organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND (user_profiles.role = 'admin'::user_role))))",null
+public,webhooks,Admins can insert webhooks,PERMISSIVE,{public},INSERT,null,"(organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND (user_profiles.role = 'admin'::user_role))))"
+public,webhooks,Admins can update webhooks,PERMISSIVE,{public},UPDATE,"(organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND (user_profiles.role = 'admin'::user_role))))",null
+public,webhooks,Users can view their organisation's webhooks,PERMISSIVE,{public},SELECT,"(organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE (user_profiles.id = auth.uid())))",null
+public,workload_assignments,admins_sales_manage_workload,PERMISSIVE,{public},INSERT,null,"((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'sales'::user_role])))"
+public,workload_assignments,users_view_workload_assignments,PERMISSIVE,{public},SELECT,(organisation_id = get_my_org()),null

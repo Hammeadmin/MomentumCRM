@@ -1,23 +1,20 @@
 /**
  * Email Service
  * 
- * Handles sending emails for contact form, demo requests, etc.
+ * Handles sending emails through the BYOE (Bring Your Own Email) system.
+ * Uses the send-email Edge Function which:
+ * 1. Checks for user's custom SMTP settings
+ * 2. Falls back to system Resend account if no custom settings
+ * 3. Always sets Reply-To to the user's email
  * 
  * CONFIGURATION:
- * 1. Replace EMAIL_ENDPOINT with your actual email API endpoint
- * 2. You can use services like:
- *    - Resend (https://resend.com) - Already mentioned in integrations
- *    - SendGrid
- *    - Postmark
- *    - Your own backend endpoint
+ * - Uses Supabase Edge Function for email delivery
+ * - User SMTP settings stored in user_smtp_settings table
  */
 
-// TODO: Replace with your actual email service endpoint
-const EMAIL_ENDPOINT = '/api/email/send'; // or 'https://api.resend.com/emails'
+import { supabase } from './supabase';
 
-// TODO: Replace with your actual API key (should be in env vars on backend)
-// Note: Never expose API keys in frontend code - this should be handled by backend
-const RECIPIENT_EMAIL = 'hej@momentum-crm.se'; // Your contact email
+const RECIPIENT_EMAIL = 'hej@momentum-crm.se'; // System contact email
 
 export interface ContactFormData {
     name: string;
@@ -39,9 +36,60 @@ export interface DemoRequestData {
     currentSystem?: string;
 }
 
+export interface EmailPayload {
+    to: string;
+    subject: string;
+    content?: string;
+    html?: string;
+    from_name?: string;
+    communication_id?: string;
+    cc?: string[];
+    bcc?: string[];
+    attachments?: Array<{ filename: string; content: string }>;
+}
+
 interface EmailResult {
     success: boolean;
     error?: string;
+    message_id?: string;
+}
+
+/**
+ * Sends an email via the Edge Function
+ * The Edge Function handles SMTP selection (user's custom or system Resend)
+ */
+export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
+    try {
+        const { data, error } = await supabase.functions.invoke('send-email', {
+            body: payload
+        });
+
+        if (error) {
+            console.error('Edge function error:', error);
+            return {
+                success: false,
+                error: error.message || 'Kunde inte skicka e-post. Försök igen.'
+            };
+        }
+
+        if (data?.success) {
+            return {
+                success: true,
+                message_id: data.message_id
+            };
+        }
+
+        return {
+            success: false,
+            error: data?.error || 'Okänt fel vid e-postutskick.'
+        };
+    } catch (error) {
+        console.error('Email send error:', error);
+        return {
+            success: false,
+            error: 'Kunde inte ansluta till e-posttjänsten. Försök igen.'
+        };
+    }
 }
 
 /**
@@ -50,42 +98,29 @@ interface EmailResult {
 export async function sendContactEmail(data: ContactFormData): Promise<EmailResult> {
     try {
         // For development/demo: simulate API call
-        if (import.meta.env.DEV || !EMAIL_ENDPOINT.startsWith('http')) {
+        if (import.meta.env.DEV) {
             console.log('📧 Contact Form Submission:', data);
             console.log('Would send to:', RECIPIENT_EMAIL);
             await new Promise(resolve => setTimeout(resolve, 1000));
             return { success: true };
         }
 
-        // Production: actual API call
-        const response = await fetch(EMAIL_ENDPOINT, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                to: RECIPIENT_EMAIL,
-                from: 'noreply@momentum-crm.se',
-                replyTo: data.email,
-                subject: `Ny kontaktförfrågan från ${data.name}`,
-                html: `
-          <h2>Ny kontaktförfrågan</h2>
-          <p><strong>Namn:</strong> ${data.name}</p>
-          <p><strong>E-post:</strong> ${data.email}</p>
-          ${data.phone ? `<p><strong>Telefon:</strong> ${data.phone}</p>` : ''}
-          ${data.company ? `<p><strong>Företag:</strong> ${data.company}</p>` : ''}
-          ${data.employees ? `<p><strong>Antal anställda:</strong> ${data.employees}</p>` : ''}
-          <p><strong>Meddelande:</strong></p>
-          <p>${data.message.replace(/\n/g, '<br>')}</p>
-        `,
-            }),
+        // Production: use Edge Function
+        return sendEmail({
+            to: RECIPIENT_EMAIL,
+            subject: `Ny kontaktförfrågan från ${data.name}`,
+            from_name: data.name,
+            html: `
+                <h2>Ny kontaktförfrågan</h2>
+                <p><strong>Namn:</strong> ${data.name}</p>
+                <p><strong>E-post:</strong> ${data.email}</p>
+                ${data.phone ? `<p><strong>Telefon:</strong> ${data.phone}</p>` : ''}
+                ${data.company ? `<p><strong>Företag:</strong> ${data.company}</p>` : ''}
+                ${data.employees ? `<p><strong>Antal anställda:</strong> ${data.employees}</p>` : ''}
+                <p><strong>Meddelande:</strong></p>
+                <p>${data.message.replace(/\n/g, '<br>')}</p>
+            `
         });
-
-        if (!response.ok) {
-            throw new Error('Failed to send email');
-        }
-
-        return { success: true };
     } catch (error) {
         console.error('Email send error:', error);
         return {
@@ -101,43 +136,30 @@ export async function sendContactEmail(data: ContactFormData): Promise<EmailResu
 export async function sendDemoRequestEmail(data: DemoRequestData): Promise<EmailResult> {
     try {
         // For development/demo: simulate API call
-        if (import.meta.env.DEV || !EMAIL_ENDPOINT.startsWith('http')) {
+        if (import.meta.env.DEV) {
             console.log('📧 Demo Request Submission:', data);
             console.log('Would send to:', RECIPIENT_EMAIL);
             await new Promise(resolve => setTimeout(resolve, 1000));
             return { success: true };
         }
 
-        // Production: actual API call
-        const response = await fetch(EMAIL_ENDPOINT, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                to: RECIPIENT_EMAIL,
-                from: 'noreply@momentum-crm.se',
-                replyTo: data.email,
-                subject: `Ny demoförfrågan från ${data.company}`,
-                html: `
-          <h2>Ny demoförfrågan</h2>
-          <p><strong>Kontaktperson:</strong> ${data.name}</p>
-          <p><strong>E-post:</strong> ${data.email}</p>
-          <p><strong>Telefon:</strong> ${data.phone}</p>
-          <p><strong>Företag:</strong> ${data.company}</p>
-          ${data.website ? `<p><strong>Hemsida:</strong> ${data.website}</p>` : ''}
-          ${data.employees ? `<p><strong>Antal anställda:</strong> ${data.employees}</p>` : ''}
-          ${data.industry ? `<p><strong>Bransch:</strong> ${data.industry}</p>` : ''}
-          ${data.currentSystem ? `<p><strong>Nuvarande system:</strong> ${data.currentSystem}</p>` : ''}
-        `,
-            }),
+        // Production: use Edge Function
+        return sendEmail({
+            to: RECIPIENT_EMAIL,
+            subject: `Ny demoförfrågan från ${data.company}`,
+            from_name: data.name,
+            html: `
+                <h2>Ny demoförfrågan</h2>
+                <p><strong>Kontaktperson:</strong> ${data.name}</p>
+                <p><strong>E-post:</strong> ${data.email}</p>
+                <p><strong>Telefon:</strong> ${data.phone}</p>
+                <p><strong>Företag:</strong> ${data.company}</p>
+                ${data.website ? `<p><strong>Hemsida:</strong> ${data.website}</p>` : ''}
+                ${data.employees ? `<p><strong>Antal anställda:</strong> ${data.employees}</p>` : ''}
+                ${data.industry ? `<p><strong>Bransch:</strong> ${data.industry}</p>` : ''}
+                ${data.currentSystem ? `<p><strong>Nuvarande system:</strong> ${data.currentSystem}</p>` : ''}
+            `
         });
-
-        if (!response.ok) {
-            throw new Error('Failed to send email');
-        }
-
-        return { success: true };
     } catch (error) {
         console.error('Email send error:', error);
         return {
@@ -145,4 +167,22 @@ export async function sendDemoRequestEmail(data: DemoRequestData): Promise<Email
             error: 'Kunde inte skicka förfrågan. Försök igen eller kontakta oss direkt.'
         };
     }
+}
+
+/**
+ * Sends an email with custom parameters
+ * Used for invoices, quotes, and other business communications
+ */
+export async function sendBusinessEmail(options: {
+    to: string;
+    subject: string;
+    html: string;
+    content?: string;
+    from_name?: string;
+    communication_id?: string;
+    cc?: string[];
+    bcc?: string[];
+    attachments?: Array<{ filename: string; content: string }>;
+}): Promise<EmailResult> {
+    return sendEmail(options);
 }

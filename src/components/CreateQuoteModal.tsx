@@ -2,13 +2,14 @@
  * Global Create Quote Modal
  * Can be opened from anywhere in the app via GlobalActionContext
  * Creates a basic quote - user can add line items on the quotes page
+ * Also supports creating new customers inline for quick quote creation
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, UserPlus, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
-import { createQuote, getCustomers, getLeads } from '../lib/database';
+import { createQuote, getCustomers, getLeads, createCustomer, updateLead } from '../lib/database';
 import type { Customer, Lead } from '../types/database';
 
 interface CreateQuoteModalProps {
@@ -35,10 +36,19 @@ const CreateQuoteModal: React.FC<CreateQuoteModalProps> = ({
         notes: '',
     });
 
+    // New customer form data
+    const [newCustomer, setNewCustomer] = useState({
+        name: '',
+        email: '',
+        phone_number: '',
+    });
+
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [leads, setLeads] = useState<Lead[]>([]);
     const [loading, setLoading] = useState(false);
     const [dataLoading, setDataLoading] = useState(false);
+    const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
+    const [creatingCustomer, setCreatingCustomer] = useState(false);
 
     useEffect(() => {
         if (isOpen && organisationId) {
@@ -61,14 +71,59 @@ const CreateQuoteModal: React.FC<CreateQuoteModalProps> = ({
                     valid_until: '',
                     notes: lead.description || '',
                 });
+                // If lead has no customer, show the new customer form
+                if (!lead.customer_id) {
+                    setShowNewCustomerForm(true);
+                }
             } else {
                 // Reset form when no lead provided
                 setFormData({
                     title: '', customer_id: '', lead_id: '', valid_until: '', notes: ''
                 });
+                setShowNewCustomerForm(false);
             }
+            // Reset new customer form
+            setNewCustomer({ name: '', email: '', phone_number: '' });
         }
     }, [isOpen, organisationId, lead]);
+
+    // Create new customer and use it for the quote
+    const handleCreateNewCustomer = async () => {
+        if (!organisationId) return null;
+
+        if (!newCustomer.name.trim()) {
+            showError('Fel', 'Kundnamn är obligatoriskt');
+            return null;
+        }
+
+        setCreatingCustomer(true);
+
+        const { data, error } = await createCustomer({
+            organisation_id: organisationId,
+            name: newCustomer.name.trim(),
+            email: newCustomer.email.trim() || null,
+            phone_number: newCustomer.phone_number.trim() || null,
+            customer_type: 'private', // Default, can be changed later
+        } as Omit<Customer, 'id' | 'created_at'>);
+
+        setCreatingCustomer(false);
+
+        if (error) {
+            showError('Fel', `Kunde inte skapa kund: ${error.message}`);
+            return null;
+        }
+
+        if (data) {
+            // Add to customers list and select it
+            setCustomers(prev => [...prev, data]);
+            setFormData(prev => ({ ...prev, customer_id: data.id }));
+            setShowNewCustomerForm(false);
+            success('Kund skapad', `${data.name} har lagts till`);
+            return data;
+        }
+
+        return null;
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -83,7 +138,15 @@ const CreateQuoteModal: React.FC<CreateQuoteModalProps> = ({
             return;
         }
 
-        if (!formData.customer_id) {
+        // If new customer form is shown, create customer first
+        let customerId = formData.customer_id;
+        if (showNewCustomerForm && !customerId) {
+            const newCust = await handleCreateNewCustomer();
+            if (!newCust) return; // Stop if customer creation failed
+            customerId = newCust.id;
+        }
+
+        if (!customerId) {
             showError('Fel', 'Kund är obligatoriskt');
             return;
         }
@@ -95,7 +158,7 @@ const CreateQuoteModal: React.FC<CreateQuoteModalProps> = ({
             {
                 organisation_id: organisationId,
                 title: formData.title.trim(),
-                customer_id: formData.customer_id,
+                customer_id: customerId,
                 lead_id: formData.lead_id || null,
                 valid_until: formData.valid_until || null,
                 notes: formData.notes.trim() || null,
@@ -105,21 +168,30 @@ const CreateQuoteModal: React.FC<CreateQuoteModalProps> = ({
             [{
                 description: formData.title.trim(),
                 quantity: 1,
-                unit_price: 0,
+                unit_price: lead?.estimated_value || 0,
             }]
         );
 
         if (error) {
             showError('Fel', `Kunde inte skapa offert: ${error.message}`);
-        } else {
-            success('Offert skapad', `${formData.title} har skapats`);
-            onQuoteCreated?.();
-            onClose();
-            // Reset form
-            setFormData({
-                title: '', customer_id: '', lead_id: '', valid_until: '', notes: ''
-            });
+            setLoading(false);
+            return;
         }
+
+        // If created from a lead, update lead status to 'proposal'
+        if (lead && formData.lead_id) {
+            await updateLead(formData.lead_id, { status: 'proposal' });
+        }
+
+        success('Offert skapad', `${formData.title} har skapats`);
+        onQuoteCreated?.();
+        onClose();
+        // Reset form
+        setFormData({
+            title: '', customer_id: '', lead_id: '', valid_until: '', notes: ''
+        });
+        setNewCustomer({ name: '', email: '', phone_number: '' });
+        setShowNewCustomerForm(false);
         setLoading(false);
     };
 
@@ -163,36 +235,87 @@ const CreateQuoteModal: React.FC<CreateQuoteModalProps> = ({
                                 />
                             </div>
 
-                            {/* Customer */}
+                            {/* Customer Selection / New Customer Toggle */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Kund *
-                                </label>
-                                <select
-                                    required
-                                    value={formData.customer_id}
-                                    onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                >
-                                    <option value="">Välj kund...</option>
-                                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Kund *
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowNewCustomerForm(!showNewCustomerForm);
+                                            if (!showNewCustomerForm) {
+                                                setFormData(prev => ({ ...prev, customer_id: '' }));
+                                            }
+                                        }}
+                                        className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                                    >
+                                        <UserPlus className="w-3 h-3" />
+                                        {showNewCustomerForm ? 'Välj befintlig kund' : 'Skapa ny kund'}
+                                    </button>
+                                </div>
+
+                                {showNewCustomerForm ? (
+                                    <div className="space-y-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                            Fyll i kunduppgifter (mer information kan läggas till senare)
+                                        </p>
+                                        <div>
+                                            <input
+                                                type="text"
+                                                value={newCustomer.name}
+                                                onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                                                placeholder="Kundnamn *"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input
+                                                type="email"
+                                                value={newCustomer.email}
+                                                onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                                                placeholder="E-post (valfritt)"
+                                            />
+                                            <input
+                                                type="tel"
+                                                value={newCustomer.phone_number}
+                                                onChange={(e) => setNewCustomer({ ...newCustomer, phone_number: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                                                placeholder="Telefon (valfritt)"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <select
+                                        required={!showNewCustomerForm}
+                                        value={formData.customer_id}
+                                        onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    >
+                                        <option value="">Välj kund...</option>
+                                        {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                )}
                             </div>
 
-                            {/* Lead (optional) */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Kopplat Lead (valfritt)
-                                </label>
-                                <select
-                                    value={formData.lead_id}
-                                    onChange={(e) => setFormData({ ...formData, lead_id: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                >
-                                    <option value="">Inget lead...</option>
-                                    {leads.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
-                                </select>
-                            </div>
+                            {/* Lead (optional) - only show if not pre-populated */}
+                            {!lead && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Kopplat Lead (valfritt)
+                                    </label>
+                                    <select
+                                        value={formData.lead_id}
+                                        onChange={(e) => setFormData({ ...formData, lead_id: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    >
+                                        <option value="">Inget lead...</option>
+                                        {leads.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
+                                    </select>
+                                </div>
+                            )}
 
                             {/* Valid Until */}
                             <div>
@@ -236,11 +359,11 @@ const CreateQuoteModal: React.FC<CreateQuoteModalProps> = ({
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={loading}
+                                    disabled={loading || creatingCustomer}
                                     className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
                                 >
-                                    {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                                    Skapa Offert
+                                    {(loading || creatingCustomer) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                                    {showNewCustomerForm ? 'Skapa kund & offert' : 'Skapa Offert'}
                                 </button>
                             </div>
                         </>
