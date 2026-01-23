@@ -2175,6 +2175,92 @@ function TeamManagement() {
         type="danger"
       />
 
+      {showInternalEmailModal && internalEmailRecipient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b">
+              <div className="flex items-center">
+                <Mail className="w-6 h-6 text-blue-600 mr-3" />
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Skicka Internt E-post</h3>
+                  <p className="text-sm text-gray-600">Till: {internalEmailRecipient.full_name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowInternalEmailModal(false);
+                  setInternalEmailRecipient(null);
+                  setInternalEmailData({ subject: '', content: '' });
+                }}
+                disabled={isSendingInternalEmail}
+                className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Till</label>
+                <input
+                  type="text"
+                  value={internalEmailRecipient.email || 'Ingen e-post'}
+                  readOnly
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-gray-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amne *</label>
+                <input
+                  type="text"
+                  value={internalEmailData.subject}
+                  onChange={(e) => setInternalEmailData(prev => ({ ...prev, subject: e.target.value }))}
+                  placeholder="Skriv amne..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Meddelande *</label>
+                <textarea
+                  value={internalEmailData.content}
+                  onChange={(e) => setInternalEmailData(prev => ({ ...prev, content: e.target.value }))}
+                  rows={10}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowInternalEmailModal(false);
+                  setInternalEmailRecipient(null);
+                  setInternalEmailData({ subject: '', content: '' });
+                }}
+                disabled={isSendingInternalEmail}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+              >
+                Avbryt
+              </button>
+              <button
+                onClick={handleSendInternalEmail}
+                disabled={isSendingInternalEmail || !internalEmailData.subject || !internalEmailData.content || !internalEmailRecipient.email}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSendingInternalEmail ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4 mr-2" />
+                )}
+                {isSendingInternalEmail ? 'Skickar...' : 'Skicka E-post'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
