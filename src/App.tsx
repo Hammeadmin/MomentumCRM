@@ -8,6 +8,7 @@ import RealtimeManager from './components/RealtimeManager';
 import QuoteAcceptance from './pages/QuoteAcceptance';
 import AppRoutes from './components/AppRoutes';
 import LoginPage from './pages/LoginPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 // Public Website
 import PublicLayout from './layouts/public/PublicLayout';
@@ -53,6 +54,7 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<SignupPage />} />
               <Route path="/complete-signup" element={<CompleteSignupPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
 
               {/* Public standalone routes */}
               <Route path="/quote-accept/:token" element={<QuoteAcceptance />} />
