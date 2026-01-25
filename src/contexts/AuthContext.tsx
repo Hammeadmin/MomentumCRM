@@ -56,8 +56,6 @@ interface AuthContextType {
   signInWithGoogle: (redirectTo?: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
-  resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
-  updatePassword: (newPassword: string) => Promise<{ error: AuthError | null }>;
   isNewOAuthUser: boolean;
 }
 
@@ -268,30 +266,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await supabase.auth.signOut();
   };
 
-  const resetPassword = async (email: string) => {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      return { error };
-    } catch (err) {
-      console.error('[AuthContext] resetPassword exception:', err);
-      return { error: { message: err instanceof Error ? err.message : 'Unknown error' } as any };
-    }
-  };
-
-  const updatePassword = async (newPassword: string) => {
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      return { error };
-    } catch (err) {
-      console.error('[AuthContext] updatePassword exception:', err);
-      return { error: { message: err instanceof Error ? err.message : 'Unknown error' } as any };
-    }
-  };
-
   const value = {
     user,
     session,
@@ -305,8 +279,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signInWithGoogle,
     signOut,
     refreshProfile,
-    resetPassword,
-    updatePassword,
     isNewOAuthUser,
   };
 

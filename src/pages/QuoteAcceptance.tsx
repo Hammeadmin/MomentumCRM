@@ -49,22 +49,8 @@ function QuoteAcceptance() {
   useEffect(() => {
     if (token) {
       loadQuote();
-      trackQuoteView(token);
     }
   }, [token]);
-
-  const trackQuoteView = async (viewToken: string) => {
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      if (!supabaseUrl) return;
-
-      const trackingUrl = `${supabaseUrl}/functions/v1/track-quote-view?token=${encodeURIComponent(viewToken)}`;
-      await fetch(trackingUrl, { mode: 'no-cors' });
-      console.log('Quote view tracked');
-    } catch (err) {
-      console.error('Failed to track quote view:', err);
-    }
-  };
 
   const loadQuote = async () => {
     if (!token) return;
