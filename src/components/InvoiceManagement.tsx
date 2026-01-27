@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 import InvoicePreview from './InvoicePreview';
 import ROTInformation from '../components/ROTInformation';
@@ -33,7 +35,11 @@ import {
   User,
   Users2,
   Bell,
-  Loader2
+  Loader2,
+  Copy,
+  ExternalLink,
+  MoreVertical,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from './ui';
 import { useAuth } from '../contexts/AuthContext';
@@ -56,6 +62,7 @@ import {
   type TeamJobParticipation
 } from '../lib/invoices';
 import { uploadSignedDocument } from '../lib/storage';
+import { supabase } from '../lib/supabase';
 import { type QuoteTemplate } from '../lib/quoteTemplates';
 import {
   canCreateCreditNote,
@@ -115,6 +122,8 @@ function InvoiceManagement() {
   const { user, organisationId } = useAuth();
   const { success, error: showError } = useToast();
   const { invoices: t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Filter states
   const [filters, setFilters] = useState<InvoiceFilters>({});
@@ -232,7 +241,7 @@ function InvoiceManagement() {
   // Initialize email data when invoice is selected
   useEffect(() => {
     if (selectedInvoice && showEmailModal) {
-      const template = generateInvoiceEmailTemplate(selectedInvoice, 'standard');
+      const template = generateInvoiceEmailTemplate(selectedInvoice, 'standard', organisation);
       setEmailData({
         recipient_email: selectedInvoice.customer?.email || '',
         subject: template.subject,
@@ -241,7 +250,23 @@ function InvoiceManagement() {
         send_copy_to_team_leader: false
       });
     }
-  }, [selectedInvoice, showEmailModal]);
+  }, [selectedInvoice, showEmailModal, organisation]);
+
+  // Handle navigation state to open specific invoice
+  useEffect(() => {
+    if (location.state?.openInvoiceId && invoices.length > 0) {
+      const invoiceToOpen = invoices.find(i => i.id === location.state.openInvoiceId);
+      if (invoiceToOpen) {
+        setSelectedInvoice(invoiceToOpen);
+        loadInvoiceDocuments(invoiceToOpen.order_id);
+        setShowDetailsModal(true);
+        if (location.state?.openEmailModal) {
+          setShowEmailModal(true);
+        }
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location.state, invoices]);
   // Initialize work summary when order is selected
   useEffect(() => {
     if (selectedOrder && showUnifiedModal) {
@@ -374,6 +399,7 @@ function InvoiceManagement() {
 
   const printComponentRef = useRef(null);
   const manualSigningInputRef = useRef<HTMLInputElement>(null);
+  const emailPdfRef = useRef<HTMLDivElement>(null);
 
   const onAfterPrint = useCallback(() => {
     // Clear the invoices to print after printing is done
@@ -705,12 +731,72 @@ function InvoiceManagement() {
     if (result.error) {
       showError(t.MESSAGES.ERROR_TITLE, t.MESSAGES.ERROR_MARK_PAID(result.error.message));
     } else if (result.data) {
-      // Refetch data to update local state
       await loadData();
       success(t.MESSAGES.SUCCESS_TITLE, t.MESSAGES.MARKED_PAID(result.data.invoice_number));
     }
   };
 
+  const handleDuplicateInvoice = async (invoice: InvoiceWithRelations) => {
+    if (!organisationId) return;
+
+    try {
+      const { data: newNumber } = await supabase.rpc('generate_invoice_number', {
+        org_id: organisationId
+      });
+
+      const { data, error } = await supabase
+        .from('invoices')
+        .insert({
+          organisation_id: organisationId,
+          customer_id: invoice.customer_id,
+          order_id: invoice.order_id,
+          invoice_number: newNumber || `INV-${Date.now()}`,
+          amount: invoice.amount,
+          net_amount: invoice.net_amount,
+          vat_amount: invoice.vat_amount,
+          vat_rate: invoice.vat_rate,
+          line_items: invoice.line_items,
+          status: 'draft',
+          notes: invoice.notes,
+          payment_terms: invoice.payment_terms,
+          job_type: invoice.job_type,
+          team_members_involved: invoice.team_members_involved,
+          work_summary: invoice.work_summary,
+          created_by_user_id: user?.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await supabase.from('invoice_history').insert({
+        organisation_id: organisationId,
+        invoice_id: data.id,
+        action_type: 'duplicated',
+        performed_by_user_id: user?.id,
+        details: { source_invoice_id: invoice.id, source_invoice_number: invoice.invoice_number }
+      });
+
+      success('Faktura duplicerad', `Ny faktura #${data.invoice_number} skapad.`);
+      await loadData();
+    } catch (err) {
+      console.error('Error duplicating invoice:', err);
+      showError('Fel', 'Kunde inte duplicera fakturan.');
+    }
+  };
+
+  const handleSendAgain = (invoice: InvoiceWithRelations) => {
+    setSelectedInvoice(invoice);
+    setShowEmailModal(true);
+  };
+
+  const handleNavigateToPayments = (invoice: InvoiceWithRelations) => {
+    if (invoice.status === 'paid') {
+      navigate('/app/betalningar', { state: { openPaymentId: invoice.id } });
+    } else {
+      navigate('/app/betalningar');
+    }
+  };
 
   const handleCreateInvoiceFromOrder = async (
     order: OrderWithRelations,
@@ -979,6 +1065,66 @@ function InvoiceManagement() {
 
 
 
+  const generateInvoicePdf = async (): Promise<string | null> => {
+    if (!emailPdfRef.current) return null;
+
+    try {
+      const element = emailPdfRef.current;
+      element.style.left = '0';
+      element.style.visibility = 'visible';
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: 794,
+        height: 1123,
+      });
+
+      element.style.left = '-9999px';
+      element.style.visibility = 'hidden';
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true,
+      });
+
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+      const imgAspectRatio = canvas.width / canvas.height;
+      const pdfAspectRatio = pdfWidth / pdfHeight;
+
+      let finalWidth: number;
+      let finalHeight: number;
+
+      if (imgAspectRatio > pdfAspectRatio) {
+        finalWidth = pdfWidth;
+        finalHeight = pdfWidth / imgAspectRatio;
+      } else {
+        finalHeight = pdfHeight;
+        finalWidth = pdfHeight * imgAspectRatio;
+      }
+
+      const xOffset = (pdfWidth - finalWidth) / 2;
+      const yOffset = 0;
+
+      pdf.addImage(imgData, 'JPEG', xOffset, yOffset, finalWidth, finalHeight);
+
+      const pdfBase64 = pdf.output('datauristring').split(',')[1];
+      return pdfBase64;
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      return null;
+    }
+  };
+
   const handleSendEmail = async () => {
 
     if (!selectedInvoice || !emailData.recipient_email || !emailData.subject || !emailData.email_body) {
@@ -995,19 +1141,28 @@ function InvoiceManagement() {
 
       setEmailLoading(true);
 
+      // Generate PDF attachment
+      const pdfBase64 = await generateInvoicePdf();
+      const attachments: { filename: string; content: string }[] = [];
 
+      if (pdfBase64) {
+        attachments.push({
+          filename: `Faktura-${selectedInvoice.invoice_number}.pdf`,
+          content: pdfBase64,
+        });
+      }
 
-      const result = await sendInvoiceEmail(selectedInvoice.id, {
-
-        recipient_email: emailData.recipient_email,
-
-        subject: emailData.subject,
-
-        email_body: emailData.email_body,
-
-        send_copy_to_team_leader: emailData.send_copy_to_team_leader
-
-      });
+      const result = await sendInvoiceEmail(
+        selectedInvoice.id,
+        {
+          recipient_email: emailData.recipient_email,
+          subject: emailData.subject,
+          email_body: emailData.email_body,
+          attachments,
+          send_copy_to_team_leader: emailData.send_copy_to_team_leader,
+        },
+        user?.id
+      );
 
 
 
@@ -1679,8 +1834,16 @@ function InvoiceManagement() {
                   </thead>
                   <tbody>
                     {invoices.map((invoice) => (
-                      <tr key={invoice.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
+                      <tr
+                        key={invoice.id}
+                        className="hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => {
+                          setSelectedInvoice(invoice);
+                          loadInvoiceDocuments(invoice.order_id);
+                          setShowDetailsModal(true);
+                        }}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             checked={selectedInvoices.includes(invoice.id)}
@@ -1689,149 +1852,127 @@ function InvoiceManagement() {
                           />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-
-                          <div className="text-sm font-medium text-gray-900">
-
-                            {invoice.invoice_number}
-
-                          </div>
-
+                          <div className="text-sm font-medium text-gray-900">{invoice.invoice_number}</div>
+                          {invoice.email_sent && (
+                            <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+                              <Send className="w-3 h-3" /> Skickad
+                            </div>
+                          )}
                         </td>
-
                         <td className="px-6 py-4 whitespace-nowrap">
-
-                          <div className="text-sm text-gray-900">
-
-                            {invoice.customer?.name || 'Okänd kund'}
-
-                          </div>
-
+                          <div className="text-sm text-gray-900">{invoice.customer?.name || 'Okänd kund'}</div>
                         </td>
-
                         <td className="px-6 py-4 whitespace-nowrap">
-
                           <div>
-
-                            <p className="text-sm font-medium text-gray-900">
-
-                              {formatCurrency(invoice.amount)}
-
-                            </p>
-
+                            <p className="text-sm font-medium text-gray-900">{formatCurrency(invoice.amount)}</p>
                             {invoice.credited_amount && invoice.credited_amount > 0 && (
-
-                              <p className="text-sm text-red-600">
-
-                                Krediterat: {formatCurrency(Math.abs(invoice.credited_amount))}
-
-                              </p>
-
+                              <p className="text-sm text-red-600">Krediterat: {formatCurrency(Math.abs(invoice.credited_amount))}</p>
                             )}
-
                             {invoice.net_amount !== invoice.amount && (
-
-                              <p className="text-sm font-medium text-gray-700">
-
-                                Netto: {formatCurrency(invoice.net_amount || invoice.amount)}
-
-                              </p>
-
+                              <p className="text-sm font-medium text-gray-700">Netto: {formatCurrency(invoice.net_amount || invoice.amount)}</p>
                             )}
-
                           </div>
-
                         </td>
-
                         <td className="px-6 py-4 whitespace-nowrap">
-
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getInvoiceStatusColor(invoice.status)}`}>
-
                             {INVOICE_STATUS_LABELS[invoice.status]}
-
                           </span>
-
                         </td>
-
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-
                           {invoice.due_date ? formatDate(invoice.due_date) : '-'}
-
                         </td>
-
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-
                           {formatDate(invoice.created_at)}
-
                         </td>
-
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-
-                          <div className="flex items-center justify-end space-x-2">
-                            <label className="cursor-pointer text-gray-400 hover:text-blue-600" title="Ladda upp signerad PDF">
-                              <FileUp className="w-4 h-4" />
-                              <input
-                                type="file"
-                                accept=".pdf"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) handleManualSigning(invoice.id, file);
-                                }}
-                              />
-                            </label>
-
-                            <button
-
-                              onClick={() => {
-
-                                setSelectedInvoice(invoice);
-                                loadInvoiceDocuments(invoice.order_id);
-                                setShowDetailsModal(true);
-                              }}
-                              className="text-blue-600 hover:text-blue-900"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleEditInvoiceClick(invoice)}
-                              className="text-gray-600 hover:text-gray-900"
-                              title="Redigera"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => handleOpenReminder(invoice)} className="text-gray-400 hover:text-orange-600 transition-colors" title="Sätt påminnelse">
-                              <Bell className="w-4 h-4" />
-                            </button>
-                            {invoice.status !== 'paid' && (
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            {/* Primary Actions Group */}
+                            <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-0.5">
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation(); // Prevent modal from opening
-                                  handleMarkAsPaid(invoice.id);
+                                onClick={() => {
+                                  setSelectedInvoice(invoice);
+                                  loadInvoiceDocuments(invoice.order_id);
+                                  setShowDetailsModal(true);
                                 }}
-                                className="text-green-600 hover:text-green-900"
-                                title="Markera som betald"
+                                className="p-1.5 rounded-md text-gray-600 hover:text-blue-600 hover:bg-white transition-colors"
+                                title="Visa detaljer"
                               >
-                                <CheckCircle className="w-4 h-4" />
+                                <Eye className="w-4 h-4" />
                               </button>
-                            )}
-                            {canCreateCreditNote(invoice) && (
                               <button
-                                onClick={() => setShowCreditNoteModal(invoice)}
-                                className="text-gray-400 hover:text-red-600"
-                                title="Kreditera"
+                                onClick={() => handleEditInvoiceClick(invoice)}
+                                className="p-1.5 rounded-md text-gray-600 hover:text-blue-600 hover:bg-white transition-colors"
+                                title="Redigera"
                               >
-                                <CreditCard className="w-4 h-4" />
+                                <Edit className="w-4 h-4" />
                               </button>
-                            )}
-                            <button
-                              onClick={() => {
-                                setInvoiceToDelete(invoice);
-                                setShowDeleteDialog(true);
-                              }}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                              <button
+                                onClick={() => handleSendAgain(invoice)}
+                                className="p-1.5 rounded-md text-gray-600 hover:text-cyan-600 hover:bg-white transition-colors"
+                                title="Skicka faktura"
+                              >
+                                <Send className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Secondary Actions Group */}
+                            <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-0.5">
+                              <button
+                                onClick={() => handleDuplicateInvoice(invoice)}
+                                className="p-1.5 rounded-md text-gray-600 hover:text-indigo-600 hover:bg-white transition-colors"
+                                title="Duplicera"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleOpenReminder(invoice)}
+                                className="p-1.5 rounded-md text-gray-600 hover:text-amber-600 hover:bg-white transition-colors"
+                                title="Sätt påminnelse"
+                              >
+                                <Bell className="w-4 h-4" />
+                              </button>
+                              {invoice.status === 'paid' && (
+                                <button
+                                  onClick={() => handleNavigateToPayments(invoice)}
+                                  className="p-1.5 rounded-md text-gray-600 hover:text-emerald-600 hover:bg-white transition-colors"
+                                  title="Gå till betalning"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </button>
+                              )}
+                              {invoice.status !== 'paid' && (
+                                <button
+                                  onClick={() => handleMarkAsPaid(invoice.id)}
+                                  className="p-1.5 rounded-md text-emerald-600 hover:text-emerald-700 hover:bg-white transition-colors"
+                                  title="Markera som betald"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Destructive Actions */}
+                            <div className="flex items-center gap-0.5">
+                              {canCreateCreditNote(invoice) && (
+                                <button
+                                  onClick={() => setShowCreditNoteModal(invoice)}
+                                  className="p-1.5 rounded-md text-gray-400 hover:text-red-600 transition-colors"
+                                  title="Kreditera"
+                                >
+                                  <CreditCard className="w-4 h-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setInvoiceToDelete(invoice);
+                                  setShowDeleteDialog(true);
+                                }}
+                                className="p-1.5 rounded-md text-gray-400 hover:text-red-600 transition-colors"
+                                title="Ta bort"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -3361,7 +3502,7 @@ function InvoiceManagement() {
 
                       const newTemplateType = e.target.value as any;
 
-                      const template = generateInvoiceEmailTemplate(selectedInvoice, newTemplateType);
+                      const template = generateInvoiceEmailTemplate(selectedInvoice, newTemplateType, organisation);
 
                       setEmailData(prev => ({
 
@@ -3495,14 +3636,32 @@ function InvoiceManagement() {
 
               {/* Right Column: Invoice Preview */}
 
-              <div className="bg-gray-50 p-4 rounded-lg h-full">
+              <div className="bg-gray-50 p-4 rounded-lg h-full overflow-hidden">
 
-                <div className="transform scale-90 -translate-y-8">
+                <div className="transform scale-[0.48] origin-top-left" style={{ width: '210mm', height: '297mm' }}>
 
-                  <InvoicePreview invoice={selectedInvoice} logoUrl={systemSettings?.logo_url} systemSettings={systemSettings} organisation={organisation} />
+                  <div className="bg-white" style={{ width: '210mm', minHeight: '297mm' }}>
+                    <InvoicePreview invoice={selectedInvoice} logoUrl={systemSettings?.logo_url} systemSettings={systemSettings} organisation={organisation} />
+                  </div>
 
                 </div>
 
+              </div>
+
+              <div
+                ref={emailPdfRef}
+                className="bg-white p-8"
+                style={{
+                  position: 'fixed',
+                  left: '-9999px',
+                  top: '0',
+                  width: '210mm',
+                  minHeight: '297mm',
+                  boxSizing: 'border-box',
+                  fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
+                }}
+              >
+                <InvoicePreview invoice={selectedInvoice} logoUrl={systemSettings?.logo_url} systemSettings={systemSettings} organisation={organisation} />
               </div>
 
             </div>

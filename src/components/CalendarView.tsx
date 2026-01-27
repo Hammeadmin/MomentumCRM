@@ -68,7 +68,7 @@ import { getOrders } from '../lib/orders';
 import { updateOrder } from '../lib/orders';
 import { updateLead } from '../lib/leads';
 import { getTeams, getUserTeams, type TeamWithRelations } from '../lib/teams';
-import { createCommunication, sendEmail } from '../lib/communications';
+import { sendEmail } from '../lib/email';
 import type { UserProfile, Lead, Order, EventType } from '../types/database';
 import CalendarFilters from './CalendarFilters';
 import CalendarLegend from './CalendarLegend';
@@ -79,8 +79,8 @@ import { RegionTabs, type Region } from './calendar/RegionTabs';
 import { Button } from './ui';
 import EmptyState from './EmptyState';
 import { Loader2 } from 'lucide-react';
-import { createQuoteFromLead } from '../lib/quotes';
 import InvitationPreviewModal from './InvitationPreviewModal';
+import QuoteCreationModal from './QuoteCreationModal';
 import { Video } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
 
@@ -228,42 +228,49 @@ function CalendarView() {
     order?: Order;
     content: string;
     recipientEmail: string;
+    recipientPhone: string;
     subject: string;
+    meetingLink: string;
   }>({
     event: null,
     order: undefined,
     content: '',
     recipientEmail: '',
-    subject: ''
+    recipientPhone: '',
+    subject: '',
+    meetingLink: ''
   });
+
+  // State for quote creation modal
+  const [showQuoteCreationModal, setShowQuoteCreationModal] = useState(false);
+  const [leadForQuote, setLeadForQuote] = useState<Lead | null>(null);
 
   const handleInitiateInvitation = (event: CalendarEventWithRelations, order?: Order) => {
     try {
-      if (!currentUserProfile) return;
-      setError(null);
-
-      // Determine recipient email
-      let recipientEmail = '';
-      let customerName = '';
-
-      if (order?.customer?.email) {
-        recipientEmail = order.customer.email;
-        customerName = order.customer.name;
-      } else if (event.related_lead?.customer?.email) {
-        recipientEmail = event.related_lead.customer.email;
-        customerName = event.related_lead.customer.name;
-      }
-
-      if (!recipientEmail) {
-        setShowDetailModal(false); // Close modal if error, or show error in modal
-        warning('Saknad e-post', 'Ingen e-postadress hittades för kunden.');
+      if (!currentUserProfile) {
+        warning('Ej inloggad', 'Du måste vara inloggad för att skicka inbjudningar.');
         return;
       }
+      setError(null);
 
-      const meetingLink = event.meeting_link || `https://meet.google.com/${Math.random().toString(36).substring(7)}`;
+      let recipientEmail = '';
+      let recipientPhone = '';
+      let customerName = '';
+
+      if (order?.customer) {
+        recipientEmail = order.customer.email || '';
+        recipientPhone = order.customer.phone || '';
+        customerName = order.customer.name || 'Kund';
+      } else if (event.related_lead?.customer) {
+        recipientEmail = event.related_lead.customer.email || '';
+        recipientPhone = event.related_lead.customer.phone || '';
+        customerName = event.related_lead.customer.name || 'Kund';
+      }
+
+      const meetingLink = event.meeting_link || '';
       const startTime = event.start_time ? formatSwedishDateTime(new Date(event.start_time)) : 'TBD';
 
-      const content = `Hej ${customerName}!
+      const content = `Hej ${customerName || 'Kund'}!
 
 Ni är inbjuden till ett möte angående "${event.title}".
 
@@ -280,7 +287,9 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
         order,
         content,
         recipientEmail,
-        subject: `Inbjudan: ${event.title}`
+        recipientPhone,
+        subject: `Inbjudan: ${event.title}`,
+        meetingLink
       });
       setShowInvitationPreview(true);
       setShowDetailModal(false);
@@ -291,42 +300,48 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
     }
   };
 
-  const handleConfirmSendInvitation = async (content: string) => {
-    if (!invitationData.event || !currentUserProfile) return;
+  const handleConfirmSendInvitation = async (
+    content: string,
+    method: 'email' | 'sms',
+    recipientEmail: string,
+    recipientPhone?: string,
+    editedSubject?: string
+  ) => {
+    if (!invitationData.event || !currentUserProfile) {
+      showToastError('Fel', 'Saknar data för att skicka inbjudan');
+      return;
+    }
 
     try {
       setIsSendingInvite(true);
 
-      const { data: comm, error: commError } = await createCommunication({
-        organisation_id: currentUserProfile.organisation_id!,
-        order_id: invitationData.event.related_order_id || '',
-        type: 'email',
-        recipient: invitationData.recipientEmail,
-        subject: invitationData.subject,
-        content: content,
-        status: 'draft',
-        created_by_user_id: currentUserProfile.id
-      });
+      const subjectToUse = editedSubject || invitationData.subject;
 
-      if (commError) throw commError;
-      if (!comm) throw new Error('Kunde inte skapa kommunikation.');
+      if (method === 'email') {
+        const result = await sendEmail({
+          to: recipientEmail,
+          subject: subjectToUse,
+          content: content
+        });
+        if (!result.success) throw new Error(result.error || 'Kunde inte skicka e-post');
+        success('Inbjudan skickad', 'E-postinbjudan har skickats till kunden.');
+      } else {
+        const { sendSms } = await import('../lib/sms');
+        const result = await sendSms(
+          currentUserProfile.organisation_id!,
+          { to: recipientPhone || '', message: content, orderId: invitationData.event.related_order_id || undefined },
+          currentUserProfile.id
+        );
+        if (!result.success) throw new Error(result.error || 'Kunde inte skicka SMS');
+        success('SMS skickat', 'SMS-inbjudan har skickats till kunden.');
+      }
 
-      // Send email
-      const { error: sendError } = await sendEmail(comm.id, {
-        to: invitationData.recipientEmail,
-        subject: invitationData.subject,
-        content: content
-      });
-
-      if (sendError) throw sendError;
-
-      success('Inbjudan skickad', 'E-postinbjudan har skickats till kunden.');
       setShowInvitationPreview(false);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error sending invitation:', err);
-      // Re-open detail modal or just show alert?
-      showToastError('Kunde inte skicka inbjudan', err.message);
+      const message = err instanceof Error ? err.message : 'Ett oväntat fel uppstod';
+      showToastError('Kunde inte skicka inbjudan', message);
     } finally {
       setIsSendingInvite(false);
     }
@@ -338,33 +353,43 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
       return;
     }
 
-
+    if (outcome === 'won') {
+      if (!lead.customer_id) {
+        showToastError('Saknad kund', 'Lead måste ha en kopplad kund för att skapa offert.');
+        return;
+      }
+      setLeadForQuote(lead);
+      setShowQuoteCreationModal(true);
+      setShowDetailModal(false);
+      return;
+    }
 
     setIsSubmittingOutcome(true);
 
     try {
-      if (outcome === 'won') {
-        // 1. Pass the salespersonId to the quote creation function
-        const { data: newQuote, error: quoteError } = await createQuoteFromLead(lead, currentUserProfile!.organisation_id);
-        if (quoteError) throw new Error(`Kunde inte skapa offert: ${quoteError.message}`);
-
-        // 2. Update the lead's status to 'won'
-        await updateLead(lead.id, { status: 'won' });
-
-      } else { // outcome is 'lost'
-        await updateLead(lead.id, { status: 'lost' });
-      }
-
-      // 3. Close the modal and refresh all data to reflect the changes
+      await updateLead(lead.id, { status: 'lost' });
       setShowDetailModal(false);
-      await initializeCalendar(); // Re-fetch everything to ensure sidebars and calendars are up to date
+      await initializeCalendar();
       await loadEvents();
-
     } catch (err: any) {
       setError(err.message);
     } finally {
       setIsSubmittingOutcome(false);
     }
+  };
+
+  const handleQuoteCreated = async () => {
+    if (leadForQuote) {
+      try {
+        await updateLead(leadForQuote.id, { status: 'won' });
+      } catch (err) {
+        console.error('Error updating lead status:', err);
+      }
+    }
+    setShowQuoteCreationModal(false);
+    setLeadForQuote(null);
+    await initializeCalendar();
+    await loadEvents();
   };
 
 
@@ -2322,16 +2347,14 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
                   )}
 
                   <div className="flex space-x-2">
-                    {(relatedOrder?.customer?.email || selectedEvent.related_lead?.customer?.email) && (
-                      <button
-                        onClick={() => handleInitiateInvitation(selectedEvent, relatedOrder)}
-                        disabled={isSendingInvite}
-                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        <Mail className="w-4 h-4 mr-2" />
-                        {isSendingInvite ? 'Skickar...' : 'Skicka Inbjudan'}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleInitiateInvitation(selectedEvent, relatedOrder)}
+                      disabled={isSendingInvite}
+                      className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <Mail className="w-4 h-4 mr-2" />
+                      {isSendingInvite ? 'Skickar...' : 'Skicka Inbjudan'}
+                    </button>
 
                     <button
                       onClick={() => setShowDetailModal(false)}
@@ -2374,8 +2397,23 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
         onSend={handleConfirmSendInvitation}
         defaultContent={invitationData.content}
         recipientEmail={invitationData.recipientEmail}
+        recipientPhone={invitationData.recipientPhone}
         subject={invitationData.subject}
+        meetingLink={invitationData.meetingLink}
+        isSending={isSendingInvite}
       />
+
+      {showQuoteCreationModal && leadForQuote && (
+        <QuoteCreationModal
+          isOpen={showQuoteCreationModal}
+          onClose={() => {
+            setShowQuoteCreationModal(false);
+            setLeadForQuote(null);
+          }}
+          onQuoteCreated={handleQuoteCreated}
+          lead={leadForQuote}
+        />
+      )}
 
     </div>
 

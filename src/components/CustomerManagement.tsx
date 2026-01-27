@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Users, Plus, Search, Edit, Trash2, Eye, Phone, Mail, MapPin, Calendar, Building, User, X, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, FileText, Briefcase, Receipt, Clock, Activity, Loader2
+  Users, Plus, Search, Edit, Trash2, Eye, Phone, Mail, MapPin, Calendar, Building, User, X, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, FileText, Briefcase, Receipt, Clock, Activity, Loader2, MessageSquare
 } from 'lucide-react';
 import {
   searchCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomerInteractions, checkDuplicateCustomer, formatDate, formatDateTime, formatCurrency
@@ -9,6 +9,7 @@ import {
 import type { Customer, Lead, Quote, Job, Invoice, UserProfile } from '../types/database';
 import { LEAD_STATUS_LABELS, QUOTE_STATUS_LABELS, JOB_STATUS_LABELS, INVOICE_STATUS_LABELS } from '../types/database';
 import ROTInformation from '../components/ROTInformation';
+import ContactCustomerModal from './ContactCustomerModal';
 import { useAuth } from '../contexts/AuthContext';
 import { Button, Badge } from './ui';
 
@@ -94,6 +95,7 @@ function CustomerManagement() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithStats | null>(null);
   const [customerInteractions, setCustomerInteractions] = useState<CustomerInteractions | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -216,8 +218,13 @@ function CustomerManagement() {
   const handleViewCustomer = async (customer: CustomerWithStats) => {
     setSelectedCustomer(customer);
     setShowDetailModal(true);
-    setCustomerInteractions(null); // Clear previous data while loading
+    setCustomerInteractions(null);
     await loadCustomerDetails(customer.id);
+  };
+
+  const handleContactCustomer = (customer: CustomerWithStats) => {
+    setSelectedCustomer(customer);
+    setShowContactModal(true);
   };
 
   const createTimeline = () => {
@@ -308,7 +315,11 @@ function CustomerManagement() {
                 </tr>
               ) : (
                 customers.map((customer) => (
-                  <tr key={customer.id}>
+                  <tr
+                    key={customer.id}
+                    onClick={() => handleViewCustomer(customer)}
+                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                  >
                     <td>
                       <div className="flex items-center">
                         <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center mr-4">
@@ -326,10 +337,11 @@ function CustomerManagement() {
                     </td>
                     <td className="text-gray-500 dark:text-gray-400">{customer.sales_area || '-'}</td>
                     <td className="cell-actions">
-                      <div className="flex items-center justify-end space-x-2">
-                        <button onClick={() => handleViewCustomer(customer)} title="Visa detaljer" className="p-2 text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"><Eye className="w-4 h-4" /></button>
-                        <button onClick={() => handleEditClick(customer)} title="Redigera" className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
-                        <button onClick={() => handleDeleteCustomer(customer)} title="Ta bort" className="p-2 text-gray-400 hover:text-error-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      <div className="flex items-center justify-end space-x-1">
+                        <button onClick={(e) => { e.stopPropagation(); handleContactCustomer(customer); }} title="Kontakta" className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"><MessageSquare className="w-4 h-4" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleViewCustomer(customer); }} title="Visa detaljer" className="p-2 text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"><Eye className="w-4 h-4" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleEditClick(customer); }} title="Redigera" className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteCustomer(customer); }} title="Ta bort" className="p-2 text-gray-400 hover:text-error-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -729,6 +741,16 @@ function CustomerManagement() {
 
                 <div className="flex space-x-3">
                   <button
+                    onClick={() => {
+                      setShowDetailModal(false);
+                      handleContactCustomer(selectedCustomer);
+                    }}
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                  >
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Kontakta
+                  </button>
+                  <button
                     onClick={() => handleEditClick(selectedCustomer)}
                     className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
@@ -740,6 +762,20 @@ function CustomerManagement() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedCustomer && (
+        <ContactCustomerModal
+          isOpen={showContactModal}
+          onClose={() => {
+            setShowContactModal(false);
+            setSelectedCustomer(null);
+          }}
+          customer={selectedCustomer}
+          onCommunicationSent={() => {
+            loadCustomers();
+          }}
+        />
       )}
     </div>
   );

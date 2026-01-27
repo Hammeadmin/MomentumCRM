@@ -23,9 +23,10 @@ import {
   UserMinus,
   ChevronDown,
   FileText,
-
   Loader2,
-
+  Send,
+  Paperclip,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Button } from './ui';
 import { useAuth } from '../contexts/AuthContext';
@@ -70,6 +71,7 @@ import {
 } from '../lib/teams';
 import EmptyState from './EmptyState';
 import ConfirmDialog from './ConfirmDialog';
+import { supabase } from '../lib/supabase';
 
 
 
@@ -290,6 +292,18 @@ function TeamManagement() {
   const [payrollAdjustments, setPayrollAdjustments] = useState<PayrollAdjustment[]>([]);
   const [newAdjustment, setNewAdjustment] = useState<Partial<PayrollAdjustment>>({ type: 'bonus', amount: 0, description: '' });
   const [selectedPayrollStatus, setSelectedPayrollStatus] = useState<'pending' | 'paid'>('pending');
+  const [showInternalEmailModal, setShowInternalEmailModal] = useState(false);
+  const [internalEmailRecipient, setInternalEmailRecipient] = useState<UserProfile | null>(null);
+  const [internalEmailData, setInternalEmailData] = useState({ subject: '', content: '' });
+  const [isSendingInternalEmail, setIsSendingInternalEmail] = useState(false);
+  const [selectedUsersForEmail, setSelectedUsersForEmail] = useState<string[]>([]);
+  const [memberSearchTerm, setMemberSearchTerm] = useState('');
+  const [showBulkEmailModal, setShowBulkEmailModal] = useState(false);
+  const [bulkEmailData, setBulkEmailData] = useState({ subject: '', content: '' });
+  const [emailAttachments, setEmailAttachments] = useState<{ filename: string; content: string; size: number }[]>([]);
+  const [bulkEmailAttachments, setBulkEmailAttachments] = useState<{ filename: string; content: string; size: number }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (activeTab === 'payroll') {
@@ -723,6 +737,184 @@ function TeamManagement() {
     setMemberRoles({});
   };
 
+  const handleFileSelect = async (files: FileList | null, isBulk: boolean = false) => {
+    if (!files) return;
+
+    const maxSize = 10 * 1024 * 1024;
+    const newAttachments: { filename: string; content: string; size: number }[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > maxSize) {
+        showError('Fil för stor', `${file.name} överskrider 10MB gränsen.`);
+        continue;
+      }
+
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      newAttachments.push({
+        filename: file.name,
+        content: base64,
+        size: file.size
+      });
+    }
+
+    if (isBulk) {
+      setBulkEmailAttachments(prev => [...prev, ...newAttachments]);
+    } else {
+      setEmailAttachments(prev => [...prev, ...newAttachments]);
+    }
+  };
+
+  const removeAttachment = (index: number, isBulk: boolean = false) => {
+    if (isBulk) {
+      setBulkEmailAttachments(prev => prev.filter((_, i) => i !== index));
+    } else {
+      setEmailAttachments(prev => prev.filter((_, i) => i !== index));
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const getFileIcon = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) {
+      return <ImageIcon className="w-4 h-4" />;
+    }
+    return <FileText className="w-4 h-4" />;
+  };
+
+  const handleSendInternalEmail = async () => {
+    if (!internalEmailRecipient?.email || !internalEmailData.subject || !internalEmailData.content) return;
+
+    setIsSendingInternalEmail(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          to: internalEmailRecipient.email,
+          subject: internalEmailData.subject,
+          content: internalEmailData.content,
+          attachments: emailAttachments.map(a => ({ filename: a.filename, content: a.content })),
+        }),
+      });
+
+      if (response.ok) {
+        showSuccess('Skickat!', 'E-postmeddelandet har skickats.');
+        setShowInternalEmailModal(false);
+        setInternalEmailRecipient(null);
+        setInternalEmailData({ subject: '', content: '' });
+        setEmailAttachments([]);
+      } else {
+        throw new Error('Failed to send email');
+      }
+    } catch (err) {
+      console.error('Error sending internal email:', err);
+      showError('Fel', 'Kunde inte skicka e-post. Försök igen.');
+    } finally {
+      setIsSendingInternalEmail(false);
+    }
+  };
+
+  const handleSendBulkEmail = async () => {
+    if (selectedUsersForEmail.length === 0 || !bulkEmailData.subject || !bulkEmailData.content) return;
+
+    setIsSendingInternalEmail(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const selectedUserEmails = allUsers
+        .filter(u => selectedUsersForEmail.includes(u.id) && u.email)
+        .map(u => u.email!);
+
+      if (selectedUserEmails.length === 0) {
+        showError('Fel', 'Inga giltiga e-postadresser hittades.');
+        return;
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          to: selectedUserEmails[0],
+          cc: selectedUserEmails.slice(1),
+          subject: bulkEmailData.subject,
+          content: bulkEmailData.content,
+          attachments: bulkEmailAttachments.map(a => ({ filename: a.filename, content: a.content })),
+        }),
+      });
+
+      if (response.ok) {
+        success('Skickat!', `E-post skickades till ${selectedUserEmails.length} mottagare.`);
+        setShowBulkEmailModal(false);
+        setSelectedUsersForEmail([]);
+        setBulkEmailData({ subject: '', content: '' });
+        setBulkEmailAttachments([]);
+      } else {
+        throw new Error('Failed to send email');
+      }
+    } catch (err) {
+      console.error('Error sending bulk email:', err);
+      showError('Fel', 'Kunde inte skicka e-post. Försök igen.');
+    } finally {
+      setIsSendingInternalEmail(false);
+    }
+  };
+
+  const toggleUserSelection = (userId: string) => {
+    setSelectedUsersForEmail(prev =>
+      prev.includes(userId)
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const toggleAllUsers = () => {
+    const usersWithEmail = filteredMembers.filter(u => u.email);
+    if (selectedUsersForEmail.length === usersWithEmail.length) {
+      setSelectedUsersForEmail([]);
+    } else {
+      setSelectedUsersForEmail(usersWithEmail.map(u => u.id));
+    }
+  };
+
+  const filteredMembers = allUsers.filter(user => {
+    if (!memberSearchTerm) return true;
+    const search = memberSearchTerm.toLowerCase();
+    return (
+      user.full_name?.toLowerCase().includes(search) ||
+      user.email?.toLowerCase().includes(search) ||
+      user.phone_number?.toLowerCase().includes(search) ||
+      user.city?.toLowerCase().includes(search)
+    );
+  });
+
+  const getUserTeam = (userId: string) => {
+    for (const team of teams) {
+      const member = team.members?.find(m => m.user_id === userId);
+      if (member) return { team, member };
+    }
+    return null;
+  };
+
   const getSpecialtyIcon = (specialty: TeamSpecialty) => {
     switch (specialty) {
       case 'fönsterputsning': return '🪟';
@@ -1074,141 +1266,218 @@ function TeamManagement() {
       }
 
       {/* Team Members Tab */}
-      {
-        activeTab === 'members' && (
-          <div className="space-y-6">
-            {/* Unassigned Users */}
-            {unassignedUsers.length > 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-yellow-900 mb-4 flex items-center">
-                  <AlertCircle className="w-5 h-5 mr-2" />
-                  Ej tilldelade användare ({unassignedUsers.length})
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {unassignedUsers.map((user) => (
-                    <div key={user.id} className="bg-white rounded-lg p-4 border border-yellow-300">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-gray-900">{user.full_name}</p>
-                          <p className="text-sm text-gray-500">{user.email}</p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setUserToAssign(user);
-                            setShowQuickAssignModal(true);
-                          }}
-                          className="text-blue-600 hover:text-blue-700"
-                          title="Tilldela till team"
-                        >
-                          <UserPlus className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+      {activeTab === 'members' && (
+        <div className="space-y-6">
+          {/* Search and Actions Bar */}
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  value={memberSearchTerm}
+                  onChange={(e) => setMemberSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Sök på namn, e-post, telefon eller stad..."
+                />
+              </div>
+              {selectedUsersForEmail.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600">
+                    {selectedUsersForEmail.length} valda
+                  </span>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setShowBulkEmailModal(true)}
+                    icon={<Mail className="w-4 h-4" />}
+                  >
+                    Skicka e-post till valda
+                  </Button>
+                  <button
+                    onClick={() => setSelectedUsersForEmail([])}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          </div>
 
-            {/* All Team Members */}
-            <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Alla teammedlemmar</h3>
+          {/* All Organisation Members */}
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Alla medarbetare</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {filteredMembers.length} av {allUsers.length} medarbetare
+                </p>
               </div>
+            </div>
 
-              <div className="table-container">
-                <table className="data-table">
-                  <thead>
+            {filteredMembers.length === 0 ? (
+              <div className="p-12 text-center">
+                <User className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">Inga medarbetare hittades</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <th>Medlem</th>
-                      <th>Team</th>
-                      <th>Roll i Team</th>
-                      <th>Gick med</th>
-                      <th>Status</th>
-                      <th className="text-right">Åtgärder</th>
+                      <th className="px-4 py-3 text-left">
+                        <input
+                          type="checkbox"
+                          checked={selectedUsersForEmail.length === filteredMembers.filter(u => u.email).length && filteredMembers.length > 0}
+                          onChange={toggleAllUsers}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Medarbetare</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kontakt</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Roll</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Åtgärder</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {teams.flatMap(team =>
-                      (team.members || []).map(member => (
-                        <tr key={member.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredMembers.map((member) => {
+                      const teamInfo = getUserTeam(member.id);
+                      const roleLabels: Record<string, string> = {
+                        admin: 'Administratör',
+                        sales: 'Säljare',
+                        worker: 'Arbetare',
+                        finance: 'Ekonomi'
+                      };
+                      return (
+                        <tr key={member.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedUsersForEmail.includes(member.id)}
+                              onChange={() => toggleUserSelection(member.id)}
+                              disabled={!member.email}
+                              className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                            />
+                          </td>
+                          <td className="px-4 py-4 whitespace-nowrap">
                             <div className="flex items-center">
-                              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center text-white font-medium">
-                                {member.user?.full_name?.charAt(0) || 'U'}
+                              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-medium shadow-sm">
+                                {member.full_name?.charAt(0) || 'U'}
                               </div>
-                              <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {member.user?.full_name}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  {member.user?.email}
-                                </div>
+                              <div className="ml-3">
+                                <div className="text-sm font-medium text-gray-900">{member.full_name}</div>
+                                {member.city && (
+                                  <div className="text-xs text-gray-500 flex items-center">
+                                    <MapPin className="w-3 h-3 mr-1" />
+                                    {member.city}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <span className="text-xl mr-2">{getSpecialtyIcon(team.specialty)}</span>
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">{team.name}</div>
-                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getTeamSpecialtyColor(team.specialty)
-                                  }`}>
-                                  {TEAM_SPECIALTY_LABELS[team.specialty] || team.specialty}
-                                </span>
-                              </div>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <div className="space-y-1">
+                              {member.email && (
+                                <div className="text-sm text-gray-600 flex items-center">
+                                  <Mail className="w-3.5 h-3.5 mr-1.5 text-gray-400" />
+                                  {member.email}
+                                </div>
+                              )}
+                              {member.phone_number && (
+                                <div className="text-sm text-gray-600 flex items-center">
+                                  <Phone className="w-3.5 h-3.5 mr-1.5 text-gray-400" />
+                                  {member.phone_number}
+                                </div>
+                              )}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getTeamRoleColor(member.role_in_team)}`}>
-                              {TEAM_ROLE_LABELS[member.role_in_team]}
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
+                              member.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                              member.role === 'sales' ? 'bg-blue-100 text-blue-800' :
+                              member.role === 'finance' ? 'bg-green-100 text-green-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {roleLabels[member.role] || member.role}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatDate(member.joined_date)}
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            {teamInfo ? (
+                              <div className="flex items-center">
+                                <span className="text-lg mr-2">{getSpecialtyIcon(teamInfo.team.specialty)}</span>
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">{teamInfo.team.name}</div>
+                                  <span className={`text-xs ${getTeamRoleColor(teamInfo.member.role_in_team)} px-1.5 py-0.5 rounded`}>
+                                    {TEAM_ROLE_LABELS[teamInfo.member.role_in_team]}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-400 italic">Ej tilldelad</span>
+                            )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${member.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                              }`}>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
+                              member.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
                               {member.is_active ? 'Aktiv' : 'Inaktiv'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div className="flex items-center justify-end space-x-2">
+                          <td className="px-4 py-4 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end space-x-1">
+                              {member.email && (
+                                <button
+                                  onClick={() => {
+                                    setInternalEmailRecipient(member);
+                                    setShowInternalEmailModal(true);
+                                  }}
+                                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="Skicka e-post"
+                                >
+                                  <Mail className="w-4 h-4" />
+                                </button>
+                              )}
                               <button
-                                onClick={() => handleViewUser(member.user)}
-                                className="text-gray-400 hover:text-indigo-600"
+                                onClick={() => handleViewUser(member)}
+                                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                                 title="Visa detaljer"
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => handleEditUser(member.user)}
-                                className="text-gray-400 hover:text-blue-600"
-                                title="Redigera användare"
+                                onClick={() => handleEditUser(member)}
+                                className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                title="Redigera"
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={() => {
-                                  // Remove from team functionality
-                                }}
-                                className="text-red-600 hover:text-red-900"
-                                title="Ta bort från team"
-                              >
-                                <UserMinus className="w-4 h-4" />
-                              </button>
+                              {!teamInfo && (
+                                <button
+                                  onClick={() => {
+                                    setUserToAssign(member);
+                                    setShowQuickAssignModal(true);
+                                  }}
+                                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="Tilldela till team"
+                                >
+                                  <UserPlus className="w-4 h-4" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
-                      ))
-                    )}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-            </div>
+            )}
           </div>
-        )
-      }
+        </div>
+      )}
 
       {
         activeTab === 'payroll' && (
@@ -2177,12 +2446,14 @@ function TeamManagement() {
 
       {showInternalEmailModal && internalEmailRecipient && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
               <div className="flex items-center">
-                <Mail className="w-6 h-6 text-blue-600 mr-3" />
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                  <Mail className="w-5 h-5 text-blue-600" />
+                </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Skicka Internt E-post</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Skicka e-post</h3>
                   <p className="text-sm text-gray-600">Till: {internalEmailRecipient.full_name}</p>
                 </div>
               </div>
@@ -2193,9 +2464,9 @@ function TeamManagement() {
                   setInternalEmailData({ subject: '', content: '' });
                 }}
                 disabled={isSendingInternalEmail}
-                className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                className="text-gray-400 hover:text-gray-600 disabled:opacity-50 p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -2206,7 +2477,7 @@ function TeamManagement() {
                   type="text"
                   value={internalEmailRecipient.email || 'Ingen e-post'}
                   readOnly
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-gray-600"
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-600"
                 />
               </div>
 
@@ -2217,7 +2488,7 @@ function TeamManagement() {
                   value={internalEmailData.subject}
                   onChange={(e) => setInternalEmailData(prev => ({ ...prev, subject: e.target.value }))}
                   placeholder="Skriv amne..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
@@ -2226,9 +2497,60 @@ function TeamManagement() {
                 <textarea
                   value={internalEmailData.content}
                   onChange={(e) => setInternalEmailData(prev => ({ ...prev, content: e.target.value }))}
-                  rows={10}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  rows={8}
+                  placeholder="Skriv ditt meddelande..."
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Bilagor</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={(e) => handleFileSelect(e.target.files, false)}
+                  className="hidden"
+                  accept="*/*"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-lg text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 transition-colors w-full justify-center"
+                >
+                  <Paperclip className="w-4 h-4 mr-2" />
+                  Klicka för att bifoga filer
+                </button>
+                {emailAttachments.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {emailAttachments.map((file, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-2.5 bg-blue-50 border border-blue-200 rounded-lg"
+                      >
+                        <div className="flex items-center min-w-0">
+                          <div className="p-1.5 bg-blue-100 rounded text-blue-600 mr-2.5">
+                            {getFileIcon(file.filename)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{file.filename}</p>
+                            <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(index, false)}
+                          className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors ml-2"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Totalt: {emailAttachments.length} fil(er), {formatFileSize(emailAttachments.reduce((sum, f) => sum + f.size, 0))}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2238,23 +2560,175 @@ function TeamManagement() {
                   setShowInternalEmailModal(false);
                   setInternalEmailRecipient(null);
                   setInternalEmailData({ subject: '', content: '' });
+                  setEmailAttachments([]);
                 }}
                 disabled={isSendingInternalEmail}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
               >
                 Avbryt
               </button>
               <button
                 onClick={handleSendInternalEmail}
                 disabled={isSendingInternalEmail || !internalEmailData.subject || !internalEmailData.content || !internalEmailRecipient.email}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center px-5 py-2.5 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isSendingInternalEmail ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
                   <Send className="w-4 h-4 mr-2" />
                 )}
-                {isSendingInternalEmail ? 'Skickar...' : 'Skicka E-post'}
+                {isSendingInternalEmail ? 'Skickar...' : 'Skicka'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Email Modal */}
+      {showBulkEmailModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+              <div className="flex items-center">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                  <Users2 className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Skicka e-post till flera</h3>
+                  <p className="text-sm text-gray-600">{selectedUsersForEmail.length} mottagare valda</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowBulkEmailModal(false);
+                  setBulkEmailData({ subject: '', content: '' });
+                }}
+                disabled={isSendingInternalEmail}
+                className="text-gray-400 hover:text-gray-600 disabled:opacity-50 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Mottagare</label>
+                <div className="flex flex-wrap gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg max-h-32 overflow-y-auto">
+                  {allUsers
+                    .filter(u => selectedUsersForEmail.includes(u.id))
+                    .map(user => (
+                      <span
+                        key={user.id}
+                        className="inline-flex items-center px-2.5 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full"
+                      >
+                        {user.full_name}
+                        <button
+                          onClick={() => toggleUserSelection(user.id)}
+                          className="ml-1.5 hover:text-blue-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amne *</label>
+                <input
+                  type="text"
+                  value={bulkEmailData.subject}
+                  onChange={(e) => setBulkEmailData(prev => ({ ...prev, subject: e.target.value }))}
+                  placeholder="Skriv amne..."
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Meddelande *</label>
+                <textarea
+                  value={bulkEmailData.content}
+                  onChange={(e) => setBulkEmailData(prev => ({ ...prev, content: e.target.value }))}
+                  rows={8}
+                  placeholder="Skriv ditt meddelande..."
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Bilagor</label>
+                <input
+                  ref={bulkFileInputRef}
+                  type="file"
+                  multiple
+                  onChange={(e) => handleFileSelect(e.target.files, true)}
+                  className="hidden"
+                  accept="*/*"
+                />
+                <button
+                  type="button"
+                  onClick={() => bulkFileInputRef.current?.click()}
+                  className="inline-flex items-center px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-lg text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 transition-colors w-full justify-center"
+                >
+                  <Paperclip className="w-4 h-4 mr-2" />
+                  Klicka för att bifoga filer
+                </button>
+                {bulkEmailAttachments.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {bulkEmailAttachments.map((file, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-2.5 bg-blue-50 border border-blue-200 rounded-lg"
+                      >
+                        <div className="flex items-center min-w-0">
+                          <div className="p-1.5 bg-blue-100 rounded text-blue-600 mr-2.5">
+                            {getFileIcon(file.filename)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{file.filename}</p>
+                            <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(index, true)}
+                          className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors ml-2"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Totalt: {bulkEmailAttachments.length} fil(er), {formatFileSize(bulkEmailAttachments.reduce((sum, f) => sum + f.size, 0))}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowBulkEmailModal(false);
+                  setBulkEmailData({ subject: '', content: '' });
+                  setBulkEmailAttachments([]);
+                }}
+                disabled={isSendingInternalEmail}
+                className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                Avbryt
+              </button>
+              <button
+                onClick={handleSendBulkEmail}
+                disabled={isSendingInternalEmail || !bulkEmailData.subject || !bulkEmailData.content || selectedUsersForEmail.length === 0}
+                className="inline-flex items-center px-5 py-2.5 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSendingInternalEmail ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4 mr-2" />
+                )}
+                {isSendingInternalEmail ? 'Skickar...' : `Skicka till ${selectedUsersForEmail.length} mottagare`}
               </button>
             </div>
           </div>

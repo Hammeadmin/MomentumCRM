@@ -49,7 +49,6 @@ function SignupPage() {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [emailVerificationSent, setEmailVerificationSent] = useState(false);
 
     const [formData, setFormData] = useState<SignupFormData>({
         email: '',
@@ -165,11 +164,11 @@ function SignupPage() {
 
             // Check if email verification is required
             if (!authData.session) {
-                console.log('[Signup] No session - email verification may be required');
-                // Email verification required - show success message
+                console.log('[Signup] No session - email verification required');
+                // Email verification required - redirect to verification page
                 // The RPC will be called when user verifies email and logs in
-                // (handled by CompleteSignupPage or AuthContext)
-                setEmailVerificationSent(true);
+                // (handled by AuthContext when they click the confirmation link)
+                navigate('/verify-email', { state: { email: formData.email } });
                 return;
             }
 
@@ -485,33 +484,7 @@ function SignupPage() {
                     </p>
                 </div>
 
-                {/* Email Verification Success Message */}
-                {emailVerificationSent ? (
-                    <div className="bg-white py-8 px-6 shadow-xl rounded-2xl border border-gray-100">
-                        <div className="text-center space-y-4">
-                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-                                <Mail className="w-8 h-8 text-green-600" />
-                            </div>
-                            <h3 className="text-xl font-semibold text-gray-900">Bekräfta din e-postadress</h3>
-                            <p className="text-gray-600">
-                                Vi har skickat ett bekräftelsemail till <strong>{formData.email}</strong>.
-                                Klicka på länken i mailet för att aktivera ditt konto.
-                            </p>
-                            <p className="text-sm text-gray-500">
-                                Hittar du inte mailet? Kolla din skräppost.
-                            </p>
-                            <Link
-                                to="/login"
-                                className="inline-block mt-4 text-blue-600 hover:text-blue-700 font-medium"
-                            >
-                                Gå till inloggning
-                            </Link>
-                        </div>
-                    </div>
-                ) : (
-                    <>
-
-                        {/* Progress Steps */}
+                {/* Progress Steps */}
                         <div className="flex items-center justify-center">
                             {STEPS.map((step, index) => (
                                 <React.Fragment key={step.id}>
@@ -653,8 +626,6 @@ function SignupPage() {
                                 Fortsätt med Google
                             </button>
                         </div>
-                    </>
-                )}
 
                 {/* Footer */}
                 <div className="text-center text-sm text-gray-500">

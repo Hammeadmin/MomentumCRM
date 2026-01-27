@@ -227,13 +227,13 @@ function OrderKanban() {
   const [columnVisibleCounts, setColumnVisibleCounts] = useState<Record<string, number>>({});
 
   const kanbanColumns = [
-    { status: 'förfrågan', title: kanban.COLUMNS.INQUIRIES, bgColor: 'bg-slate-50', headerColor: 'bg-emerald-600', badgeColor: 'bg-emerald-100 text-emerald-800', type: 'lead', navigateTo: '/leads' },
-    { status: 'offert_utkast', title: kanban.COLUMNS.QUOTES_DRAFT, bgColor: 'bg-slate-50', headerColor: 'bg-amber-500', badgeColor: 'bg-amber-100 text-amber-800', type: 'quote', navigateTo: '/offerter' },
-    { status: 'öppen_order', title: kanban.COLUMNS.OPEN_ORDERS, bgColor: 'bg-slate-50', headerColor: 'bg-blue-600', badgeColor: 'bg-blue-100 text-blue-800', type: 'order', navigateTo: '/Orderhantering' },
-    { status: 'bokad_bekräftad', title: kanban.COLUMNS.BOOKED_ORDERS, bgColor: 'bg-slate-50', headerColor: 'bg-teal-600', badgeColor: 'bg-teal-100 text-teal-800', type: 'order', navigateTo: '/Orderhantering' },
-    { status: 'ej_slutfört', title: kanban.COLUMNS.NOT_COMPLETED, bgColor: 'bg-slate-50', headerColor: 'bg-orange-500', badgeColor: 'bg-orange-100 text-orange-800', type: 'order', navigateTo: '/Orderhantering' },
-    { status: 'redo_fakturera', title: kanban.COLUMNS.READY_TO_INVOICE, bgColor: 'bg-slate-50', headerColor: 'bg-indigo-600', badgeColor: 'bg-indigo-100 text-indigo-800', type: 'order', navigateTo: '/fakturor' },
-    { status: 'avbokad_kund', title: kanban.COLUMNS.CANCELLED, bgColor: 'bg-slate-50', headerColor: 'bg-rose-600', badgeColor: 'bg-rose-100 text-rose-800', type: 'order', navigateTo: '/Orderhantering' }
+    { status: 'förfrågan', title: kanban.COLUMNS.INQUIRIES, bgColor: 'bg-slate-50', headerColor: 'bg-emerald-600', badgeColor: 'bg-emerald-100 text-emerald-800', type: 'lead', navigateTo: '/app/leads' },
+    { status: 'offert_utkast', title: kanban.COLUMNS.QUOTES_DRAFT, bgColor: 'bg-slate-50', headerColor: 'bg-amber-500', badgeColor: 'bg-amber-100 text-amber-800', type: 'quote', navigateTo: '/app/offerter' },
+    { status: 'öppen_order', title: kanban.COLUMNS.OPEN_ORDERS, bgColor: 'bg-slate-50', headerColor: 'bg-blue-600', badgeColor: 'bg-blue-100 text-blue-800', type: 'order', navigateTo: '/app/Orderhantering' },
+    { status: 'bokad_bekräftad', title: kanban.COLUMNS.BOOKED_ORDERS, bgColor: 'bg-slate-50', headerColor: 'bg-teal-600', badgeColor: 'bg-teal-100 text-teal-800', type: 'order', navigateTo: '/app/Orderhantering' },
+    { status: 'ej_slutfört', title: kanban.COLUMNS.NOT_COMPLETED, bgColor: 'bg-slate-50', headerColor: 'bg-orange-500', badgeColor: 'bg-orange-100 text-orange-800', type: 'order', navigateTo: '/app/Orderhantering' },
+    { status: 'redo_fakturera', title: kanban.COLUMNS.READY_TO_INVOICE, bgColor: 'bg-slate-50', headerColor: 'bg-indigo-600', badgeColor: 'bg-indigo-100 text-indigo-800', type: 'order', navigateTo: '/app/fakturor' },
+    { status: 'avbokad_kund', title: kanban.COLUMNS.CANCELLED, bgColor: 'bg-slate-50', headerColor: 'bg-rose-600', badgeColor: 'bg-rose-100 text-rose-800', type: 'order', navigateTo: '/app/Orderhantering' }
   ];
 
   // Removed manual useEffect for data fetching - now handled by useKanbanData hook

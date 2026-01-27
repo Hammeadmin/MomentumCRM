@@ -95,10 +95,11 @@ const AnalyticsHeader = ({ analytics, loading }: { analytics: LeadAnalytics | nu
 };
 
 // ====== KANBAN VIEW COMPONENT ====== //
-const LeadKanbanView = ({ leads, onSelectLead, onStatusChange, leadsTranslations }: {
+const LeadKanbanView = ({ leads, onSelectLead, onStatusChange, onCreateQuote, leadsTranslations }: {
     leads: LeadWithRelations[];
     onSelectLead: (lead: LeadWithRelations) => void;
     onStatusChange: (leadId: string, newStatus: LeadStatus) => void;
+    onCreateQuote: (lead: LeadWithRelations) => void;
     leadsTranslations: ReturnType<typeof useTranslation>['leads'];
 }) => {
     const handleDragStart = (e: React.DragEvent, lead: LeadWithRelations) => {
@@ -157,6 +158,7 @@ const LeadKanbanView = ({ leads, onSelectLead, onStatusChange, leadsTranslations
                                     data={lead}
                                     onDragStart={(e: React.DragEvent) => handleDragStart(e, lead)}
                                     onClick={() => onSelectLead(lead)}
+                                    onCreateQuote={() => onCreateQuote(lead)}
                                 />
                             ))}
                             {stageLeads.length === 0 && (
@@ -724,6 +726,7 @@ const LeadManagement: React.FC = () => {
                                 leads={leads}
                                 onSelectLead={setSelectedLead}
                                 onStatusChange={handleStatusChange}
+                                onCreateQuote={handleCreateQuote}
                                 leadsTranslations={leadsTranslations}
                             />
                         </div>
@@ -753,8 +756,8 @@ const LeadManagement: React.FC = () => {
 
                                 {/* Quick Actions */}
                                 <div className="flex flex-wrap gap-2 mb-4">
-                                    <Button variant="outline" size="sm" icon={<Edit className="w-4 h-4" />} onClick={() => handleEditLead(selectedLead)}>Redigera</Button>
-                                    <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => handleCreateQuote(selectedLead)}>Skapa offert</Button>
+                                    <Button variant="outline" size="sm" icon={<Edit className="w-4 h-4" />} onClick={() => selectedLead && handleEditLead(selectedLead)}>Redigera</Button>
+                                    <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => selectedLead && handleCreateQuote(selectedLead)}>Skapa offert</Button>
                                 </div>
 
                                 {/* Customer Info */}
@@ -843,7 +846,7 @@ const LeadManagement: React.FC = () => {
                                         <Button variant="outline" size="sm" icon={<PhoneCall className="w-4 h-4" />}>Ring</Button>
                                         <Button variant="outline" size="sm" icon={<Mail className="w-4 h-4" />}>E-post</Button>
                                         <Button variant="outline" size="sm" icon={<Calendar className="w-4 h-4" />}>Boka möte</Button>
-                                        <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => handleCreateQuote(selectedLead)}>Skapa offert</Button>
+                                        <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => selectedLead && handleCreateQuote(selectedLead)}>Skapa offert</Button>
                                     </div>
 
                                     {/* Next Action Suggestion */}

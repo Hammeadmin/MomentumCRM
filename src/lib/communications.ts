@@ -7,7 +7,8 @@ export type CommunicationStatus = 'draft' | 'sent' | 'delivered' | 'read' | 'fai
 export interface Communication {
   id: string;
   organisation_id: string;
-  order_id?: string | null; // Optional for standalone communications
+  order_id?: string | null;
+  customer_id?: string | null;
   type: CommunicationType;
   recipient: string;
   subject?: string | null;
@@ -16,7 +17,7 @@ export interface Communication {
   sent_at?: string | null;
   delivered_at?: string | null;
   read_at?: string | null;
-  created_by_user_id?: string | null; // Optional for system-generated
+  created_by_user_id?: string | null;
   created_at?: string | null;
   error_message?: string | null;
 }
@@ -24,6 +25,7 @@ export interface Communication {
 export interface CommunicationWithRelations extends Communication {
   created_by?: UserProfile;
   order?: Order & { customer?: Customer };
+  customer?: Customer;
 }
 
 export interface CommunicationFilters {
@@ -54,61 +56,151 @@ export interface SMSTemplate {
 export const EMAIL_TEMPLATES: EmailTemplate[] = [
   {
     id: 'booking_confirmation',
-    name: 'Bekräftelse av bokning',
-    subject: 'Bekräftelse av bokning - Order #{order_id}',
+    name: 'Bekraftelse av bokning',
+    subject: 'Bekraftelse av bokning - Order #{order_id}',
     content: `Hej {customer_name}!
 
-Vi bekräftar härmed din bokning för {order_title}.
+Vi bekraftar harmed din bokning for {order_title}.
 
 Orderdetaljer:
 - Ordernummer: #{order_id}
 - Beskrivning: {order_description}
 - Planerat datum: {planned_date}
 
-Vi kommer att kontakta dig 1-2 dagar innan för att bekräfta tid och detaljer.
+Vi kommer att kontakta dig 1-2 dagar innan for att bekrafta tid och detaljer.
 
-Vid frågor, tveka inte att kontakta oss.
+Vid fragor, tveka inte att kontakta oss.
 
-Med vänliga hälsningar,
+Med vanliga halsningar,
 {company_name}`,
     variables: ['customer_name', 'order_title', 'order_id', 'order_description', 'planned_date', 'company_name']
   },
   {
     id: 'visit_reminder',
-    name: 'Påminnelse inför besök',
-    subject: 'Påminnelse: Vi kommer imorgon - Order #{order_id}',
+    name: 'Paminnelse infor besok',
+    subject: 'Paminnelse: Vi kommer imorgon - Order #{order_id}',
     content: `Hej {customer_name}!
 
-Detta är en påminnelse om att vi kommer imorgon för att utföra {order_title}.
+Detta ar en paminnelse om att vi kommer imorgon for att utfora {order_title}.
 
 Tid: {visit_time}
-Beräknad varaktighet: {estimated_duration}
+Beraknad varaktighet: {estimated_duration}
 
-Vänligen se till att området är tillgängligt och att eventuella fordon är flyttade.
+Vanligen se till att omradet ar tillgangligt och att eventuella fordon ar flyttade.
 
-Vid frågor eller om ni behöver ändra tiden, kontakta oss så snart som möjligt.
+Vid fragor eller om ni behover andra tiden, kontakta oss sa snart som mojligt.
 
-Med vänliga hälsningar,
+Med vanliga halsningar,
 {company_name}`,
     variables: ['customer_name', 'order_title', 'order_id', 'visit_time', 'estimated_duration', 'company_name']
   },
   {
     id: 'work_completed',
-    name: 'Uppföljning efter slutfört arbete',
-    subject: 'Arbetet är slutfört - Order #{order_id}',
+    name: 'Uppfoljning efter slutfort arbete',
+    subject: 'Arbetet ar slutfort - Order #{order_id}',
     content: `Hej {customer_name}!
 
-Vi har nu slutfört arbetet med {order_title}.
+Vi har nu slutfort arbetet med {order_title}.
 
-Vi hoppas att ni är nöjda med resultatet. Om ni har några frågor eller synpunkter, tveka inte att kontakta oss.
+Vi hoppas att ni ar nojda med resultatet. Om ni har nagra fragor eller synpunkter, tveka inte att kontakta oss.
 
 Faktura kommer att skickas separat inom kort.
 
-Tack för förtroendet!
+Tack for fortroendet!
 
-Med vänliga hälsningar,
+Med vanliga halsningar,
 {company_name}`,
     variables: ['customer_name', 'order_title', 'order_id', 'company_name']
+  },
+  {
+    id: 'invoice_reminder',
+    name: 'Fakturapaminnelse',
+    subject: 'Paminnelse: Faktura #{invoice_number}',
+    content: `Hej {customer_name}!
+
+Vi vill paminna om att faktura #{invoice_number} annu inte ar betald.
+
+Fakturadetaljer:
+- Fakturanummer: #{invoice_number}
+- Belopp: {invoice_amount}
+- Forfallodag: {invoice_due_date}
+
+Om betalning redan ar gjord, vänligen bortse fran detta meddelande.
+
+Vid fragor om fakturan, kontakta oss.
+
+Med vanliga halsningar,
+{company_name}`,
+    variables: ['customer_name', 'invoice_number', 'invoice_amount', 'invoice_due_date', 'company_name']
+  },
+  {
+    id: 'invoice_sent',
+    name: 'Faktura skickad',
+    subject: 'Faktura #{invoice_number} fran {company_name}',
+    content: `Hej {customer_name}!
+
+Bifogat finner du faktura #{invoice_number}.
+
+Fakturadetaljer:
+- Fakturanummer: #{invoice_number}
+- Belopp: {invoice_amount}
+- Forfallodag: {invoice_due_date}
+
+Tack for att du valjer oss!
+
+Med vanliga halsningar,
+{company_name}`,
+    variables: ['customer_name', 'invoice_number', 'invoice_amount', 'invoice_due_date', 'company_name']
+  },
+  {
+    id: 'quote_sent',
+    name: 'Offert skickad',
+    subject: 'Offert #{quote_number} fran {company_name}',
+    content: `Hej {customer_name}!
+
+Tack for ditt intresse! Bifogat finner du var offert.
+
+Offertdetaljer:
+- Offertnummer: #{quote_number}
+- Belopp: {quote_amount}
+- Giltig till: {quote_valid_until}
+
+Offerten ar giltig till {quote_valid_until}. Kontakta oss garna om du har fragor eller vill ga vidare med arbetet.
+
+Med vanliga halsningar,
+{company_name}`,
+    variables: ['customer_name', 'quote_number', 'quote_amount', 'quote_valid_until', 'company_name']
+  },
+  {
+    id: 'quote_followup',
+    name: 'Uppfoljning offert',
+    subject: 'Uppfoljning: Offert #{quote_number}',
+    content: `Hej {customer_name}!
+
+Vi vill folja upp offert #{quote_number} som vi skickade tidigare.
+
+Offertdetaljer:
+- Offertnummer: #{quote_number}
+- Belopp: {quote_amount}
+- Giltig till: {quote_valid_until}
+
+Har du haft tid att titta pa offerten? Vi hjalper garna till om du har nagra fragor eller vill diskutera detaljer.
+
+Med vanliga halsningar,
+{company_name}`,
+    variables: ['customer_name', 'quote_number', 'quote_amount', 'quote_valid_until', 'company_name']
+  },
+  {
+    id: 'general_message',
+    name: 'Allmant meddelande',
+    subject: 'Meddelande fran {company_name}',
+    content: `Hej {customer_name}!
+
+
+
+Med vanliga halsningar,
+{company_name}`,
+    variables: ['customer_name', 'company_name']
   }
 ];
 
@@ -117,26 +209,44 @@ export const SMS_TEMPLATES: SMSTemplate[] = [
   {
     id: 'visit_tomorrow',
     name: 'Vi kommer imorgon',
-    content: 'Hej! Vi kommer imorgon kl {time} för {order_title}. Mvh {company_name}',
+    content: 'Hej! Vi kommer imorgon kl {time} for {order_title}. Mvh {company_name}',
     variables: ['time', 'order_title', 'company_name']
   },
   {
     id: 'work_completed',
-    name: 'Arbetet är slutfört',
-    content: 'Hej! Arbetet med {order_title} är nu slutfört. Tack för förtroendet! Mvh {company_name}',
+    name: 'Arbetet ar slutfort',
+    content: 'Hej! Arbetet med {order_title} ar nu slutfort. Tack for fortroendet! Mvh {company_name}',
     variables: ['order_title', 'company_name']
   },
   {
     id: 'booking_reminder',
-    name: 'Påminnelse om bokning',
-    content: 'Påminnelse: Vi kommer {date} kl {time} för {order_title}. Mvh {company_name}',
+    name: 'Paminnelse om bokning',
+    content: 'Paminnelse: Vi kommer {date} kl {time} for {order_title}. Mvh {company_name}',
     variables: ['date', 'time', 'order_title', 'company_name']
   },
   {
     id: 'running_late',
-    name: 'Vi är försenade',
-    content: 'Hej! Vi är ca {minutes} min försenade till {order_title}. Ber om ursäkt! Mvh {company_name}',
+    name: 'Vi ar forsenade',
+    content: 'Hej! Vi ar ca {minutes} min forsenade till {order_title}. Ber om ursakt! Mvh {company_name}',
     variables: ['minutes', 'order_title', 'company_name']
+  },
+  {
+    id: 'invoice_reminder_sms',
+    name: 'Fakturapaminnelse',
+    content: 'Paminnelse: Faktura #{invoice_number} pa {invoice_amount} forfoller {invoice_due_date}. Mvh {company_name}',
+    variables: ['invoice_number', 'invoice_amount', 'invoice_due_date', 'company_name']
+  },
+  {
+    id: 'quote_reminder_sms',
+    name: 'Offertpaminnelse',
+    content: 'Hej! Offert #{quote_number} pa {quote_amount} ar giltig t.o.m. {quote_valid_until}. Kontakta oss! Mvh {company_name}',
+    variables: ['quote_number', 'quote_amount', 'quote_valid_until', 'company_name']
+  },
+  {
+    id: 'general_sms',
+    name: 'Allmant meddelande',
+    content: 'Hej {customer_name}! Mvh {company_name}',
+    variables: ['customer_name', 'company_name']
   }
 ];
 
@@ -154,7 +264,8 @@ export const getCommunications = async (
         order:orders(
           id, title, description,
           customer:customers(id, name, email, phone_number)
-        )
+        ),
+        customer:customers(id, name, email, phone_number)
       `)
       .eq('organisation_id', organisationId);
 

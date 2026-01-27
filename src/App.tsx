@@ -8,6 +8,7 @@ import RealtimeManager from './components/RealtimeManager';
 import QuoteAcceptance from './pages/QuoteAcceptance';
 import AppRoutes from './components/AppRoutes';
 import LoginPage from './pages/LoginPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 // Public Website
 import PublicLayout from './layouts/public/PublicLayout';
@@ -21,6 +22,7 @@ import Integritetspolicy from './pages/public/Integritetspolicy';
 import Anvandarvillkor from './pages/public/Anvandarvillkor';
 import SignupPage from './pages/public/SignupPage';
 import CompleteSignupPage from './pages/public/CompleteSignupPage';
+import VerifyEmailPage from './pages/public/VerifyEmailPage';
 
 function App() {
   return (
@@ -52,7 +54,9 @@ function App() {
                   =========================== */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<SignupPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
               <Route path="/complete-signup" element={<CompleteSignupPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
 
               {/* Public standalone routes */}
               <Route path="/quote-accept/:token" element={<QuoteAcceptance />} />

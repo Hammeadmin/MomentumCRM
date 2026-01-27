@@ -82,7 +82,7 @@ export const getInvoices = async (
       .select(`
         *,
         customer:customers(id, name, email, phone_number, city),
-        order:orders(id, title, description, job_description), 
+        order:orders(id, title, description, job_description),
         invoice_line_items(*),
         assigned_team:teams(
           id, name, specialty, hourly_rate,
@@ -92,7 +92,7 @@ export const getInvoices = async (
             user:user_profiles(id, full_name, email, phone_number)
           )
         ),
-        assigned_user:user_profiles(id, full_name, email, phone_number),
+        assigned_user:user_profiles!invoices_assigned_user_id_fkey(id, full_name, email, phone_number),
         emails:invoice_emails(*),
         team_participation:team_job_participation(
           *,
@@ -100,7 +100,7 @@ export const getInvoices = async (
         )
       `)
       .eq('organisation_id', organisationId)
-      .eq('is_credit_note', false); // Only get regular invoices, not credit notes
+      .eq('is_credit_note', false);
 
     // Apply filters
     if (filters.status && filters.status !== 'all') {
@@ -434,15 +434,16 @@ export const sendInvoiceEmail = async (
     recipient_email: string;
     subject: string;
     email_body: string;
-    attachments?: any[];
+    attachments?: { filename: string; content: string }[];
     send_copy_to_team_leader?: boolean;
-  }
+  },
+  userId?: string
 ): Promise<{ data: InvoiceEmail | null; error: Error | null }> => {
   try {
-    // Get invoice details for organization ID
+    // Get invoice details for organization ID and order_id (for communications)
     const { data: invoice } = await supabase
       .from('invoices')
-      .select('organisation_id, assigned_team_id')
+      .select('organisation_id, assigned_team_id, order_id, invoice_number')
       .eq('id', invoiceId)
       .single();
 
@@ -469,13 +470,14 @@ export const sendInvoiceEmail = async (
       return { data: null, error: new Error(emailError.message) };
     }
 
-    // Call the send-email edge function
+    // Call the send-email edge function with attachments
     const { data: sendResult, error: sendError } = await supabase.functions.invoke('send-email', {
       body: {
         to: emailData.recipient_email,
         subject: emailData.subject,
         html: emailData.email_body.replace(/\n/g, '<br>'),
         content: emailData.email_body,
+        attachments: emailData.attachments || [],
       }
     });
 
@@ -517,6 +519,21 @@ export const sendInvoiceEmail = async (
         email_recipient: emailData.recipient_email
       })
       .eq('id', invoiceId);
+
+    // Log to communications table if we have an order_id and userId
+    if (invoice.order_id && userId) {
+      await supabase.from('communications').insert({
+        organisation_id: invoice.organisation_id,
+        order_id: invoice.order_id,
+        type: 'email',
+        recipient: emailData.recipient_email,
+        subject: emailData.subject,
+        content: emailData.email_body,
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        created_by_user_id: userId,
+      });
+    }
 
     return { data: updatedEmail, error: null };
   } catch (err) {
@@ -624,13 +641,14 @@ export const updateTeamJobParticipation = async (
 // Email template generation
 export const generateInvoiceEmailTemplate = (
   invoice: InvoiceWithRelations,
-  templateType: 'standard' | 'team_presentation' | 'quality_assurance' | 'follow_up' = 'standard'
+  templateType: 'standard' | 'team_presentation' | 'quality_assurance' | 'follow_up' = 'standard',
+  organisation?: { name?: string; email?: string; phone?: string } | null
 ): { subject: string; body: string } => {
   const customerName = invoice.customer?.name || 'Kund';
   const invoiceNumber = invoice.invoice_number;
   const amount = formatCurrency(invoice.amount);
   const dueDate = invoice.due_date ? formatDate(invoice.due_date) : 'Enligt överenskommelse';
-  const companyName = invoice.organisation?.name || 'Ditt Företag';
+  const companyName = organisation?.name || invoice.organisation?.name || 'Ditt Företag';
 
   // Team/individual assignment info
   const assignmentInfo = invoice.assigned_team

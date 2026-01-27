@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Återställ ditt lösenord</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f0f4f8;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width: 520px; margin: 0 auto;">
+
+          <!-- Logo Header -->
+          <tr>
+            <td style="text-align: center; padding-bottom: 32px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+                <tr>
+                  <td style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); width: 48px; height: 48px; border-radius: 12px; text-align: center; vertical-align: middle;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;">
+                      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                      <polyline points="16 7 22 7 22 13"></polyline>
+                    </svg>
+                  </td>
+                  <td style="padding-left: 12px; font-size: 24px; font-weight: 700; color: #1e293b;">
+                    Momentum
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+
+                <!-- Blue accent bar -->
+                <tr>
+                  <td style="height: 4px; background: linear-gradient(90deg, #2563eb 0%, #4f46e5 100%); border-radius: 16px 16px 0 0;"></td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                  <td style="padding: 40px 40px 32px 40px;">
+
+                    <!-- Icon -->
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                      <tr>
+                        <td style="text-align: center; padding-bottom: 24px;">
+                          <div style="display: inline-block; width: 64px; height: 64px; background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%); border-radius: 50%; line-height: 64px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;">
+                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                            </svg>
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Title -->
+                    <h1 style="margin: 0 0 16px 0; font-size: 24px; font-weight: 700; color: #1e293b; text-align: center; line-height: 1.3;">
+                      Återställ ditt lösenord
+                    </h1>
+
+                    <!-- Description -->
+                    <p style="margin: 0 0 32px 0; font-size: 16px; color: #64748b; text-align: center; line-height: 1.6;">
+                      Vi har tagit emot en begäran om att återställa lösenordet för ditt konto. Klicka på knappen nedan för att välja ett nytt lösenord.
+                    </p>
+
+                    <!-- CTA Button -->
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                      <tr>
+                        <td style="text-align: center;">
+                          <a href="{{ .ConfirmationURL }}" style="display: inline-block; padding: 16px 40px; background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 10px; box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.4);">
+                            Återställ lösenord
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Expiry notice -->
+                    <p style="margin: 24px 0 0 0; font-size: 14px; color: #94a3b8; text-align: center; line-height: 1.5;">
+                      Länken är giltig i 24 timmar.
+                    </p>
+
+                  </td>
+                </tr>
+
+                <!-- Divider -->
+                <tr>
+                  <td style="padding: 0 40px;">
+                    <div style="height: 1px; background-color: #e2e8f0;"></div>
+                  </td>
+                </tr>
+
+                <!-- Security notice -->
+                <tr>
+                  <td style="padding: 24px 40px 32px 40px;">
+                    <p style="margin: 0; font-size: 13px; color: #94a3b8; text-align: center; line-height: 1.6;">
+                      Om du inte har begärt att återställa ditt lösenord kan du ignorera detta meddelande. Ditt konto förblir säkert.
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding-top: 32px; text-align: center;">
+              <p style="margin: 0 0 8px 0; font-size: 13px; color: #94a3b8;">
+                © 2026 Momentum CRM. Alla rättigheter förbehållna.
+              </p>
+              <p style="margin: 0; font-size: 12px; color: #cbd5e1;">
+                Detta är ett automatiskt meddelande. Vänligen svara inte på detta e-postmeddelande.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

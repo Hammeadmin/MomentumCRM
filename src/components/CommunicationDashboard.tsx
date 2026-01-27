@@ -409,10 +409,10 @@ function CommunicationDashboard() {
                     <td className="px-6 py-4">
                       <div>
                         <p className="text-sm font-medium text-gray-900">
-                          {communication.order?.title}
+                          {communication.order?.title || '-'}
                         </p>
                         <p className="text-sm text-gray-600">
-                          #{communication.order_id.slice(-8).toUpperCase()}
+                          {communication.order_id ? `#${communication.order_id.slice(-8).toUpperCase()}` : '-'}
                         </p>
                       </div>
                     </td>
@@ -506,7 +506,7 @@ function CommunicationDashboard() {
               </div>
 
               {/* Related Order */}
-              {selectedCommunication.order && (
+              {selectedCommunication.order && selectedCommunication.order_id && (
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Kopplad order</label>
                   <div className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings as SettingsIcon, User, Users2, Bell, Shield, CreditCard, Mail, Building, Asterisk as System, Zap, FormInput, FileText, Package, Send } from 'lucide-react';
+import { Settings as SettingsIcon, User, Users2, Bell, Shield, CreditCard, Mail, Building, Asterisk as System, Zap, FormInput, FileText, Package, Send, MessageSquare, Calculator } from 'lucide-react';
 import ReminderManagement from '../components/ReminderManagement';
 import CompanyProfileSettings from '../components/settings/CompanyProfileSettings';
 import UserProfileSettings from '../components/settings/UserProfileSettings';
@@ -9,12 +9,12 @@ import LeadFormBuilder from '../components/settings/LeadFormBuilder';
 import TemplateBuilder from '../components/settings/TemplateBuilder';
 import ProductLibrarySettings from '../components/settings/ProductLibrarySettings';
 import EmailSettings from '../components/settings/EmailSettings';
+import SmsSettings from '../components/settings/SmsSettings';
 import TeamManagement from '../components/TeamManagement';
 import ROTReport from '../components/ROTReport';
-import { Calculator } from 'lucide-react';
 
 function Settings() {
-  const [activeTab, setActiveTab] = React.useState<'company' | 'user' | 'system' | 'integrations' | 'email' | 'forms' | 'templates' | 'products' | 'reminders' | 'rot' | 'general'>('company');
+  const [activeTab, setActiveTab] = React.useState<'company' | 'user' | 'system' | 'integrations' | 'email' | 'sms' | 'forms' | 'templates' | 'products' | 'reminders' | 'rot' | 'general'>('company');
 
   const settingsCategories = [
     {
@@ -63,6 +63,7 @@ function Settings() {
             { id: 'system', label: 'System', icon: SettingsIcon },
             { id: 'integrations', label: 'Integrationer', icon: Zap },
             { id: 'email', label: 'E-post', icon: Send },
+            { id: 'sms', label: 'SMS', icon: MessageSquare },
             { id: 'forms', label: 'Formulär', icon: FormInput },
             { id: 'templates', label: 'Mallar', icon: FileText },
             { id: 'products', label: 'Artiklar', icon: Package },
@@ -104,6 +105,7 @@ function Settings() {
       {activeTab === 'system' && <SystemSettings />}
       {activeTab === 'integrations' && <IntegrationSettings />}
       {activeTab === 'email' && <EmailSettings />}
+      {activeTab === 'sms' && <SmsSettings />}
       {activeTab === 'forms' && <LeadFormBuilder />}
       {activeTab === 'templates' && <TemplateBuilder />}
       {activeTab === 'products' && <ProductLibrarySettings />}

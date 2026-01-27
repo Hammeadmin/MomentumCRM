@@ -138,10 +138,12 @@ export const getQuoteByToken = async (token: string): Promise<{
       `)
       .eq('acceptance_token', token)
       .gt('token_expires_at', new Date().toISOString())
-      .eq('status', 'sent')
+      .in('status', ['sent', 'pending', 'draft'])
+      .is('accepted_at', null)
       .single();
 
     if (error) {
+      console.error('getQuoteByToken error:', error);
       return { data: null, error: new Error(error.message) };
     }
 

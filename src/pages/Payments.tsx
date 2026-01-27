@@ -1,14 +1,8 @@
-/**
- * Payments Page
- * 
- * Dedicated payment tracking view with invoice status and reminders.
- * Matches AddHub's payments section design.
- */
-
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Plus, Download, RefreshCw } from 'lucide-react';
 import PaymentsTable from '../components/PaymentsTable';
+import PaymentDetailModal from '../components/PaymentDetailModal';
 import ReminderModal from '../components/ReminderModal';
 import SendCustomerReminderModal from '../components/SendCustomerReminderModal';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,13 +11,16 @@ import { supabase } from '../lib/supabase';
 import { Invoice } from '../types/database';
 
 function Payments() {
-    const { organisationId } = useAuth();
+    const { organisationId, user } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const { success, error: showError, info } = useToast();
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Reminder modal state
+    const [isPaymentDetailOpen, setIsPaymentDetailOpen] = useState(false);
+    const [selectedInvoiceForDetail, setSelectedInvoiceForDetail] = useState<Invoice | null>(null);
+
     const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
     const [isCustomerReminderOpen, setIsCustomerReminderOpen] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -35,6 +32,17 @@ function Payments() {
         }
     }, [organisationId]);
 
+    useEffect(() => {
+        if (location.state?.openPaymentId && invoices.length > 0) {
+            const invoiceToOpen = invoices.find(i => i.id === location.state.openPaymentId);
+            if (invoiceToOpen) {
+                setSelectedInvoiceForDetail(invoiceToOpen);
+                setIsPaymentDetailOpen(true);
+                window.history.replaceState({}, document.title);
+            }
+        }
+    }, [location.state, invoices]);
+
     const fetchInvoices = async () => {
         if (!organisationId) return;
 
@@ -43,10 +51,10 @@ function Payments() {
             const { data, error } = await supabase
                 .from('invoices')
                 .select(`
-          *,
-          customer:customers(id, name, email, phone_number, city),
-          assigned_user:user_profiles!invoices_assigned_user_id_fkey(id, full_name)
-        `)
+                    *,
+                    customer:customers(id, name, email, phone_number, city),
+                    assigned_user:user_profiles!invoices_assigned_user_id_fkey(id, full_name)
+                `)
                 .eq('organisation_id', organisationId)
                 .order('due_date', { ascending: true });
 
@@ -60,10 +68,8 @@ function Payments() {
     };
 
     const handleInvoiceClick = (invoice: Invoice) => {
-        // Navigate to full invoice management page
-        navigate('/app/fakturor');
-        // In the future this could open a detail modal or specific invoice page
-        info('Visa faktura', `Öppnar faktura #${invoice.invoice_number}`);
+        setSelectedInvoiceForDetail(invoice);
+        setIsPaymentDetailOpen(true);
     };
 
     const handleInternalReminder = (invoiceId: string) => {
@@ -86,7 +92,7 @@ function Payments() {
         try {
             const { error } = await supabase
                 .from('invoices')
-                .update({ status: 'paid' })
+                .update({ status: 'paid', sent_by_user_id: user?.id })
                 .eq('id', invoiceId);
 
             if (error) throw error;
@@ -98,8 +104,68 @@ function Payments() {
         }
     };
 
+    const handleSendAgain = async (invoiceId: string) => {
+        const invoice = invoices.find(i => i.id === invoiceId);
+        if (invoice) {
+            navigate('/app/fakturor', { state: { openInvoiceId: invoiceId, openEmailModal: true } });
+        }
+    };
+
+    const handleDuplicate = async (invoiceId: string) => {
+        const invoice = invoices.find(i => i.id === invoiceId);
+        if (!invoice || !organisationId) return;
+
+        try {
+            const { data: newNumber } = await supabase.rpc('generate_invoice_number', {
+                org_id: organisationId
+            });
+
+            const { data, error } = await supabase
+                .from('invoices')
+                .insert({
+                    organisation_id: organisationId,
+                    customer_id: invoice.customer_id,
+                    order_id: invoice.order_id,
+                    invoice_number: newNumber || `INV-${Date.now()}`,
+                    amount: invoice.amount,
+                    net_amount: invoice.net_amount,
+                    vat_amount: invoice.vat_amount,
+                    vat_rate: invoice.vat_rate,
+                    line_items: invoice.line_items,
+                    status: 'draft',
+                    notes: invoice.notes,
+                    payment_terms: invoice.payment_terms,
+                    job_type: invoice.job_type,
+                    team_members_involved: invoice.team_members_involved,
+                    work_summary: invoice.work_summary,
+                    created_by_user_id: user?.id
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            await supabase.from('invoice_history').insert({
+                organisation_id: organisationId,
+                invoice_id: data.id,
+                action_type: 'duplicated',
+                performed_by_user_id: user?.id,
+                details: { source_invoice_id: invoiceId, source_invoice_number: invoice.invoice_number }
+            });
+
+            success('Faktura duplicerad', `Ny faktura #${data.invoice_number} skapad.`);
+            fetchInvoices();
+        } catch (err) {
+            console.error('Error duplicating invoice:', err);
+            showError('Fel', 'Kunde inte duplicera fakturan.');
+        }
+    };
+
+    const handleNavigateToInvoice = (invoiceId: string) => {
+        navigate('/app/fakturor', { state: { openInvoiceId: invoiceId } });
+    };
+
     const handleExport = () => {
-        // Export to CSV
         const csvContent = invoices.map(inv =>
             `${inv.invoice_number},${inv.customer?.name || ''},${inv.amount},${inv.status},${inv.due_date || ''}`
         ).join('\n');
@@ -116,7 +182,21 @@ function Payments() {
 
     return (
         <div className="space-y-4">
-            {/* Reminder Modal (Internal) */}
+            <PaymentDetailModal
+                isOpen={isPaymentDetailOpen}
+                onClose={() => {
+                    setIsPaymentDetailOpen(false);
+                    setSelectedInvoiceForDetail(null);
+                }}
+                invoice={selectedInvoiceForDetail}
+                onMarkPaid={handleMarkPaid}
+                onSendReminder={handleCustomerReminder}
+                onSendAgain={handleSendAgain}
+                onDuplicate={handleDuplicate}
+                onNavigateToInvoice={handleNavigateToInvoice}
+                onRefresh={fetchInvoices}
+            />
+
             {selectedInvoice && (
                 <ReminderModal
                     isOpen={isReminderModalOpen}
@@ -133,7 +213,6 @@ function Payments() {
                 />
             )}
 
-            {/* Customer Reminder Modal (SMS/Email) */}
             {invoiceForReminder && (
                 <SendCustomerReminderModal
                     isOpen={isCustomerReminderOpen}
@@ -148,7 +227,6 @@ function Payments() {
                 />
             )}
 
-            {/* Header */}
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Betalningar</h1>
 
@@ -177,7 +255,6 @@ function Payments() {
                 </div>
             </div>
 
-            {/* Payments Table */}
             <PaymentsTable
                 invoices={invoices}
                 loading={loading}
