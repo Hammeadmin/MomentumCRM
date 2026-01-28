@@ -21,10 +21,9 @@ import {
 import {
   getQuoteByToken,
   acceptQuoteWithROT,
+  acceptQuoteSimple,
   validateSwedishPersonnummer,
-  validateSwedishOrganisationsnummer,
   formatSwedishPersonnummer,
-  formatSwedishOrganisationsnummer,
   calculateROTAmount,
   formatROTAmount,
   getROTExplanationText,
@@ -102,30 +101,16 @@ function QuoteAcceptance() {
   const handleAcceptQuote = async () => {
     if (!token || !quote) return;
 
-    // Validation
+    // Validation for ROT quotes
     if (quote.include_rot) {
-      if (!rotData.type) {
-        setError('Vänligen välj om du är privatperson eller företag.');
-        return;
-      }
-
-      if (!rotData.identifier) {
-        setError('Vänligen ange personnummer eller organisationsnummer.');
-        return;
-      }
-
-      if (rotData.type === 'person' && !validateSwedishPersonnummer(rotData.identifier)) {
+      if (rotData.identifier && !validateSwedishPersonnummer(rotData.identifier)) {
         setError('Ogiltigt personnummer format. Använd format: YYYYMMDD-XXXX');
         return;
       }
 
-      if (rotData.type === 'company' && !validateSwedishOrganisationsnummer(rotData.identifier)) {
-        setError('Ogiltigt organisationsnummer format. Använd format: XXXXXX-XXXX');
-        return;
-      }
-
-      if (!rotData.fastighetsbeteckning.trim()) {
-        setError('Vänligen ange fastighetsbeteckning.');
+      // Only require fastighetsbeteckning if personnummer is provided
+      if (rotData.identifier && !rotData.fastighetsbeteckning.trim()) {
+        setError('Vänligen ange fastighetsbeteckning för att använda ROT-avdrag.');
         return;
       }
     }
@@ -134,11 +119,22 @@ function QuoteAcceptance() {
       setAccepting(true);
       setError(null);
 
-      const result = await acceptQuoteWithROT({
-        token,
-        rot_data: rotData,
-        client_ip: await getClientIP()
-      });
+      let result;
+
+      // Use simple acceptance for non-ROT or quotes where ROT fields are empty
+      if (!quote.include_rot || (!rotData.identifier && !rotData.fastighetsbeteckning)) {
+        result = await acceptQuoteSimple(token, await getClientIP());
+      } else {
+        result = await acceptQuoteWithROT({
+          token,
+          rot_data: {
+            type: 'person',
+            identifier: rotData.identifier,
+            fastighetsbeteckning: rotData.fastighetsbeteckning
+          },
+          client_ip: await getClientIP()
+        });
+      }
 
       if (result.error) {
         setError(result.error.message);
@@ -606,115 +602,48 @@ function QuoteAcceptance() {
                   <p className="text-sm text-green-800 leading-relaxed">
                     {getROTExplanationText()}
                   </p>
+                  <p className="text-sm text-green-700 mt-2 font-medium">
+                    Uppskattad ROT-avdrag: {formatROTAmount(calculateROTDeduction())}
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-blue-800">
+                    <strong>Vill du använda ROT-avdrag?</strong> Fyll i ditt personnummer och fastighetsbeteckning nedan.
+                    Om du inte vill använda ROT-avdrag kan du lämna fälten tomma och bara godkänna offerten.
+                  </p>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Jag är: *
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Personnummer <span className="text-gray-400 font-normal">(valfritt)</span>
                     </label>
-                    <div className="space-y-2">
-                      <label className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="rot_type"
-                          value="person"
-                          checked={rotData.type === 'person'}
-                          onChange={(e) => setRotData(prev => ({ ...prev, type: e.target.value as 'person' }))}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                        />
-                        <div className="ml-3">
-                          <div className="flex items-center">
-                            <User className="w-4 h-4 text-gray-600 mr-2" />
-                            <span className="text-sm font-medium text-gray-900">Privatperson</span>
-                          </div>
-                          <p className="text-xs text-gray-600 mt-1">
-                            Arbetet utförs på din permanenta bostad eller fritidsbostad
-                          </p>
-                        </div>
-                      </label>
-
-                      <label className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="rot_type"
-                          value="company"
-                          checked={rotData.type === 'company'}
-                          onChange={(e) => setRotData(prev => ({ ...prev, type: e.target.value as 'company' }))}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                        />
-                        <div className="ml-3">
-                          <div className="flex items-center">
-                            <Users className="w-4 h-4 text-gray-600 mr-2" />
-                            <span className="text-sm font-medium text-gray-900">Företag</span>
-                          </div>
-                          <p className="text-xs text-gray-600 mt-1">
-                            Arbetet utförs på företagets fastighet
-                          </p>
-                        </div>
-                      </label>
-                    </div>
+                    <input
+                      type="text"
+                      value={rotData.identifier}
+                      onChange={(e) => {
+                        const formatted = e.target.value.length >= 10
+                          ? formatSwedishPersonnummer(e.target.value)
+                          : e.target.value;
+                        setRotData(prev => ({ ...prev, identifier: formatted }));
+                      }}
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-blue-500 focus:border-blue-500 ${rotData.identifier && !validateSwedishPersonnummer(rotData.identifier)
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-gray-300'
+                        }`}
+                      placeholder="YYYYMMDD-XXXX"
+                    />
+                    {rotData.identifier && !validateSwedishPersonnummer(rotData.identifier) && (
+                      <p className="text-xs text-red-600 mt-1">
+                        Ogiltigt personnummer format. Använd format: YYYYMMDD-XXXX
+                      </p>
+                    )}
                   </div>
-
-                  {rotData.type === 'person' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Personnummer *
-                      </label>
-                      <input
-                        type="text"
-                        value={rotData.identifier}
-                        onChange={(e) => {
-                          const formatted = e.target.value.length >= 10
-                            ? formatSwedishPersonnummer(e.target.value)
-                            : e.target.value;
-                          setRotData(prev => ({ ...prev, identifier: formatted }));
-                        }}
-                        className={`w-full px-4 py-3 border rounded-lg focus:ring-blue-500 focus:border-blue-500 ${rotData.identifier && !validateSwedishPersonnummer(rotData.identifier)
-                          ? 'border-red-300 bg-red-50'
-                          : 'border-gray-300'
-                          }`}
-                        placeholder="YYYYMMDD-XXXX"
-                      />
-                      {rotData.identifier && !validateSwedishPersonnummer(rotData.identifier) && (
-                        <p className="text-xs text-red-600 mt-1">
-                          Ogiltigt personnummer format. Använd format: YYYYMMDD-XXXX
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {rotData.type === 'company' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Organisationsnummer *
-                      </label>
-                      <input
-                        type="text"
-                        value={rotData.identifier}
-                        onChange={(e) => {
-                          const formatted = e.target.value.length >= 10
-                            ? formatSwedishOrganisationsnummer(e.target.value)
-                            : e.target.value;
-                          setRotData(prev => ({ ...prev, identifier: formatted }));
-                        }}
-                        className={`w-full px-4 py-3 border rounded-lg focus:ring-blue-500 focus:border-blue-500 ${rotData.identifier && !validateSwedishOrganisationsnummer(rotData.identifier)
-                          ? 'border-red-300 bg-red-50'
-                          : 'border-gray-300'
-                          }`}
-                        placeholder="XXXXXX-XXXX"
-                      />
-                      {rotData.identifier && !validateSwedishOrganisationsnummer(rotData.identifier) && (
-                        <p className="text-xs text-red-600 mt-1">
-                          Ogiltigt organisationsnummer format. Använd format: XXXXXX-XXXX
-                        </p>
-                      )}
-                    </div>
-                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Fastighetsbeteckning *
+                      Fastighetsbeteckning <span className="text-gray-400 font-normal">(krävs för ROT)</span>
                     </label>
                     <input
                       type="text"
@@ -734,57 +663,65 @@ function QuoteAcceptance() {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Customer Information */}
+            {/* Company Contact Information */}
             <div className="card-padded">
-              <h3 className="font-bold text-gray-900 mb-4">Kunduppgifter</h3>
+              <h3 className="font-bold text-gray-900 mb-4">Kontaktuppgifter</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex items-center">
-                  <User className="w-4 h-4 text-gray-400 mr-2" />
-                  <span className="text-gray-900">{quote?.customer?.name}</span>
+                  <Building className="w-4 h-4 text-gray-400 mr-2" />
+                  <span className="text-gray-900 font-medium">{quote?.organisation?.name}</span>
                 </div>
-                {quote?.customer?.email && (
+                {quote?.organisation?.email && (
                   <div className="flex items-center">
                     <Mail className="w-4 h-4 text-gray-400 mr-2" />
-                    <span className="text-gray-600">{quote.customer.email}</span>
+                    <a href={`mailto:${quote.organisation.email}`} className="text-blue-600 hover:text-blue-700">
+                      {quote.organisation.email}
+                    </a>
                   </div>
                 )}
-                {quote?.customer?.phone_number && (
+                {quote?.organisation?.phone && (
                   <div className="flex items-center">
                     <Phone className="w-4 h-4 text-gray-400 mr-2" />
-                    <span className="text-gray-600">{quote.customer.phone_number}</span>
+                    <a href={`tel:${quote.organisation.phone}`} className="text-blue-600 hover:text-blue-700">
+                      {quote.organisation.phone}
+                    </a>
                   </div>
                 )}
-                {quote?.customer?.address && (
-                  <div className="flex items-start">
+                {quote?.organisation?.address && (
+                  <div className="flex items-start pt-2 border-t border-gray-100">
                     <MapPin className="w-4 h-4 text-gray-400 mr-2 mt-0.5" />
                     <div className="text-gray-600">
-                      <p>{quote.customer.address}</p>
-                      <p>{quote.customer.postal_code} {quote.customer.city}</p>
+                      <p>{quote.organisation.address}</p>
+                      {quote.organisation.postal_code && quote.organisation.city && (
+                        <p>{quote.organisation.postal_code} {quote.organisation.city}</p>
+                      )}
                     </div>
+                  </div>
+                )}
+                {quote?.organisation?.org_number && (
+                  <div className="text-xs text-gray-500 pt-2 border-t border-gray-100">
+                    Org.nr: {quote.organisation.org_number}
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Company Information */}
+            {/* Quote Info */}
             <div className="card-padded">
-              <h3 className="font-bold text-gray-900 mb-4">Företagsinformation</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center">
-                  <Building className="w-4 h-4 text-gray-400 mr-2" />
-                  <span className="text-gray-900">{quote?.organisation?.name}</span>
+              <h3 className="font-bold text-gray-900 mb-4">Offertinformation</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Offertnummer:</span>
+                  <span className="text-gray-900 font-medium">{quote?.quote_number}</span>
                 </div>
-                <div className="flex items-center">
-                  <Mail className="w-4 h-4 text-gray-400 mr-2" />
-                  <span className="text-gray-600">info@momentum.se</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Datum:</span>
+                  <span className="text-gray-900">{formatDate(quote?.created_at)}</span>
                 </div>
-                <div className="flex items-center">
-                  <Phone className="w-4 h-4 text-gray-400 mr-2" />
-                  <span className="text-gray-600">+46 8 123 456 78</span>
-                </div>
-                {quote?.organisation?.org_number && (
-                  <div className="text-xs text-gray-500 pt-2 border-t">
-                    Org.nr: {quote.organisation.org_number}
+                {quote?.valid_until && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Giltig till:</span>
+                    <span className="text-gray-900">{formatDate(quote.valid_until)}</span>
                   </div>
                 )}
               </div>

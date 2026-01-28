@@ -1,0 +1,6 @@
+# Function configuration for track-quote-view
+# This function is a tracking pixel that needs to be publicly accessible
+# without authentication since it's embedded in emails as an img src
+
+[track-quote-view]
+verify_jwt = false

@@ -160,11 +160,33 @@ export const acceptQuoteWithROT = async (acceptanceData: QuoteAcceptanceData): P
 }> => {
   try {
     const { data, error } = await supabase.rpc('accept_quote_with_rot', {
-      token: acceptanceData.token,
-      rot_type: acceptanceData.rot_data.type,
-      rot_identifier: acceptanceData.rot_data.identifier,
-      fastighetsbeteckning: acceptanceData.rot_data.fastighetsbeteckning,
-      client_ip: acceptanceData.client_ip
+      p_token: acceptanceData.token,
+      p_rot_type: acceptanceData.rot_data.type,
+      p_rot_identifier: acceptanceData.rot_data.identifier || '',
+      p_fastighetsbeteckning: acceptanceData.rot_data.fastighetsbeteckning || '',
+      p_client_ip: acceptanceData.client_ip || null
+    });
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error('Error accepting quote:', err);
+    return { data: null, error: err as Error };
+  }
+};
+
+// Simple quote acceptance (no ROT required)
+export const acceptQuoteSimple = async (token: string, clientIp?: string): Promise<{
+  data: any | null;
+  error: Error | null;
+}> => {
+  try {
+    const { data, error } = await supabase.rpc('accept_quote_simple', {
+      p_token: token,
+      p_client_ip: clientIp || null
     });
 
     if (error) {
