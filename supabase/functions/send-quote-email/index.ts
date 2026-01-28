@@ -320,9 +320,9 @@ function generateQuoteEmailContent(quote: any, bodyText: string, acceptanceUrl?:
       <div style="max-width: 640px; margin: 0 auto; padding: 20px;">
         
         <!-- Header with Company Branding -->
-        <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; padding: 40px 30px; border-radius: 16px 16px 0 0; text-align: center;">
-          <h1 style="margin: 0; font-size: 26px; font-weight: 700;">${companyName}</h1>
-          <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 15px;">har skickat dig en offert</p>
+        <div style="background-color: #1e40af; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; padding: 40px 30px; border-radius: 16px 16px 0 0; text-align: center;">
+          <h1 style="margin: 0; font-size: 26px; font-weight: 700; color: white;">${companyName}</h1>
+          <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 15px; color: white;">har skickat dig en offert</p>
         </div>
         
         <!-- Main Content -->
@@ -383,20 +383,20 @@ function generateQuoteEmailContent(quote: any, bodyText: string, acceptanceUrl?:
           ` : ''}
           
           <!-- Total Amount Box -->
-          <div style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); border-radius: 12px; padding: 24px; margin: 25px 0; color: white;">
+          <div style="background-color: #059669; background: linear-gradient(135deg, #059669 0%, #10b981 100%); border-radius: 12px; padding: 24px; margin: 25px 0; color: white;">
             <table style="width: 100%;">
               <tr>
-                <td style="padding: 8px 0; font-size: 15px; opacity: 0.9;">Totalt belopp (inkl. moms)</td>
-                <td style="padding: 8px 0; text-align: right; font-size: 20px; font-weight: 700;">${quoteAmount}</td>
+                <td style="padding: 8px 0; font-size: 15px; color: white;">Totalt belopp (inkl. moms)</td>
+                <td style="padding: 8px 0; text-align: right; font-size: 20px; font-weight: 700; color: white;">${quoteAmount}</td>
               </tr>
               ${quote.include_rot && rotAmount > 0 ? `
               <tr>
-                <td style="padding: 8px 0; font-size: 14px; opacity: 0.85;">ROT-avdrag (beräknat)</td>
-                <td style="padding: 8px 0; text-align: right; font-size: 16px;">-${formatCurrency(rotAmount)}</td>
+                <td style="padding: 8px 0; font-size: 14px; color: rgba(255,255,255,0.85);">ROT-avdrag (beräknat)</td>
+                <td style="padding: 8px 0; text-align: right; font-size: 16px; color: white;">-${formatCurrency(rotAmount)}</td>
               </tr>
               <tr style="border-top: 1px solid rgba(255,255,255,0.3);">
-                <td style="padding: 12px 0 0 0; font-size: 15px; font-weight: 600;">Att betala efter ROT</td>
-                <td style="padding: 12px 0 0 0; text-align: right; font-size: 22px; font-weight: 700;">${formatCurrency(netAmount)}</td>
+                <td style="padding: 12px 0 0 0; font-size: 15px; font-weight: 600; color: white;">Att betala efter ROT</td>
+                <td style="padding: 12px 0 0 0; text-align: right; font-size: 22px; font-weight: 700; color: white;">${formatCurrency(netAmount)}</td>
               </tr>
               ` : ''}
             </table>
@@ -415,9 +415,15 @@ function generateQuoteEmailContent(quote: any, bodyText: string, acceptanceUrl?:
           <!-- CTA Button -->
           ${acceptanceUrl ? `
           <div style="text-align: center; margin: 35px 0;">
-            <a href="${acceptanceUrl}" style="display: inline-block; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; padding: 18px 40px; text-decoration: none; border-radius: 10px; font-weight: 700; font-size: 16px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);">
-              ✓ Granska och godkänn offert
-            </a>
+            <table cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
+              <tr>
+                <td align="center" bgcolor="#059669" style="background-color: #059669; border-radius: 10px;">
+                  <a href="${acceptanceUrl}" style="display: inline-block; background-color: #059669; color: #ffffff; padding: 18px 40px; text-decoration: none; border-radius: 10px; font-weight: 700; font-size: 16px; font-family: 'Segoe UI', Arial, sans-serif;">
+                    ✓ Granska och godkänn offert
+                  </a>
+                </td>
+              </tr>
+            </table>
             <p style="margin: 12px 0 0 0; font-size: 13px; color: #9ca3af;">
               Klicka för att se fullständig offert och godkänna online
             </p>

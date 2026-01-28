@@ -860,7 +860,8 @@ export const getQuotes = async (
         *,
         customer:customers(*),
         lead:leads(*),
-        quote_line_items(*)
+        quote_line_items(*),
+        organisation:organisations(id, name, email, phone, org_number)
       `)
       .eq('organisation_id', organisationId);
 

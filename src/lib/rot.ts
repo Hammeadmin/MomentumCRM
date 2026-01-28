@@ -128,6 +128,7 @@ export const getQuoteByToken = async (token: string): Promise<{
   error: Error | null;
 }> => {
   try {
+    // Use maybeSingle() instead of single() to avoid error when no rows found
     const { data, error } = await supabase
       .from('quotes')
       .select(`
@@ -140,11 +141,16 @@ export const getQuoteByToken = async (token: string): Promise<{
       .gt('token_expires_at', new Date().toISOString())
       .in('status', ['sent', 'draft'])
       .is('accepted_at', null)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('getQuoteByToken error:', error);
       return { data: null, error: new Error(error.message) };
+    }
+
+    // If no quote found, return user-friendly error
+    if (!data) {
+      return { data: null, error: new Error('Offerten hittades inte, har redan godkänts, eller har gått ut.') };
     }
 
     return { data, error: null };
