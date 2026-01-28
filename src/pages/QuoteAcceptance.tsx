@@ -14,7 +14,9 @@ import {
   Clock,
   User,
   Users,
-  Loader2
+  Loader2,
+  XCircle,
+  MessageSquare
 } from 'lucide-react';
 import {
   getQuoteByToken,
@@ -37,9 +39,13 @@ function QuoteAcceptance() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
+  const [declining, setDeclining] = useState(false);
+  const [showDeclineForm, setShowDeclineForm] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [quote, setQuote] = useState<any>(null);
   const [accepted, setAccepted] = useState(false);
+  const [declined, setDeclined] = useState(false);
   const [rotData, setRotData] = useState<ROTFormData>({
     type: 'person',
     identifier: '',
@@ -139,7 +145,7 @@ function QuoteAcceptance() {
         return;
       }
 
-      // Send acceptance notification to organisation
+      // Send acceptance notification to organisation (email)
       if (quote?.organisation?.email) {
         try {
           await supabase.functions.invoke('send-email', {
@@ -153,8 +159,23 @@ function QuoteAcceptance() {
           console.log('Acceptance notification sent to', quote.organisation.email);
         } catch (notifyErr) {
           console.error('Failed to send acceptance notification:', notifyErr);
-          // Don't block the success flow if notification fails
         }
+      }
+
+      // Create in-app notification
+      try {
+        await supabase.functions.invoke('notify-quote-event', {
+          body: {
+            quote_id: quote.id,
+            event_type: 'quote_accepted',
+            metadata: {
+              customer_name: quote.customer?.name
+            }
+          }
+        });
+        console.log('In-app notification created');
+      } catch (notifyErr) {
+        console.error('Failed to create in-app notification:', notifyErr);
       }
 
       setAccepted(true);
@@ -164,6 +185,117 @@ function QuoteAcceptance() {
     } finally {
       setAccepting(false);
     }
+  };
+
+  const handleDeclineQuote = async () => {
+    if (!token || !quote) return;
+
+    try {
+      setDeclining(true);
+      setError(null);
+
+      // Update quote status to declined
+      const { error: updateError } = await supabase
+        .from('quotes')
+        .update({
+          status: 'declined'
+        })
+        .eq('acceptance_token', token);
+
+      if (updateError) {
+        setError('Kunde inte avvisa offerten.');
+        return;
+      }
+
+      // Send decline notification email to organisation
+      if (quote?.organisation?.email) {
+        try {
+          await supabase.functions.invoke('send-email', {
+            body: {
+              to: quote.organisation.email,
+              subject: `❌ Offert ${quote.quote_number} har avvisats`,
+              html: generateDeclineNotificationEmail(quote, declineReason),
+              from_name: 'MomentumCRM'
+            }
+          });
+        } catch (notifyErr) {
+          console.error('Failed to send decline notification:', notifyErr);
+        }
+      }
+
+      // Create in-app notification
+      try {
+        await supabase.functions.invoke('notify-quote-event', {
+          body: {
+            quote_id: quote.id,
+            event_type: 'quote_declined',
+            metadata: {
+              customer_name: quote.customer?.name,
+              decline_reason: declineReason || undefined
+            }
+          }
+        });
+      } catch (notifyErr) {
+        console.error('Failed to create in-app notification:', notifyErr);
+      }
+
+      setDeclined(true);
+    } catch (err) {
+      console.error('Error declining quote:', err);
+      setError('Ett oväntat fel inträffade.');
+    } finally {
+      setDeclining(false);
+    }
+  };
+
+  // Generate decline notification email
+  const generateDeclineNotificationEmail = (quoteData: any, reason: string) => {
+    const customerName = quoteData?.customer?.name || 'Kund';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Offert avvisad</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background: #f3f4f6;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="margin: 0; font-size: 28px;">❌ Offert avvisad</h1>
+          </div>
+          
+          <div style="background: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <p style="font-size: 16px; margin-bottom: 20px;"><strong>${customerName}</strong> har valt att avvisa offert <strong>${quoteData?.quote_number}</strong>.</p>
+            
+            <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin: 0 0 15px 0; color: #991b1b;">Offertinformation:</h3>
+              <table style="width: 100%;">
+                <tr>
+                  <td style="padding: 5px 0; color: #374151;">Titel:</td>
+                  <td style="padding: 5px 0; font-weight: bold;">${quoteData?.title}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0; color: #374151;">Belopp:</td>
+                  <td style="padding: 5px 0; font-weight: bold;">${formatCurrency(quoteData?.total_amount || 0)}</td>
+                </tr>
+                ${reason ? `
+                <tr>
+                  <td style="padding: 5px 0; color: #374151;">Skäl:</td>
+                  <td style="padding: 5px 0;">${reason}</td>
+                </tr>
+                ` : ''}
+              </table>
+            </div>
+            
+            <p style="margin: 20px 0; color: #6b7280;">Kontakta kunden för att diskutera alternativa lösningar eller få mer feedback.</p>
+            
+            <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px;">Detta är en automatisk notifiering från MomentumCRM.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
   };
 
   // Generate notification email for organisation
@@ -320,6 +452,31 @@ function QuoteAcceptance() {
             <div className="text-sm text-gray-600">
               <p>Referensnummer: {quote?.quote_number}</p>
               <p>Godkänt: {new Date().toLocaleDateString('sv-SE')}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (declined) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-2xl w-full text-center">
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <XCircle className="w-20 h-20 text-red-500 mx-auto mb-6" />
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">Offert avvisad</h1>
+            <p className="text-xl text-gray-700 mb-6">Du har valt att avvisa denna offert.</p>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
+              <p className="text-gray-600">
+                Vi har meddelat {quote?.organisation?.name || 'företaget'} om ditt beslut.
+                Om du ändrar dig eller vill diskutera alternativ, kontakta dem gärna direkt.
+              </p>
+            </div>
+
+            <div className="text-sm text-gray-600">
+              <p>Referensnummer: {quote?.quote_number}</p>
             </div>
           </div>
         </div>
@@ -659,34 +816,79 @@ function QuoteAcceptance() {
           </div>
         )}
 
-        {/* Accept Button */}
+        {/* Accept/Decline Section */}
         <div className="mt-8 bg-white rounded-lg shadow-sm border p-6">
           <div className="text-center">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Godkänn offert</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Svara på offerten</h3>
             <p className="text-gray-600 mb-6">
               Genom att godkänna denna offert accepterar du villkoren och bekräftar beställningen.
             </p>
 
-            <button
-              onClick={handleAcceptQuote}
-              disabled={accepting || (quote?.include_rot && (!rotData.identifier || !rotData.fastighetsbeteckning))}
-              className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:scale-105"
-            >
-              {accepting ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
-                  Godkänner offert...
-                </div>
-              ) : (
-                <>
-                  <CheckCircle className="w-6 h-6 mr-3" />
-                  Godkänn offert
-                </>
-              )}
-            </button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <button
+                onClick={handleAcceptQuote}
+                disabled={accepting || declining || (quote?.include_rot && (!rotData.identifier || !rotData.fastighetsbeteckning))}
+                className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:scale-105"
+              >
+                {accepting ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                    Godkänner...
+                  </div>
+                ) : (
+                  <>
+                    <CheckCircle className="w-6 h-6 mr-3" />
+                    Godkänn offert
+                  </>
+                )}
+              </button>
 
-            <p className="text-xs text-gray-500 mt-3">
-              Genom att klicka godkänner du våra allmänna villkor och bekräftar beställningen.
+              {!showDeclineForm ? (
+                <button
+                  onClick={() => setShowDeclineForm(true)}
+                  disabled={accepting || declining}
+                  className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-4 border border-gray-300 rounded-lg text-lg font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  <XCircle className="w-5 h-5 mr-2 text-gray-500" />
+                  Avvisa offert
+                </button>
+              ) : (
+                <div className="w-full sm:w-auto flex flex-col items-center gap-3">
+                  <textarea
+                    value={declineReason}
+                    onChange={(e) => setDeclineReason(e.target.value)}
+                    placeholder="Valfritt: Berätta varför du avvisar offerten..."
+                    className="w-full sm:w-80 px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-red-500 focus:border-red-500"
+                    rows={2}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowDeclineForm(false)}
+                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                    >
+                      Avbryt
+                    </button>
+                    <button
+                      onClick={handleDeclineQuote}
+                      disabled={declining}
+                      className="inline-flex items-center px-6 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {declining ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Avvisar...
+                        </div>
+                      ) : (
+                        'Bekräfta avvisning'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-gray-500 mt-4">
+              Genom att godkänna accepterar du våra allmänna villkor och bekräftar beställningen.
             </p>
           </div>
         </div>

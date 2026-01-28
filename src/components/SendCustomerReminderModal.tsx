@@ -75,6 +75,7 @@ export default function SendCustomerReminderModal({
     useEffect(() => {
         if (!entity) return;
         const template = TEMPLATES[entityType][selectedLevel];
+        const companyName = entity.organisation?.name || 'Ditt Företag';
 
         let subject = template.subject
             .replace('{id}', entityType === 'invoice' ? entity.invoice_number : entity.quote_number || entity.id.substring(0, 8));
@@ -82,7 +83,7 @@ export default function SendCustomerReminderModal({
         let body = template.body
             .replace('{id}', entityType === 'invoice' ? entity.invoice_number : entity.quote_number || entity.id.substring(0, 8))
             .replace('{duedate}', entity.due_date || 'snart')
-            .replace('{company}', 'Ditt Företag'); // Should fetch org name
+            .replace('{company}', companyName);
 
         setMessageSubject(subject);
         setMessageBody(body);

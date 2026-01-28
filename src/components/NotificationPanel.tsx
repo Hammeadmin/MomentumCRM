@@ -23,7 +23,7 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
     refreshNotifications,
     clearError
   } = useNotifications();
-  
+
   const [filter, setFilter] = useState<'all' | 'unread' | 'high'>('all');
 
   const filteredNotifications = notifications.filter(notification => {
@@ -52,6 +52,9 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
       case 'order_assignment': return Package;
       case 'event_assignment': return Calendar;
       case 'status_update': return TrendingUp;
+      case 'quote_accepted': return CheckCircle;
+      case 'quote_declined': return AlertCircle;
+      case 'quote_viewed': return FileText;
       case 'system': return AlertCircle;
       default: return Bell;
     }
@@ -62,6 +65,9 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
       case 'order_assignment': return 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30';
       case 'event_assignment': return 'text-indigo-600 bg-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30';
       case 'status_update': return 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30';
+      case 'quote_accepted': return 'text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30';
+      case 'quote_declined': return 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30';
+      case 'quote_viewed': return 'text-purple-600 bg-purple-100 dark:text-purple-400 dark:bg-purple-900/30';
       case 'system': return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-700';
       default: return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-700';
     }
@@ -69,11 +75,11 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
 
   const getRelativeTime = (timestamp?: string) => {
     if (!timestamp) return '';
-    
+
     const now = new Date();
     const time = new Date(timestamp);
     const diffInMinutes = Math.floor((now.getTime() - time.getTime()) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) return 'just nu';
     if (diffInMinutes < 60) return `${diffInMinutes}m sedan`;
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h sedan`;
@@ -139,17 +145,16 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
               <button
                 key={filterOption.key}
                 onClick={() => setFilter(filterOption.key as any)}
-                className={`px-3 py-1 text-xs font-medium rounded-full transition-colors duration-200 ${
-                  filter === filterOption.key
+                className={`px-3 py-1 text-xs font-medium rounded-full transition-colors duration-200 ${filter === filterOption.key
                     ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
+                  }`}
               >
                 {filterOption.label}
               </button>
             ))}
           </div>
-          
+
           {unreadCount > 0 && (
             <button
               onClick={markAllAsRead}
@@ -181,9 +186,9 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
           <div className="p-8 text-center text-gray-500 dark:text-gray-400">
             <Bell className="w-12 h-12 mx-auto mb-3 text-gray-400 dark:text-gray-500" />
             <p className="text-sm font-medium">
-              {filter === 'unread' ? 'Inga olästa notifieringar' : 
-               filter === 'high' ? 'Inga viktiga notifieringar' : 
-               'Inga notifieringar'}
+              {filter === 'unread' ? 'Inga olästa notifieringar' :
+                filter === 'high' ? 'Inga viktiga notifieringar' :
+                  'Inga notifieringar'}
             </p>
             <p className="text-xs mt-1">Du är uppdaterad!</p>
           </div>
@@ -191,15 +196,14 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
           <div className="p-4 space-y-2">
             {filteredNotifications.map((notification) => {
               const Icon = getNotificationIcon(notification.type);
-              
+
               return (
                 <div
                   key={notification.id}
-                  className={`group relative p-4 rounded-xl border transition-all duration-200 hover:shadow-md cursor-pointer ${
-                    notification.is_read
+                  className={`group relative p-4 rounded-xl border transition-all duration-200 hover:shadow-md cursor-pointer ${notification.is_read
                       ? 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600'
                       : 'bg-white dark:bg-gray-700 border-primary-200 dark:border-primary-700 shadow-sm'
-                  }`}
+                    }`}
                   onClick={() => handleNotificationClick(notification)}
                 >
                   {/* Unread indicator */}
@@ -211,7 +215,7 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center shadow-sm ${getNotificationColor(notification.type)}`}>
                       <Icon className="w-5 h-5" />
                     </div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between mb-1">
                         <h4 className="text-sm font-medium text-gray-900 dark:text-white">
@@ -242,11 +246,11 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
                           </button>
                         </div>
                       </div>
-                      
+
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                         {notification.message}
                       </p>
-                      
+
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-500 dark:text-gray-500">
                           {getRelativeTime(notification.created_at)}

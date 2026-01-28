@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { generateAcceptanceToken } from './rot';
 import type { Quote, Customer, Lead, QuoteLineItem, QuoteStatus, Order } from '../types/database';
 import { createOrder } from './orders'; // Import createOrder
 
@@ -41,7 +40,8 @@ export const getQuotes = async (
         customer:customers(*),
         lead:leads(id, title),
         quote_line_items(*),
-        order:orders(id, title, status)
+        order:orders(id, title, status),
+        organisation:organisations(id, name, email, phone, org_number)
       `, { count: 'exact' })
       .eq('organisation_id', organisationId);
 
@@ -160,7 +160,8 @@ export const getQuote = async (
         customer:customers(*),
         lead:leads(*),
         quote_line_items(*),
-        order:orders(id, title, status)
+        order:orders(id, title, status),
+        organisation:organisations(id, name, email, phone, org_number, address, postal_code, city)
       `)
       .eq('id', id)
       .single();
@@ -245,7 +246,8 @@ export const updateQuote = async (
         customer:customers(*),
         lead:leads(id, title),
         quote_line_items(*),
-        order:orders(id, title, status)
+        order:orders(id, title, status),
+        organisation:organisations(id, name, email, phone, org_number)
       `)
       .single();
 
@@ -488,7 +490,7 @@ export const generateOrderConfirmationEmailTemplate = (
 ): { subject: string; body: string } => {
   const customerName = quote.customer?.name || 'Kund';
   const amount = quote.total_amount;
-  const companyName = 'Momentum CRM';
+  const companyName = quote.organisation?.name || 'Ditt Företag';
 
   const subject = `Orderbekräftelse - Order ${orderNumber}`;
 

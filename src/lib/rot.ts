@@ -138,7 +138,7 @@ export const getQuoteByToken = async (token: string): Promise<{
       `)
       .eq('acceptance_token', token)
       .gt('token_expires_at', new Date().toISOString())
-      .in('status', ['sent', 'pending', 'draft'])
+      .in('status', ['sent', 'draft'])
       .is('accepted_at', null)
       .single();
 

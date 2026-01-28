@@ -40,6 +40,7 @@ const TaskDashboardWidget = lazy(() => import('../components/TaskDashboardWidget
 const IntranetDashboard = lazy(() => import('../components/IntranetDashboard'));
 const JobStatusWidget = lazy(() => import('../components/dashboard/widgets/JobStatusWidget'));
 const TaskDetailModal = lazy(() => import('../components/TaskDetailModal'));
+const QuoteActivityWidget = lazy(() => import('../components/dashboard/QuoteActivityWidget'));
 
 // Helper for column spans
 const getWidgetColSpan = (id: DashboardWidgetId): string => {
@@ -135,6 +136,7 @@ export default function Dashboard() {
       case 'tasks': return <TaskDashboardWidget onTaskClick={setSelectedTask} />;
       case 'intranet': return <IntranetDashboard />;
       case 'job_status': return <JobStatusWidget data={jobStatusData} />;
+      case 'quote_activity': return <QuoteActivityWidget />;
       case 'lead_distribution': return null; // Included in SalesChart
       default: return null;
     }

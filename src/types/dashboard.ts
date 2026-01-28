@@ -156,7 +156,8 @@ export type DashboardWidgetId =
   | 'job_status'
   | 'intranet'
   | 'weather'
-  | 'world_clock';
+  | 'world_clock'
+  | 'quote_activity';
 
 export interface DashboardSettings {
   visible_widgets: DashboardWidgetId[];
@@ -174,6 +175,7 @@ export interface DashboardSettings {
 export const DEFAULT_WIDGETS_SALES: DashboardWidgetId[] = [
   'morning_briefing',
   'sales_goal',
+  'quote_activity',
   'leaderboard',
   'world_clock',
   'weather',
@@ -196,6 +198,7 @@ export const DEFAULT_WIDGETS_WORKER: DashboardWidgetId[] = [
 export const DEFAULT_WIDGETS_ADMIN: DashboardWidgetId[] = [
   'morning_briefing',
   'cash_flow',
+  'quote_activity',
   'world_clock',
   'weather',
   'sales_goal',
@@ -210,6 +213,7 @@ export const DEFAULT_WIDGETS_ADMIN: DashboardWidgetId[] = [
 export const ALL_WIDGETS: { id: DashboardWidgetId; label: string; roles?: string[] }[] = [
   { id: 'morning_briefing', label: 'Morgonrapport' },
   { id: 'sales_goal', label: 'Säljmål & Ring', roles: ['admin', 'sales'] },
+  { id: 'quote_activity', label: 'Offertaktivitet', roles: ['admin', 'sales'] },
   { id: 'leaderboard', label: 'Topplista', roles: ['admin', 'sales'] },
   { id: 'my_day', label: 'Min Dag (Kalender & Uppgifter)' },
   { id: 'scratchpad', label: 'Anteckningar' },
