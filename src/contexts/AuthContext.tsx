@@ -249,10 +249,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const signInWithGoogle = async (redirectTo?: string) => {
+    // Ensure redirectTo is always an absolute URL
+    const baseUrl = window.location.origin;
+    let fullRedirectUrl = `${baseUrl}/complete-signup`; // Default
+
+    if (redirectTo) {
+      // If it's already absolute, use it; otherwise prepend origin
+      fullRedirectUrl = redirectTo.startsWith('http')
+        ? redirectTo
+        : `${baseUrl}${redirectTo.startsWith('/') ? '' : '/'}${redirectTo}`;
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: redirectTo || `${window.location.origin}/complete-signup`,
+        redirectTo: fullRedirectUrl,
         queryParams: {
           access_type: 'offline',
           prompt: 'select_account',

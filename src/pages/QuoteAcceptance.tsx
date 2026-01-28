@@ -764,7 +764,7 @@ function QuoteAcceptance() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={handleAcceptQuote}
-                disabled={accepting || declining || (quote?.include_rot && (!rotData.identifier || !rotData.fastighetsbeteckning))}
+                disabled={accepting || declining || (quote?.include_rot && rotData.identifier && (!validateSwedishPersonnummer(rotData.identifier) || !rotData.fastighetsbeteckning.trim()))}
                 className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:scale-105"
               >
                 {accepting ? (

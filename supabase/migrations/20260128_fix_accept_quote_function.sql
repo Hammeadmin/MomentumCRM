@@ -1,5 +1,6 @@
 -- Migration: Fix accept_quote_with_rot function
 -- Issue: order_id variable name conflicts with column name causing ambiguity
+-- Added: Duplicate order prevention
 
 CREATE OR REPLACE FUNCTION public.accept_quote_with_rot(
   p_token text, 
@@ -28,6 +29,16 @@ BEGIN
     RETURN json_build_object(
       'success', false,
       'error', 'Ogiltig eller utgången token'
+    );
+  END IF;
+  
+  -- Check if quote already has an order (prevent duplicates)
+  IF v_quote_record.order_id IS NOT NULL THEN
+    RETURN json_build_object(
+      'success', true,
+      'quote_id', v_quote_record.id,
+      'order_id', v_quote_record.order_id,
+      'message', 'Offerten har redan godkänts'
     );
   END IF;
   
@@ -123,6 +134,16 @@ BEGIN
     RETURN json_build_object(
       'success', false,
       'error', 'Ogiltig eller utgången token'
+    );
+  END IF;
+  
+  -- Check if quote already has an order (prevent duplicates)
+  IF v_quote_record.order_id IS NOT NULL THEN
+    RETURN json_build_object(
+      'success', true,
+      'quote_id', v_quote_record.id,
+      'order_id', v_quote_record.order_id,
+      'message', 'Offerten har redan godkänts'
     );
   END IF;
   

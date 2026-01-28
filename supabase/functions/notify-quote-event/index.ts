@@ -141,7 +141,7 @@ Deno.serve(async (req: Request) => {
             title,
             message,
             is_read: false,
-            action_url: `/offerter/${quote_id}`,
+            action_url: `/app/offert/${quote_id}`,
             created_at: new Date().toISOString()
         }));
 

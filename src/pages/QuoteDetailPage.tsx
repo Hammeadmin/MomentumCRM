@@ -40,7 +40,8 @@ import {
     Link2,
     ExternalLink,
     MessageSquare,
-    Copy
+    Copy,
+    Flame
 } from 'lucide-react';
 import QuoteEditModal from '../components/QuoteEditModal';
 import QuotePreview from '../components/QuotePreview';
@@ -89,6 +90,9 @@ export default function QuoteDetailPage() {
     const [leads, setLeads] = useState<Lead[]>([]);
     const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
 
+    // View tracking data
+    const [viewData, setViewData] = useState<{ count: number; lastViewed: string | null }>({ count: 0, lastViewed: null });
+
     // Print ref for preview
     const printRef = useRef<HTMLDivElement>(null);
 
@@ -101,8 +105,29 @@ export default function QuoteDetailPage() {
     useEffect(() => {
         if (id) {
             loadQuoteData();
+            loadViewData();
         }
     }, [id]);
+
+    const loadViewData = async () => {
+        if (!id) return;
+        try {
+            const { data, error } = await supabase
+                .from('quote_views')
+                .select('viewed_at')
+                .eq('quote_id', id)
+                .order('viewed_at', { ascending: false });
+
+            if (!error && data) {
+                setViewData({
+                    count: data.length,
+                    lastViewed: data.length > 0 ? data[0].viewed_at : null
+                });
+            }
+        } catch (err) {
+            console.error('Error loading view data:', err);
+        }
+    };
 
     const loadQuoteData = async () => {
         if (!id) return;
@@ -479,6 +504,67 @@ export default function QuoteDetailPage() {
                             </div>
                         )}
                     </div>
+
+                    {/* View Tracking */}
+                    {quote.status === 'sent' && (
+                        <div className={`rounded-xl shadow-sm border p-5 ${viewData.count >= 3 ? 'bg-gradient-to-br from-orange-50 to-red-50 border-orange-200' : 'bg-white border-gray-200'}`}>
+                            <div className="flex items-center gap-2 mb-4">
+                                {viewData.count >= 3 ? (
+                                    <Flame className="w-5 h-5 text-orange-500" />
+                                ) : (
+                                    <Eye className="w-5 h-5 text-purple-500" />
+                                )}
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Kundaktivitet</h3>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-gray-600">Visningar</span>
+                                    <span className={`text-2xl font-bold ${viewData.count >= 3 ? 'text-orange-600' : 'text-gray-900'}`}>
+                                        {viewData.count}
+                                    </span>
+                                </div>
+
+                                {viewData.lastViewed && (
+                                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                                        <Clock className="w-4 h-4" />
+                                        <span>Senast: {new Date(viewData.lastViewed).toLocaleString('sv-SE')}</span>
+                                    </div>
+                                )}
+
+                                {viewData.count >= 3 && (
+                                    <div className="pt-3 border-t border-orange-200">
+                                        <div className="flex items-center gap-2 text-orange-700 mb-3">
+                                            <Flame className="w-4 h-4" />
+                                            <span className="text-sm font-medium">Het lead! Kunden är intresserad.</span>
+                                        </div>
+                                        {quote.customer?.phone_number && (
+                                            <a
+                                                href={`tel:${quote.customer.phone_number}`}
+                                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium"
+                                            >
+                                                <Phone className="w-4 h-4" />
+                                                Ring nu: {quote.customer.phone_number}
+                                            </a>
+                                        )}
+                                        {quote.customer?.email && (
+                                            <a
+                                                href={`mailto:${quote.customer.email}?subject=Angående offert ${quote.quote_number}`}
+                                                className="w-full flex items-center justify-center gap-2 px-4 py-2 mt-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors text-sm"
+                                            >
+                                                <Mail className="w-4 h-4" />
+                                                Skicka e-post
+                                            </a>
+                                        )}
+                                    </div>
+                                )}
+
+                                {viewData.count === 0 && (
+                                    <p className="text-sm text-gray-400">Offerten har inte öppnats än</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Right Column - Tabs */}

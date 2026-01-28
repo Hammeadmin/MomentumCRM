@@ -114,6 +114,23 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Fallback: If organisation wasn't joined properly, fetch it separately
+    if (!quote.organisation && quote.organisation_id) {
+      console.log('Organisation not in join, fetching separately...');
+      const { data: orgData } = await supabase
+        .from('organisations')
+        .select('id, name, email, phone, org_number')
+        .eq('id', quote.organisation_id)
+        .single();
+
+      if (orgData) {
+        quote.organisation = orgData;
+        console.log('Fetched organisation:', orgData.name);
+      }
+    }
+
+    console.log('Quote organisation:', quote.organisation?.name || 'NOT FOUND');
+
     let acceptanceToken = null;
     let acceptanceUrl = null;
 
@@ -276,19 +293,20 @@ Deno.serve(async (req: Request) => {
 
 function generateQuoteEmailContent(quote: any, bodyText: string, acceptanceUrl?: string | null) {
   const companyName = quote.organisation?.name || 'Momentum CRM';
+  const companyEmail = quote.organisation?.email || '';
+  const companyPhone = quote.organisation?.phone || '';
+  const companyOrgNumber = quote.organisation?.org_number || '';
   const customerName = quote.customer?.name || 'Kund';
   const quoteAmount = formatCurrency(quote.total_amount);
-  const rotAmount = quote.rot_amount || 0;
+  const rotAmount = quote.include_rot ? calculateRotDeduction(quote.total_amount) : 0;
   const netAmount = quote.total_amount - rotAmount;
+  const validUntil = quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('sv-SE') : null;
+  const createdDate = new Date(quote.created_at).toLocaleDateString('sv-SE');
 
-  // Replace acceptance link placeholder in body
-  let finalBody = bodyText;
-  if (acceptanceUrl) {
-    finalBody = finalBody.replace(
-      '[Länk kommer att genereras automatiskt]',
-      acceptanceUrl
-    );
-  }
+  // Get line items preview (first 5)
+  const lineItems = quote.quote_line_items || [];
+  const displayItems = lineItems.slice(0, 5);
+  const hasMoreItems = lineItems.length > 5;
 
   const html = `
     <!DOCTYPE html>
@@ -297,109 +315,196 @@ function generateQuoteEmailContent(quote: any, bodyText: string, acceptanceUrl?:
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Offert från ${companyName}</title>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #2563EB 0%, #1d4ed8 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
-        .content { background: white; padding: 30px 20px; border: 1px solid #e5e7eb; }
-        .footer { background: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; border-top: none; }
-        .button { display: inline-block; background: #10b981; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
-        .rot-info { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 20px; border-radius: 8px; margin: 20px 0; }
-        .quote-details { background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; }
-      </style>
     </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0; font-size: 28px;">${companyName}</h1>
-          <p style="margin: 10px 0 0 0; opacity: 0.9;">Offert ${quote.quote_number}</p>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f3f4f6;">
+      <div style="max-width: 640px; margin: 0 auto; padding: 20px;">
+        
+        <!-- Header with Company Branding -->
+        <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; padding: 40px 30px; border-radius: 16px 16px 0 0; text-align: center;">
+          <h1 style="margin: 0; font-size: 26px; font-weight: 700;">${companyName}</h1>
+          <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 15px;">har skickat dig en offert</p>
         </div>
         
-        <div class="content">
-          <h2 style="color: #1f2937; margin-top: 0;">Hej ${customerName}!</h2>
+        <!-- Main Content -->
+        <div style="background: white; padding: 40px 30px; border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb;">
           
-          <div style="white-space: pre-wrap; margin: 20px 0;">${finalBody}</div>
+          <!-- Greeting -->
+          <h2 style="color: #111827; margin: 0 0 20px 0; font-size: 22px;">Hej ${customerName}!</h2>
           
-          <div class="quote-details">
-            <h3 style="margin-top: 0; color: #374151;">Offertsammanfattning:</h3>
+          <p style="color: #4b5563; margin: 0 0 25px 0; font-size: 16px;">
+            Tack för ditt intresse! Här kommer offerten du begärt. Granska detaljerna nedan och klicka på knappen för att godkänna direkt online.
+          </p>
+          
+          <!-- Quote Info Card -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 25px 0;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+              <div>
+                <p style="margin: 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Offertnummer</p>
+                <p style="margin: 4px 0 0 0; font-size: 18px; font-weight: 600; color: #1e40af;">${quote.quote_number}</p>
+              </div>
+              <div style="text-align: right;">
+                <p style="margin: 0; font-size: 13px; color: #64748b;">Datum: ${createdDate}</p>
+                ${validUntil ? `<p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">Giltig t.o.m: ${validUntil}</p>` : ''}
+              </div>
+            </div>
+            
+            <h3 style="margin: 0 0 12px 0; color: #374151; font-size: 16px; font-weight: 600;">
+              ${quote.title}
+            </h3>
+            
+            ${quote.description ? `<p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.5;">${quote.description.substring(0, 200)}${quote.description.length > 200 ? '...' : ''}</p>` : ''}
+          </div>
+          
+          <!-- Line Items Preview -->
+          ${displayItems.length > 0 ? `
+          <div style="margin: 25px 0;">
+            <h4 style="margin: 0 0 15px 0; color: #374151; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Innehåll i offerten</h4>
             <table style="width: 100%; border-collapse: collapse;">
+              ${displayItems.map((item: any) => `
               <tr>
-                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">Totalt belopp:</td>
-                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: bold;">${quoteAmount}</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #374151; font-size: 14px;">
+                  ${item.description || item.name || 'Post'}
+                  ${item.quantity > 1 ? `<span style="color: #9ca3af;"> × ${item.quantity}</span>` : ''}
+                </td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; text-align: right; color: #374151; font-size: 14px; white-space: nowrap;">
+                  ${formatCurrency(item.total || item.quantity * item.unit_price)}
+                </td>
+              </tr>
+              `).join('')}
+              ${hasMoreItems ? `
+              <tr>
+                <td colspan="2" style="padding: 10px 0; color: #9ca3af; font-size: 13px; font-style: italic;">
+                  + ${lineItems.length - 5} fler poster...
+                </td>
+              </tr>
+              ` : ''}
+            </table>
+          </div>
+          ` : ''}
+          
+          <!-- Total Amount Box -->
+          <div style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); border-radius: 12px; padding: 24px; margin: 25px 0; color: white;">
+            <table style="width: 100%;">
+              <tr>
+                <td style="padding: 8px 0; font-size: 15px; opacity: 0.9;">Totalt belopp (inkl. moms)</td>
+                <td style="padding: 8px 0; text-align: right; font-size: 20px; font-weight: 700;">${quoteAmount}</td>
               </tr>
               ${quote.include_rot && rotAmount > 0 ? `
               <tr>
-                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; color: #059669;">ROT-avdrag:</td>
-                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: bold; color: #059669;">-${formatCurrency(rotAmount)}</td>
+                <td style="padding: 8px 0; font-size: 14px; opacity: 0.85;">ROT-avdrag (beräknat)</td>
+                <td style="padding: 8px 0; text-align: right; font-size: 16px;">-${formatCurrency(rotAmount)}</td>
               </tr>
-              <tr>
-                <td style="padding: 8px 0; color: #059669; font-weight: bold;">Att betala efter ROT:</td>
-                <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #059669; font-size: 18px;">${formatCurrency(netAmount)}</td>
+              <tr style="border-top: 1px solid rgba(255,255,255,0.3);">
+                <td style="padding: 12px 0 0 0; font-size: 15px; font-weight: 600;">Att betala efter ROT</td>
+                <td style="padding: 12px 0 0 0; text-align: right; font-size: 22px; font-weight: 700;">${formatCurrency(netAmount)}</td>
               </tr>
               ` : ''}
             </table>
           </div>
           
-          ${quote.include_rot && rotAmount > 0 ? `
-          <div class="rot-info">
-            <h3 style="margin-top: 0; color: #065f46;">🏠 ROT-avdrag inkluderat</h3>
-            <p style="margin: 0 0 10px 0; color: #047857;">
-              Som privatperson får du automatiskt ROT-avdrag på ${formatCurrency(rotAmount)}. 
-              Detta dras av direkt från fakturan - du behöver inte ansöka separat hos Skatteverket.
+          ${quote.include_rot ? `
+          <!-- ROT Info -->
+          <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 20px; margin: 25px 0;">
+            <p style="margin: 0; color: #065f46; font-size: 14px;">
+              <strong>🏠 ROT-avdrag kan nyttjas!</strong><br>
+              Du anger ditt personnummer när du godkänner offerten online. ROT-avdraget hanteras automatiskt.
             </p>
-            ${quote.rot_personnummer ? `<p style="margin: 5px 0; color: #047857;"><strong>Personnummer:</strong> ${quote.rot_personnummer}</p>` : ''}
-            ${quote.rot_fastighetsbeteckning ? `<p style="margin: 5px 0; color: #047857;"><strong>Fastighetsbeteckning:</strong> ${quote.rot_fastighetsbeteckning}</p>` : ''}
           </div>
           ` : ''}
           
+          <!-- CTA Button -->
           ${acceptanceUrl ? `
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${acceptanceUrl}" class="button" style="color: white;">
-              🎯 Godkänn offert online
+          <div style="text-align: center; margin: 35px 0;">
+            <a href="${acceptanceUrl}" style="display: inline-block; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; padding: 18px 40px; text-decoration: none; border-radius: 10px; font-weight: 700; font-size: 16px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);">
+              ✓ Granska och godkänn offert
             </a>
-            <p style="margin: 10px 0 0 0; font-size: 14px; color: #6b7280;">
-              Klicka för att godkänna offerten och bekräfta beställningen
+            <p style="margin: 12px 0 0 0; font-size: 13px; color: #9ca3af;">
+              Klicka för att se fullständig offert och godkänna online
             </p>
           </div>
           ` : ''}
+          
+          <!-- Contact Section -->
+          <div style="background: #f8fafc; border-radius: 12px; padding: 20px; margin: 30px 0 0 0; text-align: center;">
+            <p style="margin: 0 0 10px 0; color: #374151; font-size: 14px; font-weight: 600;">Har du frågor om offerten?</p>
+            <p style="margin: 0; color: #6b7280; font-size: 14px;">
+              Kontakta oss gärna:
+              ${companyEmail ? `<a href="mailto:${companyEmail}" style="color: #2563eb; text-decoration: none;">${companyEmail}</a>` : ''}
+              ${companyPhone && companyEmail ? ` · ` : ''}
+              ${companyPhone ? `<a href="tel:${companyPhone}" style="color: #2563eb; text-decoration: none;">${companyPhone}</a>` : ''}
+            </p>
+          </div>
         </div>
         
-        <div class="footer">
-          <p style="margin: 0; color: #6b7280; font-size: 14px;">
-            ${companyName}${quote.organisation?.email ? ` | ${quote.organisation.email}` : ''}${quote.organisation?.phone ? ` | ${quote.organisation.phone}` : ''}
+        <!-- Footer -->
+        <div style="background: #1f2937; color: white; padding: 25px 30px; border-radius: 0 0 16px 16px; text-align: center;">
+          <p style="margin: 0; font-size: 16px; font-weight: 600;">${companyName}</p>
+          ${companyOrgNumber ? `<p style="margin: 6px 0 0 0; font-size: 12px; opacity: 0.7;">Org.nr: ${companyOrgNumber}</p>` : ''}
+          <p style="margin: 15px 0 0 0; font-size: 11px; opacity: 0.5;">
+            Detta e-postmeddelande skickades automatiskt från ${companyName}s offertsystem.
           </p>
-          ${quote.organisation?.org_number ? `
-          <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 12px;">
-            Org.nr: ${quote.organisation.org_number}
-          </p>
-          ` : ''}
         </div>
+        
       </div>
     </body>
     </html>
   `;
 
-  const text = finalBody + `
+  // Plain text version
+  const text = `
+OFFERT FRÅN ${companyName.toUpperCase()}
+${'='.repeat(40)}
 
-Offertsammanfattning:
-- Totalt belopp: ${quoteAmount}
-${quote.include_rot && rotAmount > 0 ? `- ROT-avdrag: -${formatCurrency(rotAmount)}
-- Att betala efter ROT: ${formatCurrency(netAmount)}` : ''}
+Hej ${customerName}!
 
-${acceptanceUrl ? `Godkänn offert online: ${acceptanceUrl}` : ''}
+Tack för ditt intresse! Här kommer offerten du begärt.
 
-${companyName}${quote.organisation?.email ? ` | ${quote.organisation.email}` : ''}${quote.organisation?.phone ? ` | ${quote.organisation.phone}` : ''}
-${quote.organisation?.org_number ? `Org.nr: ${quote.organisation.org_number}` : ''}
-${quote.include_rot && rotAmount > 0 && quote.rot_personnummer ? `Personnummer: ${quote.rot_personnummer}` : ''}
-${quote.include_rot && rotAmount > 0 && quote.rot_fastighetsbeteckning ? `Fastighetsbeteckning: ${quote.rot_fastighetsbeteckning}` : ''}
-  `;
+OFFERTDETALJER
+--------------
+Offertnummer: ${quote.quote_number}
+Datum: ${createdDate}
+${validUntil ? `Giltig t.o.m: ${validUntil}` : ''}
+
+${quote.title}
+${quote.description ? `\n${quote.description}\n` : ''}
+
+BELOPP
+------
+Totalt: ${quoteAmount}
+${quote.include_rot && rotAmount > 0 ? `ROT-avdrag: -${formatCurrency(rotAmount)}
+Att betala: ${formatCurrency(netAmount)}` : ''}
+
+${acceptanceUrl ? `
+GODKÄNN OFFERTEN
+----------------
+Klicka här för att granska och godkänna: ${acceptanceUrl}
+` : ''}
+
+HAR DU FRÅGOR?
+--------------
+${companyEmail ? `E-post: ${companyEmail}` : ''}
+${companyPhone ? `Telefon: ${companyPhone}` : ''}
+
+--
+${companyName}
+${companyOrgNumber ? `Org.nr: ${companyOrgNumber}` : ''}
+  `.trim();
 
   return { html, text };
+}
+
+// Calculate ROT deduction (30% of labor, max 50k per person)
+function calculateRotDeduction(totalAmount: number): number {
+  const rotPercentage = 0.30;
+  const maxRot = 50000;
+  return Math.min(totalAmount * rotPercentage, maxRot);
 }
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('sv-SE', {
     style: 'currency',
     currency: 'SEK',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
   }).format(amount);
 }
