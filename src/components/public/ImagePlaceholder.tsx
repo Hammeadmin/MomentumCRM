@@ -29,7 +29,7 @@ for (const path in imageModules) {
 // Fallback descriptions for images not yet available
 const PLACEHOLDER_INFO: Record<string, { description: string; dimensions: string }> = {
     TEAM_FOUNDER: {
-        description: 'Professional headshot of Swedish tech entrepreneur, 30s, casual business attire, gray background',
+        description: 'Coming soon',
         dimensions: '500x500',
     },
 };
