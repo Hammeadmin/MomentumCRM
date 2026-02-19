@@ -544,80 +544,79 @@ function CompanyProfileSettings() {
               placeholder="1234 12 34567"
             />
           </div>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            IBAN
-          </label>
-          <input
-            type="text"
-            value={profile.iban}
-            onChange={(e) => {
-              const raw = e.target.value.replace(/\s/g, '');
-              const formatted = raw.match(/.{1,4}/g)?.join(' ') || '';
-              setProfile(prev => ({ ...prev, iban: formatted }));
-            }}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            placeholder="SE45 5000 0000 0504 0114 8920"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            BIC/SWIFT
-          </label>
-          <input
-            type="text"
-            value={profile.bic}
-            onChange={(e) => setProfile(prev => ({ ...prev, bic: e.target.value.toUpperCase() }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            placeholder="ESSESESSXXX"
-          />
-        </div>
-      </div>
-
-      <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-        <div className="flex items-start">
-          <FileText className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
           <div>
-            <h4 className="font-medium text-blue-900">Information om bankinformation</h4>
-            <p className="text-sm text-blue-700 mt-1">
-              Denna information kommer att visas på dina fakturor så att kunder vet var de ska betala.
-              Se till att informationen är korrekt och uppdaterad.
-            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              IBAN
+            </label>
+            <input
+              type="text"
+              value={profile.iban}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/\s/g, '');
+                const formatted = raw.match(/.{1,4}/g)?.join(' ') || '';
+                setProfile(prev => ({ ...prev, iban: formatted }));
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              placeholder="SE45 5000 0000 0504 0114 8920"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              BIC/SWIFT
+            </label>
+            <input
+              type="text"
+              value={profile.bic}
+              onChange={(e) => setProfile(prev => ({ ...prev, bic: e.target.value.toUpperCase() }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              placeholder="ESSESESSXXX"
+            />
           </div>
         </div>
-      </div>
+
+        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+          <div className="flex items-start">
+            <FileText className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-blue-900">Information om bankinformation</h4>
+              <p className="text-sm text-blue-700 mt-1">
+                Denna information kommer att visas på dina fakturor så att kunder vet var de ska betala.
+                Se till att informationen är korrekt och uppdaterad.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* F-skatt */}
       <div className="bg-white rounded-lg shadow-sm border p-6">
-    <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
-      <FileText className="w-5 h-5 mr-2 text-blue-600" />
-      F-skatt
-    </h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+          <FileText className="w-5 h-5 mr-2 text-blue-600" />
+          F-skatt
+        </h3>
 
-    <div className="flex items-center justify-between">
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Godkänd för F-skatt
-        </label>
-        <p className="text-xs text-gray-500 mt-1">
-          Visas på fakturor och offerter som lagstadgad information.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Godkänd för F-skatt
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Visas på fakturor och offerter som lagstadgad information.
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={profile.f_skatt_approved ?? true}
+              onChange={(e) => setProfile(prev => ({ ...prev, f_skatt_approved: e.target.checked }))}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
       </div>
-      <label className="relative inline-flex items-center cursor-pointer">
-        <input
-          type="checkbox"
-          checked={profile.f_skatt_approved ?? true}
-          onChange={(e) => setProfile(prev => ({ ...prev, f_skatt_approved: e.target.checked }))}
-          className="sr-only peer"
-        />
-        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-      </label>
-    </div>
-  </div>
     </div>
   );
 }
