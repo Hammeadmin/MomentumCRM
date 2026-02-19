@@ -307,6 +307,16 @@ function IntegrationSettings() {
         return;
       }
 
+      if (integrationId === 'fortnox') {
+        if (!userProfile?.organisation_id) {
+          throw new Error('Organisation saknas');
+        }
+        const redirectUri = `${window.location.origin}${window.location.pathname}?tab=integrations`;
+        connectFortnox(userProfile.organisation_id, redirectUri);
+        // OAuth will redirect
+        return;
+      }
+
       // Simulate connection for other integrations
       await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -824,8 +834,12 @@ function IntegrationSettings() {
                               setError('Organisation saknas');
                               return;
                             }
-                            const redirectUri = `${window.location.origin}${window.location.pathname}?tab=integrations`;
-                            connectFortnox(userProfile.organisation_id, redirectUri);
+                            try {
+                              const redirectUri = `${window.location.origin}${window.location.pathname}?tab=integrations`;
+                              connectFortnox(userProfile.organisation_id, redirectUri);
+                            } catch (err) {
+                              setError((err as Error).message || 'Kunde inte starta Fortnox-anslutning');
+                            }
                           }}
                           disabled={loading}
                           className="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
@@ -883,8 +897,12 @@ function IntegrationSettings() {
                               setError('Organisation saknas');
                               return;
                             }
-                            const redirectUri = `${window.location.origin}${window.location.pathname}?tab=integrations`;
-                            connectFortnox(userProfile.organisation_id, redirectUri);
+                            try {
+                              const redirectUri = `${window.location.origin}${window.location.pathname}?tab=integrations`;
+                              connectFortnox(userProfile.organisation_id, redirectUri);
+                            } catch (err) {
+                              setError((err as Error).message || 'Kunde inte starta Fortnox-anslutning');
+                            }
                           }}
                           disabled={loading}
                           className="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
