@@ -18,6 +18,8 @@ import {
   AlertCircle,
   CheckCircle,
   Package,
+  Target,
+  Clock,
   Star,
   Crown,
   Briefcase,
@@ -247,8 +249,8 @@ const LeadKanbanRow = ({
       )}
       {typeof lead.lead_score === 'number' && (
         <span className={`inline-flex items-center gap-1 text-xs font-semibold rounded px-1.5 py-0.5 ${lead.lead_score >= 70 ? 'bg-green-100 text-green-700' :
-            lead.lead_score >= 40 ? 'bg-amber-100 text-amber-700' :
-              'bg-gray-100 text-gray-500'
+          lead.lead_score >= 40 ? 'bg-amber-100 text-amber-700' :
+            'bg-gray-100 text-gray-500'
           }`}>
           <Star className="w-3 h-3" />
           {lead.lead_score}
