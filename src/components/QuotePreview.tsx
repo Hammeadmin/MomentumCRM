@@ -756,6 +756,14 @@ function QuotePreview({
       case 'page_footer':
         // Page footer with company info - applies block styles
         const footerStyles = getBlockStyles(block.settings, font_family);
+        const footerSegments: string[] = [];
+        if (company.name) footerSegments.push(company.name);
+        if (company.org_number) footerSegments.push(`Org.nr: ${company.org_number}`);
+        if (company.vat_number) footerSegments.push(`Momsreg.nr: ${company.vat_number}`);
+        if (company.iban) footerSegments.push(`IBAN: ${company.iban}`);
+        if (company.bic) footerSegments.push(`BIC: ${company.bic}`);
+        if (company.f_skatt_approved !== false) footerSegments.push('Godkänd för F-skatt');
+        if (company.email) footerSegments.push(company.email);
         innerContent = (
           <div
             className="mt-12 border-t pt-6"
@@ -771,10 +779,7 @@ function QuotePreview({
             }}
           >
             {block.content?.showCompanyInfo !== false && (
-              <>
-                <p className="mb-1">{company.name} | {company.org_number} | {company.city}</p>
-                <p>{company.email} | {company.phone}</p>
-              </>
+              <p className="mb-1">{footerSegments.join(' | ')}</p>
             )}
           </div>
         );
@@ -800,6 +805,18 @@ function QuotePreview({
                 <div>
                   <span className="text-gray-500 block">Bankgiro / Kontonummer</span>
                   <span className="font-semibold text-gray-800">{company.bank_account || 'Ej angivet'}</span>
+                </div>
+              )}
+              {company.iban && (
+                <div>
+                  <span className="text-gray-500 block">IBAN</span>
+                  <span className="font-semibold text-gray-800 font-mono">{company.iban}</span>
+                </div>
+              )}
+              {company.bic && (
+                <div>
+                  <span className="text-gray-500 block">BIC/SWIFT</span>
+                  <span className="font-semibold text-gray-800 font-mono">{company.bic}</span>
                 </div>
               )}
               {block.content?.showOCR !== false && (
@@ -843,18 +860,25 @@ function QuotePreview({
       case 'f_skatt_text':
         // F-skatt text disclaimer
         const fskattStyles = getBlockStyles(block.settings, font_family);
+        const fskattText = company.f_skatt_approved !== false
+          ? 'Godkänd för F-skatt. Innehar F-skattsedel.'
+          : '';
         innerContent = (
           <div
             className="mt-8 pt-4 border-t border-gray-200 text-center"
             style={{ ...fskattStyles, color: fskattStyles.color || '#6b7280' }}
           >
-            <EditableElement
-              tagName="p"
-              className="text-xs"
-              initialContent={typeof block.content === 'string' ? block.content : 'Godkänd för F-skatt. Innehar F-skattsedel.'}
-              isEditable={isEditable}
-              onSave={(val) => onBlockUpdate?.(block.id, val)}
-            />
+            {company.f_skatt_approved !== false ? (
+              <EditableElement
+                tagName="p"
+                className="text-xs"
+                initialContent={typeof block.content === 'string' ? block.content : fskattText}
+                isEditable={isEditable}
+                onSave={(val) => onBlockUpdate?.(block.id, val)}
+              />
+            ) : (
+              <p className="text-xs text-gray-400 italic">F-skatt ej godkänd</p>
+            )}
             {company.vat_number && (
               <p className="text-xs mt-1">
                 Momsnr: {company.vat_number}

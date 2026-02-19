@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   Building,
   Upload,
@@ -31,6 +31,9 @@ interface CompanyProfile {
   bank_name?: string;
   vat_number?: string;
   description?: string;
+  iban?: string;
+  bic?: string;
+  f_skatt_approved?: boolean;
 }
 
 function CompanyProfileSettings() {
@@ -55,7 +58,10 @@ function CompanyProfileSettings() {
     bank_account: '',
     bank_name: '',
     vat_number: '',
-    description: ''
+    description: '',
+    iban: '',
+    bic: '',
+    f_skatt_approved: true
   });
 
   useEffect(() => {
@@ -93,7 +99,10 @@ function CompanyProfileSettings() {
           bank_account: data.bank_account || '',
           bank_name: data.bank_name || '',
           vat_number: data.vat_number || '',
-          description: data.description || ''
+          description: data.description || '',
+          iban: data.iban || '',
+          bic: data.bic || '',
+          f_skatt_approved: data.f_skatt_approved ?? true
         });
       }
     } catch (err) {
@@ -125,7 +134,10 @@ function CompanyProfileSettings() {
           bank_account: profile.bank_account,
           bank_name: profile.bank_name,
           vat_number: profile.vat_number,
-          description: profile.description
+          description: profile.description,
+          iban: profile.iban,
+          bic: profile.bic,
+          f_skatt_approved: profile.f_skatt_approved
         })
         .eq('id', organisationId);
 
@@ -359,8 +371,8 @@ function CompanyProfileSettings() {
                   value={profile.org_number}
                   onChange={(e) => setProfile(prev => ({ ...prev, org_number: e.target.value }))}
                   className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${profile.org_number && !validateOrgNumber(profile.org_number)
-                      ? 'border-red-300'
-                      : 'border-gray-300'
+                    ? 'border-red-300'
+                    : 'border-gray-300'
                     }`}
                   placeholder="556123-4567"
                 />
@@ -423,8 +435,8 @@ function CompanyProfileSettings() {
                   value={profile.vat_number}
                   onChange={(e) => setProfile(prev => ({ ...prev, vat_number: e.target.value }))}
                   className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${profile.vat_number && !validateVATNumber(profile.vat_number)
-                      ? 'border-red-300'
-                      : 'border-gray-300'
+                    ? 'border-red-300'
+                    : 'border-gray-300'
                     }`}
                   placeholder="SE556123456701"
                 />
@@ -534,19 +546,78 @@ function CompanyProfileSettings() {
           </div>
         </div>
 
-        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-          <div className="flex items-start">
-            <FileText className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
-            <div>
-              <h4 className="font-medium text-blue-900">Information om bankinformation</h4>
-              <p className="text-sm text-blue-700 mt-1">
-                Denna information kommer att visas på dina fakturor så att kunder vet var de ska betala.
-                Se till att informationen är korrekt och uppdaterad.
-              </p>
-            </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            IBAN
+          </label>
+          <input
+            type="text"
+            value={profile.iban}
+            onChange={(e) => {
+              const raw = e.target.value.replace(/\s/g, '');
+              const formatted = raw.match(/.{1,4}/g)?.join(' ') || '';
+              setProfile(prev => ({ ...prev, iban: formatted }));
+            }}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            placeholder="SE45 5000 0000 0504 0114 8920"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            BIC/SWIFT
+          </label>
+          <input
+            type="text"
+            value={profile.bic}
+            onChange={(e) => setProfile(prev => ({ ...prev, bic: e.target.value.toUpperCase() }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            placeholder="ESSESESSXXX"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+        <div className="flex items-start">
+          <FileText className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
+          <div>
+            <h4 className="font-medium text-blue-900">Information om bankinformation</h4>
+            <p className="text-sm text-blue-700 mt-1">
+              Denna information kommer att visas på dina fakturor så att kunder vet var de ska betala.
+              Se till att informationen är korrekt och uppdaterad.
+            </p>
           </div>
         </div>
       </div>
+      </div>
+
+      {/* F-skatt */}
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+    <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+      <FileText className="w-5 h-5 mr-2 text-blue-600" />
+      F-skatt
+    </h3>
+
+    <div className="flex items-center justify-between">
+      <div>
+        <label className="block text-sm font-medium text-gray-700">
+          Godkänd för F-skatt
+        </label>
+        <p className="text-xs text-gray-500 mt-1">
+          Visas på fakturor och offerter som lagstadgad information.
+        </p>
+      </div>
+      <label className="relative inline-flex items-center cursor-pointer">
+        <input
+          type="checkbox"
+          checked={profile.f_skatt_approved ?? true}
+          onChange={(e) => setProfile(prev => ({ ...prev, f_skatt_approved: e.target.checked }))}
+          className="sr-only peer"
+        />
+        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+      </label>
+    </div>
+  </div>
     </div>
   );
 }
