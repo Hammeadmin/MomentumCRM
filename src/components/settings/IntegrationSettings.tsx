@@ -32,7 +32,6 @@ import {
 import {
   getFortnoxConnectionStatus,
   connectFortnox,
-  exchangeFortnoxCode,
   disconnectFortnox,
   testFortnoxConnection,
   type FortnoxConnectionStatus
@@ -207,41 +206,6 @@ function IntegrationSettings() {
     checkFortnoxStatus();
   }, [userProfile?.organisation_id]);
 
-  // Handle Fortnox OAuth callback
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const authCode = urlParams.get('code');
-    const state = urlParams.get('state');
-
-    // Only handle callback if we have code + state matches an org_id
-    if (authCode && state && userProfile?.organisation_id && state === userProfile.organisation_id) {
-      const handleCallback = async () => {
-        setLoading(true);
-        const redirectUri = `${window.location.origin}${window.location.pathname}?tab=integrations`;
-
-        const result = await exchangeFortnoxCode(userProfile.organisation_id, authCode, redirectUri);
-
-        if (result.success) {
-          // Refresh the connection status
-          const newStatus = await getFortnoxConnectionStatus(userProfile.organisation_id);
-          setFortnoxStatus(newStatus);
-          setIntegrations(prev => prev.map(i =>
-            i.id === 'fortnox' ? { ...i, status: 'connected' } : i
-          ));
-          setSuccess('Fortnox ansluten framgångsrikt!');
-        } else {
-          setError(result.error || 'Kunde inte ansluta till Fortnox');
-        }
-
-        // Clean up URL params
-        window.history.replaceState({}, '', `${window.location.pathname}?tab=integrations`);
-        setLoading(false);
-      };
-
-      handleCallback();
-    }
-  }, [userProfile?.organisation_id]);
-
   // Check SMS/46elks settings on mount
   useEffect(() => {
     const checkSmsSettings = async () => {
@@ -311,7 +275,7 @@ function IntegrationSettings() {
         if (!userProfile?.organisation_id) {
           throw new Error('Organisation saknas');
         }
-        const redirectUri = `${window.location.origin}${window.location.pathname}?tab=integrations`;
+        const redirectUri = `${window.location.origin}/app/fortnox/callback`;
         connectFortnox(userProfile.organisation_id, redirectUri);
         // OAuth will redirect
         return;
@@ -835,7 +799,7 @@ function IntegrationSettings() {
                               return;
                             }
                             try {
-                              const redirectUri = `${window.location.origin}${window.location.pathname}?tab=integrations`;
+                              const redirectUri = `${window.location.origin}/app/fortnox/callback`;
                               connectFortnox(userProfile.organisation_id, redirectUri);
                             } catch (err) {
                               setError((err as Error).message || 'Kunde inte starta Fortnox-anslutning');
@@ -898,7 +862,7 @@ function IntegrationSettings() {
                               return;
                             }
                             try {
-                              const redirectUri = `${window.location.origin}${window.location.pathname}?tab=integrations`;
+                              const redirectUri = `${window.location.origin}/app/fortnox/callback`;
                               connectFortnox(userProfile.organisation_id, redirectUri);
                             } catch (err) {
                               setError((err as Error).message || 'Kunde inte starta Fortnox-anslutning');
