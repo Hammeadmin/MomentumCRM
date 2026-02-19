@@ -10,7 +10,7 @@ import { useToast } from '../hooks/useToast';
 import { useLeads } from '../hooks/useLeads';
 import { useTranslation } from '../locales/sv';
 import { parseLead } from '../lib/schemas';
-import KanbanCard from './kanban/KanbanCard';
+
 import {
     createLead, updateLead, deleteLead, getSalesTasks, updateSalesTask,
     fetchRSSArticles, getAILeadSuggestions, createLeadFromArticle, getLeadScoreColor,
@@ -50,6 +50,15 @@ const LEAD_STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bgC
 };
 
 const PIPELINE_STAGES: LeadStatus[] = ['new', 'contacted', 'qualified', 'proposal', 'won', 'lost'];
+
+const LEAD_STATUS_BORDER_COLORS: Record<LeadStatus, string> = {
+    new: '#16a34a',
+    contacted: '#f59e0b',
+    qualified: '#7c3aed',
+    proposal: '#4f46e5',
+    won: '#0d9488',
+    lost: '#e11d48',
+};
 
 // ====== ANALYTICS COMPONENT ====== //
 const AnalyticsHeader = ({ analytics, loading }: { analytics: LeadAnalytics | null; loading: boolean }) => {
@@ -94,6 +103,50 @@ const AnalyticsHeader = ({ analytics, loading }: { analytics: LeadAnalytics | nu
     );
 };
 
+// ====== KANBAN ROW COMPONENT ====== //
+const LeadKanbanRow = ({
+    lead,
+    statusColor,
+    onDragStart,
+    onClick,
+    onCreateQuote,
+}: {
+    lead: LeadWithRelations;
+    statusColor: string;
+    onDragStart: (e: React.DragEvent) => void;
+    onClick: () => void;
+    onCreateQuote: () => void;
+}) => (
+    <div
+        className="group flex items-center gap-3 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+        style={{ borderLeft: `3px solid ${statusColor}` }}
+        draggable
+        onDragStart={onDragStart}
+        onClick={onClick}
+    >
+        <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">{lead.title}</p>
+            {lead.customer && (
+                <p className="text-xs text-gray-500 truncate">{lead.customer.name}</p>
+            )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+            {lead.estimated_value ? (
+                <span className="text-xs font-semibold text-gray-700">
+                    {formatCurrency(lead.estimated_value)}
+                </span>
+            ) : null}
+            <button
+                className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-blue-600 transition-all"
+                onClick={(e: React.MouseEvent) => { e.stopPropagation(); onCreateQuote(); }}
+                title="Skapa offert"
+            >
+                <Send className="w-3.5 h-3.5" />
+            </button>
+        </div>
+    </div>
+);
+
 // ====== KANBAN VIEW COMPONENT ====== //
 const LeadKanbanView = ({ leads, onSelectLead, onStatusChange, onCreateQuote, leadsTranslations }: {
     leads: LeadWithRelations[];
@@ -130,7 +183,7 @@ const LeadKanbanView = ({ leads, onSelectLead, onStatusChange, onCreateQuote, le
                 return (
                     <div
                         key={status}
-                        className="flex-shrink-0 w-72 bg-slate-50 rounded-xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-all"
+                        className="flex-shrink-0 w-64 bg-slate-50 rounded-xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-all"
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, status)}
                     >
@@ -150,12 +203,12 @@ const LeadKanbanView = ({ leads, onSelectLead, onStatusChange, onCreateQuote, le
                         </div>
 
                         {/* Column Content */}
-                        <div className="p-3 space-y-2.5">
+                        <div className="p-2 space-y-1.5">
                             {stageLeads.map(lead => (
-                                <KanbanCard
+                                <LeadKanbanRow
                                     key={lead.id}
-                                    type="lead"
-                                    data={lead}
+                                    lead={lead}
+                                    statusColor={LEAD_STATUS_BORDER_COLORS[status]}
                                     onDragStart={(e: React.DragEvent) => handleDragStart(e, lead)}
                                     onClick={() => onSelectLead(lead)}
                                     onCreateQuote={() => onCreateQuote(lead)}

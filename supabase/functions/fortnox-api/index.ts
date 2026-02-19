@@ -10,6 +10,8 @@ Actions:
 Required environment variables:
 - SUPABASE_URL
 - SUPABASE_SERVICE_ROLE_KEY
+- FORTNOX_CLIENT_ID
+- FORTNOX_CLIENT_SECRET
 */
 
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
@@ -57,7 +59,16 @@ Deno.serve(async (req: Request) => {
     try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
         const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const clientId = Deno.env.get('FORTNOX_CLIENT_ID')!;
+        const clientSecret = Deno.env.get('FORTNOX_CLIENT_SECRET')!;
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+        if (!clientId || !clientSecret) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'Fortnox client credentials not configured on server' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+            );
+        }
 
         const requestData: FortnoxRequest = await req.json();
 
@@ -68,10 +79,10 @@ Deno.serve(async (req: Request) => {
             );
         }
 
-        // Get organisation's Fortnox credentials
+        // Get organisation's Fortnox tokens (not client credentials — those are app-level env vars)
         const { data: org, error: orgError } = await supabase
             .from('organisations')
-            .select('fortnox_client_id, fortnox_client_secret, fortnox_access_token, fortnox_refresh_token, fortnox_token_expires_at')
+            .select('fortnox_access_token, fortnox_refresh_token, fortnox_token_expires_at')
             .eq('id', requestData.organisation_id)
             .single();
 
@@ -82,17 +93,10 @@ Deno.serve(async (req: Request) => {
             );
         }
 
-        if (!org.fortnox_client_id || !org.fortnox_client_secret) {
-            return new Response(
-                JSON.stringify({ success: false, error: 'Fortnox client credentials not configured' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-            );
-        }
-
         if (requestData.action === 'auth') {
-            return handleAuth(requestData as AuthRequest, org, supabase);
+            return handleAuth(requestData as AuthRequest, org, supabase, clientId, clientSecret);
         } else if (requestData.action === 'proxy') {
-            return handleProxy(requestData as ProxyRequest, org, supabase);
+            return handleProxy(requestData as ProxyRequest, org, supabase, clientId, clientSecret);
         } else {
             return new Response(
                 JSON.stringify({ success: false, error: 'Invalid action. Use "auth" or "proxy"' }),
@@ -115,7 +119,9 @@ Deno.serve(async (req: Request) => {
 async function handleAuth(
     request: AuthRequest,
     org: any,
-    supabase: any
+    supabase: any,
+    clientId: string,
+    clientSecret: string
 ): Promise<Response> {
     try {
         const { code, redirect_uri, organisation_id } = request;
@@ -132,7 +138,7 @@ async function handleAuth(
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'Authorization': `Basic ${btoa(`${org.fortnox_client_id}:${org.fortnox_client_secret}`)}`,
+                'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
             },
             body: new URLSearchParams({
                 grant_type: 'authorization_code',
@@ -199,7 +205,9 @@ async function handleAuth(
 async function handleProxy(
     request: ProxyRequest,
     org: any,
-    supabase: any
+    supabase: any,
+    clientId: string,
+    clientSecret: string
 ): Promise<Response> {
     try {
         let accessToken = org.fortnox_access_token;
@@ -215,8 +223,8 @@ async function handleProxy(
 
             // Refresh the token
             const refreshResult = await refreshAccessToken(
-                org.fortnox_client_id,
-                org.fortnox_client_secret,
+                clientId,
+                clientSecret,
                 org.fortnox_refresh_token,
                 request.organisation_id,
                 supabase

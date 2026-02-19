@@ -80,8 +80,8 @@ interface FortnoxInvoiceRow {
  */
 export interface FortnoxConnectionStatus {
     isConnected: boolean;
+    isExpired: boolean;
     expiresAt?: string;
-    clientId?: string;
 }
 
 // ============================================================================
@@ -96,55 +96,172 @@ export async function getFortnoxConnectionStatus(
 ): Promise<FortnoxConnectionStatus> {
     const { data, error } = await supabase
         .from('organisations')
-        .select('fortnox_client_id, fortnox_access_token, fortnox_token_expires_at')
+        .select('fortnox_access_token, fortnox_token_expires_at')
         .eq('id', organisationId)
         .single();
 
     if (error || !data) {
-        return { isConnected: false };
+        return { isConnected: false, isExpired: false };
     }
 
-    const isConnected = !!(data.fortnox_access_token && data.fortnox_token_expires_at);
+    const hasToken = !!data.fortnox_access_token;
+    const isExpired = hasToken && data.fortnox_token_expires_at
+        ? new Date(data.fortnox_token_expires_at) <= new Date()
+        : false;
+    const isConnected = hasToken && !isExpired;
 
     return {
         isConnected,
+        isExpired,
         expiresAt: data.fortnox_token_expires_at,
-        clientId: data.fortnox_client_id,
+    };
+}
+
+// Client credentials (FORTNOX_CLIENT_ID / FORTNOX_CLIENT_SECRET) are app-level env
+// vars on the server. They are NOT stored per-organisation in the database.
+
+/**
+ * Get Fortnox OAuth URL
+ * Uses VITE_FORTNOX_CLIENT_ID from environment — the client ID is an app-level
+ * credential, not per-organisation.
+ */
+export function getFortnoxAuthUrl(
+    redirectUri: string,
+    organisationId: string
+): string {
+    const clientId = import.meta.env.VITE_FORTNOX_CLIENT_ID;
+    if (!clientId) {
+        throw new Error('VITE_FORTNOX_CLIENT_ID is not configured');
+    }
+
+    const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        scope: 'invoice customer companyinformation',
+        state: organisationId,
+        access_type: 'offline',
+        response_type: 'code',
+    });
+
+    return `https://apps.fortnox.se/oauth-v1/auth?${params.toString()}`;
+}
+
+/**
+ * Initiate Fortnox OAuth connection — navigates to Fortnox auth page
+ */
+export function connectFortnox(
+    organisationId: string,
+    redirectUri: string
+): void {
+    const authUrl = getFortnoxAuthUrl(redirectUri, organisationId);
+    window.location.href = authUrl;
+}
+
+/**
+ * Exchange OAuth authorization code for tokens via the fortnox-api Edge Function
+ */
+export async function exchangeFortnoxCode(
+    organisationId: string,
+    code: string,
+    redirectUri: string
+): Promise<{ success: boolean; error?: string }> {
+    try {
+        const { data, error } = await supabase.functions.invoke('fortnox-api', {
+            body: {
+                action: 'auth',
+                organisation_id: organisationId,
+                code,
+                redirect_uri: redirectUri,
+            },
+        });
+
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return data;
+    } catch (err) {
+        return { success: false, error: (err as Error).message };
+    }
+}
+
+/**
+ * Test the Fortnox connection by fetching company information
+ */
+export async function testFortnoxConnection(
+    organisationId: string
+): Promise<{ success: boolean; companyName?: string; error?: string }> {
+    const result = await fortnoxApiRequest<{ CompanyInformation: { CompanyName: string } }>(
+        organisationId,
+        'GET',
+        '/companyinformation'
+    );
+
+    if (!result.success) {
+        return { success: false, error: result.error };
+    }
+
+    return {
+        success: true,
+        companyName: result.data?.CompanyInformation?.CompanyName,
     };
 }
 
 /**
- * Save Fortnox client credentials (Client ID and Secret)
+ * Sync invoices TO Fortnox via the sync-fortnox Edge Function
  */
-export async function saveFortnoxCredentials(
+export async function syncInvoicesToFortnox(
     organisationId: string,
-    clientId: string,
-    clientSecret: string
-): Promise<{ success: boolean; error?: string }> {
-    const { error } = await supabase
-        .from('organisations')
-        .update({
-            fortnox_client_id: clientId,
-            fortnox_client_secret: clientSecret,
-        })
-        .eq('id', organisationId);
+    ids?: string[]
+): Promise<{ success: number; failed: number; errors: string[] }> {
+    try {
+        const { data, error } = await supabase.functions.invoke('sync-fortnox', {
+            body: {
+                action: 'sync-invoices',
+                organisation_id: organisationId,
+                ...(ids && ids.length > 0 ? { ids } : {}),
+            },
+        });
 
-    if (error) {
-        return { success: false, error: error.message };
+        if (error) {
+            return { success: 0, failed: 0, errors: [error.message] };
+        }
+
+        return {
+            success: data?.success || 0,
+            failed: data?.failed || 0,
+            errors: data?.errors || [],
+        };
+    } catch (err) {
+        return { success: 0, failed: 0, errors: [(err as Error).message] };
     }
-
-    return { success: true };
 }
 
 /**
- * Get Fortnox OAuth URL
+ * Sync invoice statuses FROM Fortnox via the sync-from-fortnox Edge Function
  */
-export function getFortnoxAuthUrl(clientId: string, redirectUri: string): string {
-    const scopes = 'invoice customer article';
-    const encodedScopes = encodeURIComponent(scopes);
-    const encodedRedirect = encodeURIComponent(redirectUri);
+export async function syncInvoicesFromFortnox(
+    organisationId: string
+): Promise<{ success: number; failed: number; errors: string[] }> {
+    try {
+        const { data, error } = await supabase.functions.invoke('sync-from-fortnox', {
+            body: {
+                organisation_id: organisationId,
+            },
+        });
 
-    return `https://apps.fortnox.se/oauth-v1/auth?client_id=${clientId}&response_type=code&scope=${encodedScopes}&redirect_uri=${encodedRedirect}&state=fortnox_auth`;
+        if (error) {
+            return { success: 0, failed: 0, errors: [error.message] };
+        }
+
+        return {
+            success: data?.success || 0,
+            failed: data?.failed || 0,
+            errors: data?.errors || [],
+        };
+    } catch (err) {
+        return { success: 0, failed: 0, errors: [(err as Error).message] };
+    }
 }
 
 /**

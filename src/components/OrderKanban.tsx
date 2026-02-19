@@ -21,7 +21,9 @@ import {
   Star,
   Crown,
   Briefcase,
-  Loader2
+  Loader2,
+  Edit,
+  Send
 } from 'lucide-react';
 import { Button } from './ui';
 import { useAuth } from '../contexts/AuthContext';
@@ -71,7 +73,7 @@ import { acceptQuoteAndCreateOrder } from '../lib/quotes';
 import { useTranslation } from '../locales/sv';
 import { useKanbanData } from '../hooks/useKanbanData';
 import { useMoveCard } from '../hooks/useMoveCard';
-import { KanbanCard } from './kanban';
+
 import { SkeletonColumn } from './ui';
 import QuoteCreationModal from './QuoteCreationModal';
 import QuoteDetailModal from './QuoteDetailModal';
@@ -119,6 +121,200 @@ const getInitialEditFormData = (order: OrderWithRelations | null) => {
     rot_amount: order.rot_amount || 0
   };
 };
+
+// ====== COMPACT KANBAN ROW COMPONENTS ====== //
+
+const OrderKanbanRow = ({
+  order, borderColor, onDragStart, onClick, onEdit, onDelete,
+}: {
+  order: OrderWithRelations;
+  borderColor: string;
+  onDragStart: (e: React.DragEvent) => void;
+  onClick: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) => (
+  <div
+    className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+    style={{ borderLeft: `3px solid ${borderColor}` }}
+    draggable
+    onDragStart={onDragStart}
+    onClick={onClick}
+  >
+    {/* Row 1: Title + Value */}
+    <div className="flex items-start justify-between gap-2">
+      <p className="text-sm font-medium text-gray-900 truncate leading-tight">{order.title}</p>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {order.value ? (
+          <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+            {formatCurrency(order.value)}
+          </span>
+        ) : null}
+        <button
+          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-blue-600 transition-all"
+          onClick={(e: React.MouseEvent) => { e.stopPropagation(); onEdit(); }}
+          title="Redigera"
+        >
+          <Edit className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+    {/* Row 2: Customer */}
+    {order.customer && (
+      <p className="text-xs text-gray-500 truncate">{order.customer.name}</p>
+    )}
+    {/* Row 3: Metadata chips */}
+    <div className="flex items-center gap-2 flex-wrap">
+      {order.job_type && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+          <Briefcase className="w-3 h-3" />
+          {JOB_TYPE_LABELS[order.job_type as keyof typeof JOB_TYPE_LABELS] ?? order.job_type}
+        </span>
+      )}
+      {order.assigned_to && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+          <User className="w-3 h-3" />
+          {order.assigned_to.full_name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || '?'}
+        </span>
+      )}
+      {order.assigned_team && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+          <Users2 className="w-3 h-3" />
+          {order.assigned_team.name}
+        </span>
+      )}
+      {order.created_at && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto">
+          <Calendar className="w-3 h-3" />
+          {formatDate(order.created_at)}
+        </span>
+      )}
+    </div>
+  </div>
+);
+
+const LeadKanbanRow = ({
+  lead, borderColor, onDragStart, onClick, onCreateQuote,
+}: {
+  lead: LeadWithRelations;
+  borderColor: string;
+  onDragStart: (e: React.DragEvent) => void;
+  onClick: () => void;
+  onCreateQuote: () => void;
+}) => (
+  <div
+    className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+    style={{ borderLeft: `3px solid ${borderColor}` }}
+    draggable
+    onDragStart={onDragStart}
+    onClick={onClick}
+  >
+    {/* Row 1: Title + Value */}
+    <div className="flex items-start justify-between gap-2">
+      <p className="text-sm font-medium text-gray-900 truncate leading-tight">{lead.title}</p>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {lead.estimated_value ? (
+          <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+            {formatCurrency(lead.estimated_value)}
+          </span>
+        ) : null}
+        <button
+          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-blue-600 transition-all"
+          onClick={(e: React.MouseEvent) => { e.stopPropagation(); onCreateQuote(); }}
+          title="Skapa offert"
+        >
+          <Send className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+    {/* Row 2: Customer */}
+    {lead.customer && (
+      <p className="text-xs text-gray-500 truncate">{lead.customer.name}</p>
+    )}
+    {/* Row 3: Metadata chips */}
+    <div className="flex items-center gap-2 flex-wrap">
+      {lead.source && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[100px]">
+          <Activity className="w-3 h-3 flex-shrink-0" />
+          {lead.source}
+        </span>
+      )}
+      {lead.assigned_to && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+          <User className="w-3 h-3" />
+          {lead.assigned_to.full_name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || '?'}
+        </span>
+      )}
+      {typeof lead.lead_score === 'number' && (
+        <span className={`inline-flex items-center gap-1 text-xs font-semibold rounded px-1.5 py-0.5 ${lead.lead_score >= 70 ? 'bg-green-100 text-green-700' :
+            lead.lead_score >= 40 ? 'bg-amber-100 text-amber-700' :
+              'bg-gray-100 text-gray-500'
+          }`}>
+          <Star className="w-3 h-3" />
+          {lead.lead_score}
+        </span>
+      )}
+      {lead.last_activity_at && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto">
+          <Clock className="w-3 h-3" />
+          {formatDate(lead.last_activity_at)}
+        </span>
+      )}
+    </div>
+  </div>
+);
+
+const QuoteKanbanRow = ({
+  quote, borderColor, onDragStart, onClick,
+}: {
+  quote: QuoteWithRelations;
+  borderColor: string;
+  onDragStart: (e: React.DragEvent) => void;
+  onClick: () => void;
+}) => (
+  <div
+    className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+    style={{ borderLeft: `3px solid ${borderColor}` }}
+    draggable
+    onDragStart={onDragStart}
+    onClick={onClick}
+  >
+    {/* Row 1: Title + Amount */}
+    <div className="flex items-start justify-between gap-2">
+      <p className="text-sm font-medium text-gray-900 truncate leading-tight">{quote.title}</p>
+      {quote.total_amount ? (
+        <span className="text-xs font-semibold text-gray-700 whitespace-nowrap flex-shrink-0">
+          {formatCurrency(quote.total_amount)}
+        </span>
+      ) : null}
+    </div>
+    {/* Row 2: Customer */}
+    {quote.customer && (
+      <p className="text-xs text-gray-500 truncate">{quote.customer.name}</p>
+    )}
+    {/* Row 3: Metadata chips */}
+    <div className="flex items-center gap-2 flex-wrap">
+      {quote.line_items && quote.line_items.length > 0 && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+          <Package className="w-3 h-3" />
+          {quote.line_items.length} {quote.line_items.length === 1 ? 'rad' : 'rader'}
+        </span>
+      )}
+      {quote.lead && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-blue-50 text-blue-600 rounded px-1.5 py-0.5">
+          <Target className="w-3 h-3" />
+          Lead
+        </span>
+      )}
+      {(quote as any).created_at && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto">
+          <Calendar className="w-3 h-3" />
+          {formatDate((quote as any).created_at)}
+        </span>
+      )}
+    </div>
+  </div>
+);
 
 function OrderKanban() {
   const { user, organisationId } = useAuth();
@@ -235,6 +431,16 @@ function OrderKanban() {
     { status: 'redo_fakturera', title: kanban.COLUMNS.READY_TO_INVOICE, bgColor: 'bg-slate-50', headerColor: 'bg-indigo-600', badgeColor: 'bg-indigo-100 text-indigo-800', type: 'order', navigateTo: '/app/fakturor' },
     { status: 'avbokad_kund', title: kanban.COLUMNS.CANCELLED, bgColor: 'bg-slate-50', headerColor: 'bg-rose-600', badgeColor: 'bg-rose-100 text-rose-800', type: 'order', navigateTo: '/app/Orderhantering' }
   ];
+
+  const COLUMN_BORDER_COLORS: Record<string, string> = {
+    'bg-emerald-600': '#16a34a',
+    'bg-amber-500': '#f59e0b',
+    'bg-blue-600': '#2563eb',
+    'bg-teal-600': '#0d9488',
+    'bg-orange-500': '#f97316',
+    'bg-indigo-600': '#4f46e5',
+    'bg-rose-600': '#e11d48',
+  };
 
   // Removed manual useEffect for data fetching - now handled by useKanbanData hook
 
@@ -804,7 +1010,7 @@ function OrderKanban() {
 
               {/* Column Content */}
               <div className="p-3">
-                <div className="space-y-2.5">
+                <div className="space-y-1.5">
                   {items.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                       <Package className="w-8 h-8 mx-auto mb-2 text-gray-400" />
@@ -825,10 +1031,10 @@ function OrderKanban() {
                       <>
                         {/* Render Leads */}
                         {visibleLeads.map((lead) => (
-                          <KanbanCard
+                          <LeadKanbanRow
                             key={lead.id}
-                            type="lead"
-                            data={lead}
+                            lead={lead}
+                            borderColor={COLUMN_BORDER_COLORS[column.headerColor] || '#6b7280'}
                             onDragStart={(e) => handleDragStart(e, lead, 'lead')}
                             onClick={() => {
                               setSelectedLead(lead);
@@ -840,10 +1046,10 @@ function OrderKanban() {
 
                         {/* Render Quotes */}
                         {visibleQuotes.map((quote) => (
-                          <KanbanCard
+                          <QuoteKanbanRow
                             key={quote.id}
-                            type="quote"
-                            data={quote}
+                            quote={quote}
+                            borderColor={COLUMN_BORDER_COLORS[column.headerColor] || '#6b7280'}
                             onDragStart={(e) => handleDragStart(e, quote, 'quote')}
                             onClick={() => {
                               setSelectedQuote(quote);
@@ -854,10 +1060,10 @@ function OrderKanban() {
 
                         {/* Render Orders */}
                         {visibleOrders.map((order) => (
-                          <KanbanCard
+                          <OrderKanbanRow
                             key={order.id}
-                            type="order"
-                            data={order}
+                            order={order}
+                            borderColor={COLUMN_BORDER_COLORS[column.headerColor] || '#6b7280'}
                             onDragStart={(e) => handleDragStart(e, order, 'order')}
                             onClick={() => handleOrderClick(order)}
                             onEdit={() => {
