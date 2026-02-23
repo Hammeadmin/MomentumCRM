@@ -131,8 +131,10 @@ export default function CreateEditInvoiceModal({
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <form
+                noValidate
                 onSubmit={(e: React.FormEvent) => {
                     e.preventDefault();
+                    console.log('Form submission triggered!');
                     onSubmit();
                 }}
                 className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto flex flex-col"

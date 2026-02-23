@@ -41,6 +41,7 @@ interface UseInvoiceActionsDeps {
     editingInvoice: InvoiceWithRelations | null;
     setEditingInvoice: React.Dispatch<React.SetStateAction<InvoiceWithRelations | null>>;
     setShowUnifiedModal: React.Dispatch<React.SetStateAction<boolean>>;
+    activeTab: 'invoices' | 'ready-to-invoice' | 'credit_notes' | string;
     setActiveTab: React.Dispatch<React.SetStateAction<'invoices' | 'ready-to-invoice' | 'credit_notes'>>;
     invoiceToDelete: InvoiceWithRelations | null;
     setShowDeleteDialog: React.Dispatch<React.SetStateAction<boolean>>;
@@ -54,9 +55,6 @@ interface UseInvoiceActionsDeps {
     preInvoiceAssignmentType: 'individual' | 'team';
     preInvoiceAssignedToUserId: string | null;
     preInvoiceAssignedToTeamId: string | null;
-    detailsAssignmentType: 'individual' | 'team';
-    detailsAssignedToUserId: string | null;
-    detailsAssignedToTeamId: string | null;
     isManualCustomer: boolean;
     manualCustomerForm: ReturnType<typeof useInvoiceForm>['manualCustomerForm'];
     calculateTotal: (items: LineItem[]) => number;
@@ -85,6 +83,7 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
         editingInvoice,
         setEditingInvoice,
         setShowUnifiedModal,
+        activeTab,
         setActiveTab,
         invoiceToDelete,
         setShowDeleteDialog,
@@ -98,9 +97,6 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
         preInvoiceAssignmentType,
         preInvoiceAssignedToUserId,
         preInvoiceAssignedToTeamId,
-        detailsAssignmentType,
-        detailsAssignedToUserId,
-        detailsAssignedToTeamId,
         isManualCustomer,
         manualCustomerForm,
         calculateTotal,
@@ -115,23 +111,28 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
     // ── Create Invoice ────────────────────────────────────────────────────────────
 
     const handleCreateInvoice = async () => {
+        console.log('A. handleCreateInvoice triggered');
         if ((!isManualCustomer && !formData.customer_id) || (isManualCustomer && !manualCustomerForm.name)) {
+            console.log('B. Aborting: No customer ID or manual name');
             showError('Fel', 'Kund (eller namn för manuell kund) är obligatoriskt.');
             return;
         }
 
         if (!formData.line_items[0]?.description) {
+            console.log('C. Aborting: No line items description');
             showError('Fel', 'Minst en fakturarad med beskrivning är obligatoriskt.');
             return;
         }
 
         try {
+            console.log('D. Setting loading state for create');
             setFormLoading(true);
 
             let finalCustomerId = formData.customer_id;
 
             if (isManualCustomer) {
                 try {
+                    console.log('E. Handling manual customer creation');
                     const { checkDuplicateCustomer, searchCustomers, createCustomer } = await import('../lib/database');
                     const duplicateCheck = await checkDuplicateCustomer(organisationId, manualCustomerForm.email, manualCustomerForm.name);
 
@@ -193,7 +194,7 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 ocr_number: ocrNumber,
             };
 
-            const result = await createInvoice(invoiceData, formData.line_items);
+            const result = await createInvoice(invoiceData, formData.line_items, user?.id);
 
             if (result.error) {
                 showError('Fel', result.error.message);
@@ -266,38 +267,73 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
 
     // ── Create Invoice From Order ─────────────────────────────────────────────────
 
-    const handleCreateInvoiceFromOrder = async (
-        order: OrderWithRelations,
-        workSummaryArg?: string,
-        assignmentUpdates?: {
-            assignment_type: 'individual' | 'team';
-            assigned_to_user_id: string | null;
-            assigned_to_team_id: string | null;
-        },
-        currentRotState?: {
-            include_rot: boolean;
-            rot_personnummer: unknown;
-            rot_organisationsnummer: unknown;
-            rot_fastighetsbeteckning: unknown;
-            rot_amount: unknown;
+    const handleCreateInvoiceFromOrder = async (orderArg?: OrderWithRelations) => {
+        const order = orderArg || selectedOrder;
+        if (!order) {
+            showError('Fel', 'Ingen order vald.');
+            return;
         }
-    ) => {
+
         if (!order.customer) {
             showError('Fel', 'Order saknar kundinformation.');
-            return;
+            throw new Error('Order saknar kundinformation.');
         }
 
         try {
             setFormLoading(true);
 
-            const lineItemsFromOrder = [
-                {
-                    description: order.job_description || order.title || 'Utförd tjänst enligt order',
-                    quantity: 1,
-                    unit_price: order.value || 0,
-                    total: order.value || 0,
-                },
-            ];
+            let currentRotState;
+            if (activeTab === 'orders' && !orderArg) {
+                currentRotState = {
+                    include_rot: formData.include_rot,
+                    rot_personnummer: formData.rot_personnummer,
+                    rot_organisationsnummer: formData.rot_organisationsnummer,
+                    rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
+                    rot_amount: formData.rot_amount,
+                };
+            }
+
+            const assignmentUpdates =
+                preInvoiceAssignmentType ||
+                    preInvoiceAssignedToUserId ||
+                    preInvoiceAssignedToTeamId
+                    ? {
+                        assignment_type: preInvoiceAssignmentType,
+                        assigned_to_user_id: preInvoiceAssignmentType === 'individual' ? preInvoiceAssignedToUserId : null,
+                        assigned_to_team_id: preInvoiceAssignmentType === 'team' ? preInvoiceAssignedToTeamId : null,
+                    }
+                    : undefined;
+
+            if (assignmentUpdates) {
+                const updateResult = await updateOrderInDb(order.id, assignmentUpdates);
+                if (updateResult.error) {
+                    throw new Error(`Kunde inte uppdatera order innan fakturering: ${updateResult.error.message}`);
+                }
+            }
+
+            const workSummaryArg = activeTab === 'orders' && !orderArg ? workSummary : undefined;
+
+            // Bug Fix 2: Use quote line items if available, fallback to single generic item
+            let lineItemsFromOrder: { description: string; quantity: number; unit_price: number; total: number }[];
+
+            const actualQuote = Array.isArray(order.quote) ? order.quote[0] : order.quote;
+            if (actualQuote?.quote_line_items && actualQuote.quote_line_items.length > 0) {
+                lineItemsFromOrder = actualQuote.quote_line_items.map((item: any) => ({
+                    description: item.description || 'Artikel',
+                    quantity: item.quantity || 1,
+                    unit_price: item.unit_price || 0,
+                    total: (item.quantity || 1) * (item.unit_price || 0),
+                }));
+            } else {
+                lineItemsFromOrder = [
+                    {
+                        description: order.job_description || order.title || 'Utförd tjänst enligt order',
+                        quantity: 1,
+                        unit_price: order.value || 0,
+                        total: order.value || 0,
+                    },
+                ];
+            }
 
             const invoiceNumber = `F${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`;
             const ocrNumber = invoiceNumber.replace(/\D/g, '');
@@ -318,24 +354,23 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 assigned_user_id: assignmentUpdates?.assigned_to_user_id || order.assigned_to_user_id,
                 assigned_team_id: assignmentUpdates?.assigned_to_team_id || order.assigned_to_team_id,
                 job_description: workSummaryArg || order.job_description || order.description,
-                include_rot: currentRotState ? currentRotState.include_rot : order.include_rot,
-                rot_personnummer: currentRotState ? currentRotState.rot_personnummer : order.rot_personnummer,
-                rot_organisationsnummer: currentRotState ? currentRotState.rot_organisationsnummer : order.rot_organisationsnummer,
-                rot_fastighetsbeteckning: currentRotState ? currentRotState.rot_fastighetsbeteckning : order.rot_fastighetsbeteckning,
-                rot_amount: currentRotState ? currentRotState.rot_amount : order.rot_amount,
+                include_rot: currentRotState ? (currentRotState.include_rot as boolean) : order.include_rot,
+                rot_personnummer: currentRotState ? (currentRotState.rot_personnummer as string | null) : order.rot_personnummer,
+                rot_organisationsnummer: currentRotState ? (currentRotState.rot_organisationsnummer as string | null) : order.rot_organisationsnummer,
+                rot_fastighetsbeteckning: currentRotState ? (currentRotState.rot_fastighetsbeteckning as string | null) : order.rot_fastighetsbeteckning,
+                rot_amount: currentRotState ? (currentRotState.rot_amount as number) : order.rot_amount,
             };
 
-            const result = await createInvoice(invoiceData, lineItemsFromOrder);
+            const result = await createInvoice(invoiceData, lineItemsFromOrder, user?.id);
 
             if (result.error) {
-                showError('Fel', result.error.message);
-                return;
+                throw new Error(result.error.message);
             }
 
             showSuccess('Framgång', `Faktura ${invoiceNumber} skapad från order "${order.title}"!`);
             setActiveTab('invoices');
         } catch (err) {
-            showError('Fel', 'Ett oväntat fel inträffade vid skapande av faktura.');
+            showError('Fel', err instanceof Error ? err.message : 'Ett oväntat fel inträffade vid skapande av faktura.');
             throw err;
         } finally {
             setFormLoading(false);
@@ -345,7 +380,9 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
     // ── Save Pre-Invoice Changes & Create Invoice ─────────────────────────────────
 
     const handleSavePreInvoiceChangesAndCreateInvoice = async () => {
-        if (!selectedOrder) return;
+        if (!selectedOrder) {
+            return;
+        }
         try {
             for (const key in attachmentsToInclude) {
                 const [type, id] = key.split('_');
@@ -371,10 +408,49 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 return;
             }
 
-            await handleCreateInvoiceFromOrder(selectedOrder, workSummary, assignmentUpdates, formData);
+            // Bug Fix 1: Use formData.line_items from the modal instead of hardcoding from selectedOrder.value
+            const lineItems = formData.line_items.filter(item => item.description);
+            if (lineItems.length === 0) {
+                showError('Fel', 'Minst en fakturarad med beskrivning är obligatoriskt.');
+                return;
+            }
+
+            const invoiceNumber = `F${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`;
+            const ocrNumber = invoiceNumber.replace(/\D/g, '');
+
+            const invoiceData = {
+                organisation_id: organisationId,
+                invoice_number: invoiceNumber,
+                customer_id: formData.customer_id || selectedOrder.customer_id,
+                amount: calculateTotal(lineItems),
+                due_date: formData.due_date || new Date(Date.now() + (systemSettings?.default_payment_terms || 30) * 86400000).toISOString().split('T')[0],
+                order_id: selectedOrder.id,
+                status: 'draft' as InvoiceStatus,
+                ocr_number: ocrNumber,
+                assignment_type: assignmentUpdates.assignment_type,
+                assigned_user_id: assignmentUpdates.assigned_to_user_id,
+                assigned_team_id: assignmentUpdates.assigned_to_team_id,
+                job_description: workSummary,
+                include_rot: formData.include_rot,
+                rot_personnummer: formData.rot_personnummer,
+                rot_organisationsnummer: formData.rot_organisationsnummer,
+                rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
+                rot_amount: formData.rot_amount,
+            };
+
+            const result = await createInvoice(invoiceData, lineItems, user?.id);
+
+            if (result.error) {
+                showError('Fel', result.error.message);
+                return;
+            }
+
+            showSuccess('Framgång', `Faktura ${invoiceNumber} skapad!`);
             setShowUnifiedModal(false);
             setSelectedOrder(null);
-        } catch {
+            setActiveTab('invoices');
+            await loadData();
+        } catch (err) {
             showError('Fel', 'Ett oväntat fel inträffade.');
         } finally {
             setFormLoading(false);
@@ -384,13 +460,16 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
     // ── Bulk Create Invoices ──────────────────────────────────────────────────────
 
     const handleBulkCreateInvoices = async () => {
+        console.log('Bulk creation triggered. Orders selected:', selectedOrders.length);
         if (selectedOrders.length === 0) {
             showError('Fel', 'Välj minst en order för att skapa fakturor.');
             return;
         }
         if (!confirm(`Är du säker på att du vill skapa ${selectedOrders.length} fakturor?`)) {
+            console.log('Bulk creation cancelled by user confirm dialog');
             return;
         }
+        console.log('Bulk creation confirmed by user');
         try {
             setBulkProcessing(true);
             let successCount = 0;
@@ -508,13 +587,17 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
 
     // ── Save Assignment ───────────────────────────────────────────────────────────
 
-    const handleSaveAssignment = async () => {
+    const handleSaveAssignment = async (
+        assignmentType: 'individual' | 'team',
+        userId: string | null,
+        teamId: string | null
+    ) => {
         if (!selectedInvoice) return;
 
         const updates = {
-            assignment_type: detailsAssignmentType,
-            assigned_user_id: detailsAssignmentType === 'individual' ? detailsAssignedToUserId : null,
-            assigned_team_id: detailsAssignmentType === 'team' ? detailsAssignedToTeamId : null,
+            assignment_type: assignmentType,
+            assigned_user_id: assignmentType === 'individual' ? userId : null,
+            assigned_team_id: assignmentType === 'team' ? teamId : null,
         };
 
         try {
@@ -533,8 +616,8 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                     ? {
                         ...prev,
                         ...updates,
-                        assigned_user: teamMembers.find((m) => m.id === detailsAssignedToUserId),
-                        assigned_team: teams.find((t) => t.id === detailsAssignedToTeamId),
+                        assigned_user: teamMembers.find((m) => m.id === userId),
+                        assigned_team: teams.find((t) => t.id === teamId),
                     }
                     : null
             );
@@ -590,7 +673,7 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
     /**
      * Sync a single invoice to Fortnox
      */
-    const handleSyncToFortnox = async (invoiceId: string) => {
+    const handleSyncSingleToFortnox = async (invoiceId: string) => {
         try {
             if (!organisationId) {
                 showError('Fel', 'Organisation saknas');
@@ -698,7 +781,7 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
         handleMarkAsPaid,
         handleSaveAssignment,
         handleManualSigning,
-        handleSyncToFortnox,
+        handleSyncSingleToFortnox,
         handleSyncAllToFortnox,
         handleSyncFromFortnox,
     };

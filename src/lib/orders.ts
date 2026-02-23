@@ -161,12 +161,12 @@ export const getMoreOrdersByStatus = async (
   }
 };
 
-// Helper function to process order data consistently
 const processOrderData = (order: any): OrderWithRelations => {
   let calculatedValue = order.order_value;
   // Calculate value from the quote's line items if order_value is missing
   if (calculatedValue === null || calculatedValue === undefined) {
-    calculatedValue = order.quote?.quote_line_items?.reduce((sum: number, item: any) => {
+    const actualQuote = Array.isArray(order.quote) ? order.quote[0] : order.quote;
+    calculatedValue = actualQuote?.quote_line_items?.reduce((sum: number, item: any) => {
       return sum + ((item.quantity || 0) * (item.unit_price || 0));
     }, 0) || 0;
   }

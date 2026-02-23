@@ -113,6 +113,8 @@ export interface Organisation {
   logo_url?: string | null;
   bank_account?: string | null; // Using this instead of IBAN
   bank_name?: string | null;
+  iban?: string | null;
+  bic?: string | null;
   vat_number?: string | null;
   description?: string | null;
 

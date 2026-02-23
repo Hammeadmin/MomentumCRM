@@ -10,6 +10,7 @@ import {
 import {
     createQuote,
     updateQuote,
+    createCustomer,
     formatCurrency
 } from '../lib/database';
 import { useToast } from '../hooks/useToast';
@@ -76,6 +77,17 @@ export default function QuoteEditModal({
     const [showProductLibrary, setShowProductLibrary] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<QuoteTemplate | null>(null);
 
+    const [isManualCustomer, setIsManualCustomer] = useState(false);
+    const [manualCustomerForm, setManualCustomerForm] = useState({
+        name: '',
+        email: '',
+        org_number: '',
+        customer_type: 'company' as 'company' | 'private',
+        address: '',
+        postal_code: '',
+        city: ''
+    });
+
     const [quoteForm, setQuoteForm] = useState<QuoteFormData>({
         customer_id: '',
         lead_id: '',
@@ -135,7 +147,7 @@ export default function QuoteEditModal({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!quoteForm.customer_id || !quoteForm.title) {
+        if ((!isManualCustomer && !quoteForm.customer_id) || (isManualCustomer && !manualCustomerForm.name) || !quoteForm.title) {
             setError('Kund och titel är obligatoriska fält.');
             return;
         }
@@ -144,8 +156,26 @@ export default function QuoteEditModal({
             setIsSubmitting(true);
             setError(null);
 
+            let finalCustomerId = quoteForm.customer_id;
+
+            if (isManualCustomer) {
+                const { data: newCustomer, error: customerError } = await createCustomer({
+                    organisation_id: organisationId,
+                    ...manualCustomerForm
+                } as Omit<Customer, 'id' | 'created_at'>);
+
+                if (customerError) {
+                    setError(`Kunde inte skapa kund: ${customerError.message}`);
+                    setIsSubmitting(false);
+                    return;
+                }
+                if (newCustomer) {
+                    finalCustomerId = newCustomer.id;
+                }
+            }
+
             const commonData = {
-                customer_id: quoteForm.customer_id,
+                customer_id: finalCustomerId,
                 lead_id: quoteForm.lead_id || null,
                 title: quoteForm.title,
                 description: quoteForm.description || null,
@@ -157,9 +187,13 @@ export default function QuoteEditModal({
                 rot_amount: quoteForm.rot_amount
             };
 
-            const lineItems = quoteForm.line_items.filter(item =>
-                item.description.trim() && item.quantity > 0 && item.unit_price >= 0
-            );
+            const lineItems = quoteForm.line_items
+                .filter(item => item.description.trim() && item.quantity > 0 && item.unit_price >= 0)
+                .map((item, index) => ({
+                    ...item,
+                    total: item.quantity * item.unit_price,
+                    sort_order: index
+                }));
 
             let result;
             if (quote) {
@@ -331,22 +365,71 @@ export default function QuoteEditModal({
                     {/* Basic Information */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Kund *
-                            </label>
-                            <select
-                                required
-                                value={quoteForm.customer_id}
-                                onChange={(e) => setQuoteForm(prev => ({ ...prev, customer_id: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                            >
-                                <option value="">Välj kund</option>
-                                {customers.map((customer) => (
-                                    <option key={customer.id} value={customer.id}>
-                                        {customer.name}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="flex items-center justify-between mb-1">
+                                <label className="block text-sm font-medium text-gray-700">Kund *</label>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsManualCustomer(!isManualCustomer);
+                                        if (!isManualCustomer) {
+                                            setQuoteForm(prev => ({ ...prev, customer_id: '' }));
+                                        }
+                                    }}
+                                    className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                                >
+                                    {isManualCustomer ? 'Välj befintlig kund' : 'Ny kund (Manuell)'}
+                                </button>
+                            </div>
+                            {isManualCustomer ? (
+                                <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    <input
+                                        type="text"
+                                        required
+                                        value={manualCustomerForm.name}
+                                        onChange={e => setManualCustomerForm(prev => ({ ...prev, name: e.target.value }))}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                                        placeholder="Kundnamn *"
+                                    />
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <select
+                                            value={manualCustomerForm.customer_type}
+                                            onChange={e => setManualCustomerForm(prev => ({ ...prev, customer_type: e.target.value as 'company' | 'private' }))}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                                        >
+                                            <option value="company">Företag</option>
+                                            <option value="private">Privatperson</option>
+                                        </select>
+                                        <input
+                                            type="text"
+                                            value={manualCustomerForm.org_number}
+                                            onChange={e => setManualCustomerForm(prev => ({ ...prev, org_number: e.target.value }))}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                                            placeholder={manualCustomerForm.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}
+                                        />
+                                    </div>
+                                    <input
+                                        type="email"
+                                        value={manualCustomerForm.email}
+                                        onChange={e => setManualCustomerForm(prev => ({ ...prev, email: e.target.value }))}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                                        placeholder="E-post"
+                                    />
+                                </div>
+                            ) : (
+                                <select
+                                    required={!isManualCustomer}
+                                    value={quoteForm.customer_id}
+                                    onChange={(e) => setQuoteForm(prev => ({ ...prev, customer_id: e.target.value }))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                    <option value="">Välj kund</option>
+                                    {customers.map((customer) => (
+                                        <option key={customer.id} value={customer.id}>
+                                            {customer.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
                         </div>
 
                         <div>
@@ -444,7 +527,11 @@ export default function QuoteEditModal({
                                     rot_amount: quoteForm.rot_amount,
                                 }}
                                 onChange={(rotData) =>
-                                    setQuoteForm(prev => ({ ...prev, ...rotData }))
+                                    setQuoteForm(prev => ({
+                                        ...prev,
+                                        ...rotData,
+                                        rot_amount: rotData.rot_amount || 0
+                                    }))
                                 }
                                 totalAmount={calculateTotal()}
                             />

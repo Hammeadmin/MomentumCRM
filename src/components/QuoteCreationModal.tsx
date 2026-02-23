@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import { X, FileText, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
-import { createQuote, updateLead } from '../lib/database';
+import { createQuote, updateLead, createCustomer } from '../lib/database';
 import LineItemsEditor, { type LineItem } from './LineItemsEditor';
 import type { LeadWithRelations } from '../lib/leads';
 
@@ -44,6 +44,16 @@ export function QuoteCreationModal({
         valid_days: 30
     });
 
+    const [manualCustomerForm, setManualCustomerForm] = useState({
+        name: '',
+        email: '',
+        org_number: '',
+        customer_type: 'company' as 'company' | 'private',
+        address: '',
+        postal_code: '',
+        city: ''
+    });
+
     // Initialize form with lead data
     useEffect(() => {
         if (isOpen && lead) {
@@ -70,8 +80,8 @@ export function QuoteCreationModal({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!lead.customer_id) {
-            showError('Fel', 'Lead har ingen kopplad kund. En kund krävs för att skapa offert.');
+        if (!lead.customer_id && !manualCustomerForm.name) {
+            showError('Fel', 'Du måste ange ett kundnamn eller ha en kopplad kund för att skapa offert.');
             return;
         }
 
@@ -83,6 +93,22 @@ export function QuoteCreationModal({
         setLoading(true);
 
         try {
+            let customerId = lead.customer_id;
+
+            if (!customerId) {
+                const { data: newCustomer, error: customerError } = await createCustomer({
+                    organisation_id: organisationId!,
+                    ...manualCustomerForm
+                } as any);
+
+                if (customerError || !newCustomer) {
+                    throw new Error(`Kunde inte skapa kund: ${customerError?.message || 'Okänt fel'}`);
+                }
+
+                customerId = newCustomer.id;
+                await updateLead(lead.id, { customer_id: customerId });
+            }
+
             // Calculate valid until date
             const validUntil = new Date();
             validUntil.setDate(validUntil.getDate() + formData.valid_days);
@@ -100,7 +126,7 @@ export function QuoteCreationModal({
             const { error } = await createQuote(
                 {
                     organisation_id: organisationId!,
-                    customer_id: lead.customer_id,
+                    customer_id: customerId,
                     lead_id: lead.id,
                     title: formData.title,
                     description: formData.description || null,
@@ -160,15 +186,52 @@ export function QuoteCreationModal({
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
                     {/* Warning if no customer */}
                     {!lead.customer_id && (
-                        <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5" />
-                            <div>
-                                <p className="font-medium text-amber-800 dark:text-amber-300">
-                                    Ingen kund kopplad
-                                </p>
-                                <p className="text-sm text-amber-700 dark:text-amber-400">
-                                    En kund måste kopplas till leadet innan en offert kan skapas.
-                                </p>
+                        <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                            <div className="flex items-start gap-3 mb-4">
+                                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+                                <div>
+                                    <p className="font-medium text-amber-800 dark:text-amber-300">
+                                        Ingen kund kopplad
+                                    </p>
+                                    <p className="text-sm text-amber-700 dark:text-amber-400">
+                                        Skapa en ny kund för detta lead nedan för att kunna skapa offerten.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700">
+                                <input
+                                    type="text"
+                                    required
+                                    value={manualCustomerForm.name}
+                                    onChange={e => setManualCustomerForm(prev => ({ ...prev, name: e.target.value }))}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    placeholder="Kundnamn *"
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                    <select
+                                        value={manualCustomerForm.customer_type}
+                                        onChange={e => setManualCustomerForm(prev => ({ ...prev, customer_type: e.target.value as 'company' | 'private' }))}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    >
+                                        <option value="company">Företag</option>
+                                        <option value="private">Privatperson</option>
+                                    </select>
+                                    <input
+                                        type="text"
+                                        value={manualCustomerForm.org_number}
+                                        onChange={e => setManualCustomerForm(prev => ({ ...prev, org_number: e.target.value }))}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        placeholder={manualCustomerForm.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}
+                                    />
+                                </div>
+                                <input
+                                    type="email"
+                                    value={manualCustomerForm.email}
+                                    onChange={e => setManualCustomerForm(prev => ({ ...prev, email: e.target.value }))}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    placeholder="E-post"
+                                />
                             </div>
                         </div>
                     )}
@@ -254,7 +317,7 @@ export function QuoteCreationModal({
                         </button>
                         <button
                             type="submit"
-                            disabled={loading || !lead.customer_id || lineItems.length === 0}
+                            disabled={loading || (!lead.customer_id && !manualCustomerForm.name) || lineItems.length === 0}
                             className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? (

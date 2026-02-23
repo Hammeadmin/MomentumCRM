@@ -234,12 +234,13 @@ function InvoicePreview({
       <div className="grid grid-cols-2 gap-8 mt-8 mb-6">
         <div>
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2" style={{ color: primary_color }}>Fakturera till</h3>
-          <p className="font-bold">{invoice.customer.name}</p>
-          {invoice.customer.address && <p>{invoice.customer.address}</p>}
-          {invoice.customer.postal_code && invoice.customer.city && (
+          <p className="font-bold">{invoice.customer?.name}</p>
+          {invoice.customer?.address && <p>{invoice.customer.address}</p>}
+          {invoice.customer?.postal_code && invoice.customer?.city && (
             <p>{`${invoice.customer.postal_code} ${invoice.customer.city}`}</p>
           )}
-          <p>Sverige</p>
+          {invoice.customer?.email && <p className="mt-1 flex items-center text-gray-600"><Mail className="w-3 h-3 mr-1" /> {invoice.customer.email}</p>}
+          {invoice.customer?.phone_number && <p className="flex items-center text-gray-600"><Phone className="w-3 h-3 mr-1" /> {invoice.customer.phone_number}</p>}
         </div>
 
         <div>
@@ -304,7 +305,7 @@ function InvoicePreview({
             <div>
               <h4 className="font-semibold text-gray-800 mb-2" style={{ color: primary_color }}>Betalningsinformation</h4>
               <div className="text-sm text-gray-700 space-y-1">
-                {organisation?.bank_account && <p><strong>Bankkonto:</strong> {organisation.bank_account}</p>}
+                {organisation?.bank_account && <p><strong>Bankkonto / BG:</strong> {organisation.bank_account}</p>}
                 {organisation?.bank_name && <p><strong>Bank:</strong> {organisation.bank_name}</p>}
                 {invoice.ocr_number && <p><strong>OCR:</strong> {invoice.ocr_number}</p>}
               </div>
@@ -337,7 +338,14 @@ function InvoicePreview({
             {organisation?.org_number && <span>Org.nr: {organisation.org_number} | </span>}
             {organisation?.vat_number && <span>Momsreg.nr: {organisation.vat_number} | Godkänd för F-skatt</span>}
           </p>
-          <p>
+          {(organisation?.iban || organisation?.bic) && (
+            <p className="mt-1">
+              {organisation?.iban && <span>IBAN: {organisation.iban} </span>}
+              {organisation?.iban && organisation?.bic && <span>| </span>}
+              {organisation?.bic && <span>BIC: {organisation.bic}</span>}
+            </p>
+          )}
+          <p className="mt-1">
             {organisation?.email && <span>{organisation.email} | </span>}
             {organisation?.website && <span>{organisation.website}</span>}
           </p>

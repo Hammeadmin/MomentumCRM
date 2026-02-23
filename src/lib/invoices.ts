@@ -81,7 +81,7 @@ export const getInvoices = async (
       .from('invoices')
       .select(`
         *,
-        customer:customers(id, name, email, phone_number, city),
+        customer:customers(id, name, email, phone_number, address, postal_code, city),
         order:orders(id, title, description, job_description),
         invoice_line_items(*),
         assigned_team:teams(
@@ -182,13 +182,15 @@ export const getInvoice = async (
 
 export const createInvoice = async (
   invoice: Omit<Invoice, 'id' | 'created_at' | 'invoice_line_items'>,
-  lineItems: Omit<InvoiceLineItem, 'id' | 'invoice_id'>[]
+  lineItems: Omit<InvoiceLineItem, 'id' | 'invoice_id'>[],
+  userId?: string
 ): Promise<{ data: InvoiceWithRelations | null; error: Error | null }> => {
   try {
     // 1. Create the main invoice record
+    const invoicePayload = userId ? { ...invoice, created_by_user_id: userId } : invoice;
     const { data: newInvoice, error: invoiceError } = await supabase
       .from('invoices')
-      .insert([invoice])
+      .insert([invoicePayload])
       .select(`
         *,
         customer:customers(*),

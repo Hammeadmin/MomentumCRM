@@ -555,7 +555,7 @@ function OrderDetailModal({ order, onClose, onOpenEdit, onOpenDelete }: {
                   {lineItems.length > 0 ? (
                     lineItems.map(item => (
                       <tr key={item.id}>
-                        <td className="px-4 py-2 text-sm">{item.name || 'Ingen produkt'}</td>
+                        <td className="px-4 py-2 text-sm">{item.description || 'Ingen produkt'}</td>
                         <td className="px-4 py-2 text-sm text-right">{item.quantity}</td>
                         <td className="px-4 py-2 text-sm text-right">{formatCurrency(item.unit_price)}</td>
                         <td className="px-4 py-2 text-sm text-right font-medium">{formatCurrency((item.quantity || 0) * (item.unit_price || 0))}</td>
