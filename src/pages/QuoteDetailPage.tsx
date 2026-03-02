@@ -460,6 +460,18 @@ export default function QuoteDetailPage() {
                                     </div>
                                 </div>
                             )}
+                            {(quote as any).include_rut && (
+                                <div className="bg-purple-50 rounded-lg p-3 mt-3">
+                                    <div className="flex justify-between items-center text-purple-700">
+                                        <span className="text-sm font-medium">RUT-avdrag</span>
+                                        <span className="font-semibold">-{formatCurrency((quote as any).rut_amount || 0)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center mt-1 text-purple-800">
+                                        <span className="text-sm">Att betala</span>
+                                        <span className="font-bold">{formatCurrency((quote.total_amount || 0) - ((quote as any).rut_amount || 0))}</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -720,6 +732,20 @@ export default function QuoteDetailPage() {
                                                     <div>
                                                         <p className="text-green-600">Fastighetsbeteckning</p>
                                                         <p className="font-medium text-green-800">{quote.rot_fastighetsbeteckning}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {(quote as any).include_rut && (
+                                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                            <h4 className="text-sm font-semibold text-purple-800 mb-2">RUT-information</h4>
+                                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                                {(quote as any).rut_personnummer && (
+                                                    <div>
+                                                        <p className="text-purple-600">Personnummer</p>
+                                                        <p className="font-medium text-purple-800">{(quote as any).rut_personnummer}</p>
                                                     </div>
                                                 )}
                                             </div>

@@ -4,6 +4,7 @@ import {
     CheckSquare, Square,
 } from 'lucide-react';
 import ROTFields from '../../ROTFields';
+import RUTFields from '../../RUTFields';
 import { type InvoiceWithRelations } from '../../../lib/invoices';
 import { type OrderWithRelations, type OrderAttachment } from '../../../lib/orders';
 import { type UserProfile, TEAM_SPECIALTY_LABELS, TEAM_ROLE_LABELS, getTeamRoleColor } from '../../../types/database';
@@ -36,6 +37,10 @@ interface CreateEditInvoiceModalProps {
         rot_organisationsnummer: string | null;
         rot_fastighetsbeteckning: string | null;
         rot_amount: number;
+        // RUT fields
+        include_rut: boolean;
+        rut_personnummer: string | null;
+        rut_amount: number;
     };
     setFormData: (updater: any) => void;
     workSummary: string;
@@ -319,7 +324,29 @@ export default function CreateEditInvoiceModal({
                                         rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
                                         rot_amount: formData.rot_amount,
                                     }}
-                                    onChange={(rotData) => setFormData((prev: any) => ({ ...prev, ...rotData }))}
+                                    onChange={(rotData) => setFormData((prev: any) => ({
+                                        ...prev,
+                                        ...rotData,
+                                        // Mutual exclusion: disable RUT when ROT is enabled
+                                        ...(rotData.include_rot ? { include_rut: false, rut_personnummer: null, rut_amount: 0 } : {})
+                                    }))}
+                                    totalAmount={calculateTotal(formData.line_items)}
+                                />
+                            </div>
+
+                            <div className="border-t border-gray-200 pt-6">
+                                <RUTFields
+                                    data={{
+                                        include_rut: formData.include_rut,
+                                        rut_personnummer: formData.rut_personnummer,
+                                        rut_amount: formData.rut_amount,
+                                    }}
+                                    onChange={(rutData) => setFormData((prev: any) => ({
+                                        ...prev,
+                                        ...rutData,
+                                        // Mutual exclusion: disable ROT when RUT is enabled
+                                        ...(rutData.include_rut ? { include_rot: false, rot_personnummer: null, rot_organisationsnummer: null, rot_fastighetsbeteckning: null, rot_amount: 0 } : {})
+                                    }))}
                                     totalAmount={calculateTotal(formData.line_items)}
                                 />
                             </div>

@@ -448,6 +448,9 @@ export default function OrderDetailPage() {
                         {order.include_rot && (
                             <p className="text-sm text-green-600 mt-1">Inkl. ROT-avdrag</p>
                         )}
+                        {(order as any).include_rut && (
+                            <p className="text-sm text-purple-600 mt-1">Inkl. RUT-avdrag</p>
+                        )}
                     </div>
                 </div>
 

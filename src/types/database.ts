@@ -79,6 +79,13 @@ export interface ROTData {
   rot_amount?: number | null;
 }
 
+// RUT-related types
+export interface RUTData {
+  include_rut: boolean;
+  rut_personnummer?: string | null;
+  rut_amount?: number | null;
+}
+
 // Credit Note types
 export interface CreditNote {
   id: string;
@@ -209,6 +216,10 @@ export interface Customer {
   rot_organisationsnummer?: string | null;
   rot_fastighetsbeteckning?: string | null;
   rot_amount?: number | null;
+  // RUT fields
+  include_rut?: boolean | null;
+  rut_personnummer?: string | null;
+  rut_amount?: number | null;
   customer_type?: 'private' | 'company';
   org_number?: string | null;
   sales_area?: string | null;
@@ -306,6 +317,10 @@ export interface Quote {
   rot_organisationsnummer?: string | null;
   rot_fastighetsbeteckning?: string | null;
   rot_amount?: number | null;
+  // RUT fields
+  include_rut?: boolean | null;
+  rut_personnummer?: string | null;
+  rut_amount?: number | null;
   signed_document_url?: string | null;
   acceptance_token?: string | null;
   token_expires_at?: string | null;
@@ -374,6 +389,10 @@ export interface Invoice {
   rot_organisationsnummer?: string | null;
   rot_fastighetsbeteckning?: string | null;
   rot_amount?: number | null;
+  // RUT fields
+  include_rut?: boolean | null;
+  rut_personnummer?: string | null;
+  rut_amount?: number | null;
   signed_document_url?: string | null;
   ocr_number?: string | null;
 
@@ -458,6 +477,10 @@ export interface Order {
   rot_organisationsnummer?: string | null;
   rot_fastighetsbeteckning?: string | null;
   rot_amount?: number | null;
+  // RUT fields
+  include_rut?: boolean | null;
+  rut_personnummer?: string | null;
+  rut_amount?: number | null;
   primary_salesperson_id?: string | null;
   secondary_salesperson_id?: string | null;
   commission_split_percentage?: number | null;

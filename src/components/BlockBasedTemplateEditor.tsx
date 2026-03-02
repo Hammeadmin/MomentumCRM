@@ -11,14 +11,18 @@ import {
   Save,
   X,
   Image as ImageIcon,
-  Layout
+  Layout,
+  FileMinus,
+  LayoutTemplate,
+  Columns,
+  Star
 } from 'lucide-react';
 import { UNIT_LABELS, UNIT_DESCRIPTIONS, type QuoteLineItemTemplate } from '../lib/quoteTemplates';
 import { formatCurrency } from '../lib/database';
 
 export interface ContentBlock {
   id: string;
-  type: 'header' | 'text_block' | 'line_items_table' | 'footer' | 'image';
+  type: 'header' | 'text_block' | 'line_items_table' | 'footer' | 'image' | 'page_break' | 'cover_page' | 'split_content' | 'testimonials';
   content: any;
   settings?: any;
 }
@@ -39,7 +43,11 @@ function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '' }: Bl
     { type: 'text_block', label: 'Textblock', icon: MessageSquare, description: 'Beskrivande text' },
     { type: 'line_items_table', label: 'Artikeltabell', icon: Package, description: 'Tabell med artiklar och priser' },
     { type: 'image', label: 'Bild', icon: ImageIcon, description: 'Bild från URL' },
-    { type: 'footer', label: 'Sidfot', icon: FileText, description: 'Avslutande text' }
+    { type: 'footer', label: 'Sidfot', icon: FileText, description: 'Avslutande text' },
+    { type: 'page_break', label: 'Sidbrytning', icon: FileMinus, description: 'Tvinga ny sida vid utskrift/PDF' },
+    { type: 'cover_page', label: 'Framsida', icon: LayoutTemplate, description: 'Helsides framsida med bakgrundsbild' },
+    { type: 'split_content', label: 'Delat Innehåll', icon: Columns, description: 'Bild och text sida vid sida' },
+    { type: 'testimonials', label: 'Omdömen', icon: Star, description: 'Kundrecensioner och betyg' }
   ];
 
   const addBlock = (type: ContentBlock['type']) => {
@@ -64,6 +72,14 @@ function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '' }: Bl
         return '';
       case 'footer':
         return 'Tack för förtroendet! Vi ser fram emot att arbeta med er.';
+      case 'page_break':
+        return null;
+      case 'cover_page':
+        return { backgroundImage: '', title: 'Offertens Titel', subtitle: 'Undertitel eller slogan', showLogo: true };
+      case 'split_content':
+        return { imageUrl: '', headline: 'Rubrik', paragraph: 'Beskriv ert innehåll här...', imagePosition: 'left' };
+      case 'testimonials':
+        return [];
       default:
         return '';
     }
@@ -403,6 +419,261 @@ function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '' }: Bl
               <div className="flex items-center space-x-4">
                 <img src={block.content} alt="Block" className="h-10 w-10 object-cover rounded bg-gray-100" />
                 <span className="text-gray-500 truncate">{block.content || 'Ingen bild vald'}</span>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'page_break':
+        return (
+          <div className="py-4">
+            <div className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+              <FileMinus className="w-4 h-4" />
+              <span>Sidbrytning</span>
+            </div>
+            <div className="border-t-2 border-dashed border-gray-400 relative">
+              <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-xs text-gray-500 font-medium tracking-widest">
+                --- SIDBRYTNING ---
+              </span>
+            </div>
+          </div>
+        );
+
+      case 'cover_page':
+        const coverContent = block.content || {};
+        return (
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+              <LayoutTemplate className="w-4 h-4" />
+              <span>Framsida</span>
+            </div>
+            {isEditing ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Bakgrundsbild URL</label>
+                  <input
+                    type="text"
+                    value={coverContent.backgroundImage || ''}
+                    onChange={(e) => updateBlock(block.id, { ...coverContent, backgroundImage: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="https://images.unsplash.com/..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Titel</label>
+                  <input
+                    type="text"
+                    value={coverContent.title || ''}
+                    onChange={(e) => updateBlock(block.id, { ...coverContent, title: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Offertens titel"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Undertitel</label>
+                  <input
+                    type="text"
+                    value={coverContent.subtitle || ''}
+                    onChange={(e) => updateBlock(block.id, { ...coverContent, subtitle: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Kort beskrivning eller slogan"
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={coverContent.showLogo !== false}
+                    onChange={(e) => updateBlock(block.id, { ...coverContent, showLogo: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label className="text-xs font-medium text-gray-700">Visa logotyp</label>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gray-800 rounded-lg p-6 text-white text-center relative overflow-hidden" style={{ minHeight: '120px' }}>
+                {coverContent.backgroundImage && (
+                  <img src={coverContent.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />
+                )}
+                <div className="relative z-10">
+                  <p className="text-lg font-bold">{coverContent.title || 'Titel'}</p>
+                  <p className="text-sm opacity-80">{coverContent.subtitle || 'Undertitel'}</p>
+                  {coverContent.showLogo !== false && <p className="text-xs mt-2 opacity-60">🏢 Logotyp visas</p>}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'split_content':
+        const splitContent = block.content || {};
+        return (
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+              <Columns className="w-4 h-4" />
+              <span>Delat Innehåll</span>
+            </div>
+            {isEditing ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Bild-URL</label>
+                  <input
+                    type="text"
+                    value={splitContent.imageUrl || ''}
+                    onChange={(e) => updateBlock(block.id, { ...splitContent, imageUrl: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="https://..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Rubrik</label>
+                  <input
+                    type="text"
+                    value={splitContent.headline || ''}
+                    onChange={(e) => updateBlock(block.id, { ...splitContent, headline: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Rubrik"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Brödtext</label>
+                  <textarea
+                    value={splitContent.paragraph || ''}
+                    onChange={(e) => updateBlock(block.id, { ...splitContent, paragraph: e.target.value })}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Beskrivning..."
+                  />
+                </div>
+                <div className="flex items-center space-x-3">
+                  <label className="text-xs font-medium text-gray-700">Bildposition:</label>
+                  <button
+                    onClick={() => updateBlock(block.id, { ...splitContent, imagePosition: 'left' })}
+                    className={`px-3 py-1 text-xs rounded-md border ${splitContent.imagePosition !== 'right' ? 'bg-blue-100 border-blue-400 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    ◀ Bild vänster
+                  </button>
+                  <button
+                    onClick={() => updateBlock(block.id, { ...splitContent, imagePosition: 'right' })}
+                    className={`px-3 py-1 text-xs rounded-md border ${splitContent.imagePosition === 'right' ? 'bg-blue-100 border-blue-400 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    Bild höger ▶
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className={`flex gap-4 items-start ${splitContent.imagePosition === 'right' ? 'flex-row-reverse' : ''}`}>
+                <div className="w-24 h-20 bg-gray-200 rounded flex-shrink-0 overflow-hidden">
+                  {splitContent.imageUrl ? (
+                    <img src={splitContent.imageUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Bild</div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900 text-sm">{splitContent.headline || 'Rubrik'}</p>
+                  <p className="text-gray-600 text-xs mt-1 line-clamp-3">{splitContent.paragraph || 'Brödtext...'}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'testimonials':
+        const reviews = Array.isArray(block.content) ? block.content : [];
+        return (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+                <Star className="w-4 h-4" />
+                <span>Omdömen ({reviews.length})</span>
+              </div>
+              <button
+                onClick={() => {
+                  const newReviews = [...reviews, { name: '', rating: 5, quote: '' }];
+                  updateBlock(block.id, newReviews);
+                }}
+                className="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Lägg till omdöme
+              </button>
+            </div>
+
+            {reviews.length === 0 ? (
+              <div className="text-center py-6 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
+                <Star className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                <p className="text-sm">Inga omdömen ännu</p>
+                <button
+                  onClick={() => updateBlock(block.id, [{ name: '', rating: 5, quote: '' }])}
+                  className="text-xs text-blue-600 hover:text-blue-700 mt-1"
+                >
+                  Lägg till första omdömet
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {reviews.map((review: any, idx: number) => (
+                  <div key={idx} className="border border-gray-200 rounded-lg p-3">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                      <div className="md:col-span-3">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Namn</label>
+                        <input
+                          type="text"
+                          value={review.name}
+                          onChange={(e) => {
+                            const updated = [...reviews];
+                            updated[idx] = { ...updated[idx], name: e.target.value };
+                            updateBlock(block.id, updated);
+                          }}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Kundens namn"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Betyg (1-5)</label>
+                        <select
+                          value={review.rating}
+                          onChange={(e) => {
+                            const updated = [...reviews];
+                            updated[idx] = { ...updated[idx], rating: parseInt(e.target.value) };
+                            updateBlock(block.id, updated);
+                          }}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          {[1, 2, 3, 4, 5].map(v => (
+                            <option key={v} value={v}>{'★'.repeat(v)}{'☆'.repeat(5 - v)} ({v})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="md:col-span-6">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Omdöme</label>
+                        <input
+                          type="text"
+                          value={review.quote}
+                          onChange={(e) => {
+                            const updated = [...reviews];
+                            updated[idx] = { ...updated[idx], quote: e.target.value };
+                            updateBlock(block.id, updated);
+                          }}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Vad sa kunden?"
+                        />
+                      </div>
+                      <div className="md:col-span-1 flex items-end">
+                        <button
+                          onClick={() => {
+                            const updated = reviews.filter((_: any, i: number) => i !== idx);
+                            updateBlock(block.id, updated);
+                          }}
+                          className="p-1 text-gray-400 hover:text-red-600"
+                          title="Ta bort omdöme"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

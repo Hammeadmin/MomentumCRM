@@ -16,6 +16,7 @@ import {
 import { useToast } from '../hooks/useToast';
 import QuoteTemplateSelector from './QuoteTemplateSelector';
 import ROTFields from '../components/ROTFields';
+import RUTFields from '../components/RUTFields';
 import ProductLibraryModal from './ProductLibraryModal';
 import type { QuoteTemplate, ProductLibraryItem } from '../lib/quoteTemplates';
 import type { Quote, Customer, Lead, QuoteStatus, QuoteLineItem } from '../types/database';
@@ -45,6 +46,9 @@ interface QuoteFormData {
     rot_organisationsnummer: string | null;
     rot_fastighetsbeteckning: string | null;
     rot_amount: number;
+    include_rut: boolean;
+    rut_personnummer: string | null;
+    rut_amount: number;
 }
 
 interface QuoteEditModalProps {
@@ -99,7 +103,10 @@ export default function QuoteEditModal({
         rot_personnummer: null,
         rot_organisationsnummer: null,
         rot_fastighetsbeteckning: null,
-        rot_amount: 0
+        rot_amount: 0,
+        include_rut: false,
+        rut_personnummer: null,
+        rut_amount: 0
     });
 
     useEffect(() => {
@@ -122,7 +129,10 @@ export default function QuoteEditModal({
                 rot_personnummer: quote.rot_personnummer || null,
                 rot_organisationsnummer: quote.rot_organisationsnummer || null,
                 rot_fastighetsbeteckning: quote.rot_fastighetsbeteckning || null,
-                rot_amount: quote.rot_amount || 0
+                rot_amount: quote.rot_amount || 0,
+                include_rut: (quote as any).include_rut || false,
+                rut_personnummer: (quote as any).rut_personnummer || null,
+                rut_amount: (quote as any).rut_amount || 0
             });
         } else {
             // Reset form for create mode
@@ -137,7 +147,10 @@ export default function QuoteEditModal({
                 rot_personnummer: null,
                 rot_organisationsnummer: null,
                 rot_fastighetsbeteckning: null,
-                rot_amount: 0
+                rot_amount: 0,
+                include_rut: false,
+                rut_personnummer: null,
+                rut_amount: 0
             });
             setSelectedTemplate(null);
         }
@@ -184,7 +197,10 @@ export default function QuoteEditModal({
                 rot_personnummer: quoteForm.rot_personnummer,
                 rot_organisationsnummer: quoteForm.rot_organisationsnummer,
                 rot_fastighetsbeteckning: quoteForm.rot_fastighetsbeteckning,
-                rot_amount: quoteForm.rot_amount
+                rot_amount: quoteForm.rot_amount,
+                include_rut: quoteForm.include_rut,
+                rut_personnummer: quoteForm.rut_personnummer,
+                rut_amount: quoteForm.rut_amount
             };
 
             const lineItems = quoteForm.line_items
@@ -517,7 +533,7 @@ export default function QuoteEditModal({
                         </div>
 
                         {/* ROT/RUT DEDUCTION SECTION */}
-                        <div className="border-t border-gray-200 pt-6">
+                        <div className="border-t border-gray-200 pt-6 space-y-4">
                             <ROTFields
                                 data={{
                                     include_rot: quoteForm.include_rot,
@@ -530,7 +546,26 @@ export default function QuoteEditModal({
                                     setQuoteForm(prev => ({
                                         ...prev,
                                         ...rotData,
-                                        rot_amount: rotData.rot_amount || 0
+                                        rot_amount: rotData.rot_amount || 0,
+                                        // Mutual exclusion: disable RUT when ROT is enabled
+                                        ...(rotData.include_rot ? { include_rut: false, rut_personnummer: null, rut_amount: 0 } : {})
+                                    }))
+                                }
+                                totalAmount={calculateTotal()}
+                            />
+                            <RUTFields
+                                data={{
+                                    include_rut: quoteForm.include_rut,
+                                    rut_personnummer: quoteForm.rut_personnummer,
+                                    rut_amount: quoteForm.rut_amount,
+                                }}
+                                onChange={(rutData) =>
+                                    setQuoteForm(prev => ({
+                                        ...prev,
+                                        ...rutData,
+                                        rut_amount: rutData.rut_amount || 0,
+                                        // Mutual exclusion: disable ROT when RUT is enabled
+                                        ...(rutData.include_rut ? { include_rot: false, rot_personnummer: null, rot_organisationsnummer: null, rot_fastighetsbeteckning: null, rot_amount: 0 } : {})
                                     }))
                                 }
                                 totalAmount={calculateTotal()}

@@ -29,6 +29,13 @@ import {
   getROTExplanationText,
   type ROTFormData
 } from '../lib/rot';
+import {
+  calculateRUTAmount,
+  formatRUTAmount,
+  getRUTExplanationText,
+  validateSwedishPersonnummer as validateRUTPersonnummer,
+  formatSwedishPersonnummer as formatRUTPersonnummer,
+} from '../lib/rut';
 import { formatCurrency, formatDate } from '../lib/database';
 import { supabase } from '../lib/supabase';
 
@@ -50,6 +57,7 @@ function QuoteAcceptance() {
     identifier: '',
     fastighetsbeteckning: ''
   });
+  const [rutPersonnummer, setRutPersonnummer] = useState('');
 
   useEffect(() => {
     if (token) {
@@ -136,6 +144,14 @@ function QuoteAcceptance() {
         });
       }
 
+      // If RUT personnummer was provided, update the quote with it
+      if (quote.include_rut && rutPersonnummer) {
+        await supabase
+          .from('quotes')
+          .update({ rut_personnummer: rutPersonnummer })
+          .eq('acceptance_token', token);
+      }
+
       if (result.error) {
         setError(result.error.message);
         return;
@@ -148,7 +164,7 @@ function QuoteAcceptance() {
             body: {
               to: quote.organisation.email,
               subject: `✅ Offert ${quote.quote_number} har godkänts!`,
-              html: generateAcceptanceNotificationEmail(quote, rotData),
+              html: generateAcceptanceNotificationEmail(quote, rotData, rutPersonnummer),
               from_name: 'MomentumCRM'
             }
           });
@@ -295,10 +311,11 @@ function QuoteAcceptance() {
   };
 
   // Generate notification email for organisation
-  const generateAcceptanceNotificationEmail = (quoteData: any, rotInfo: ROTFormData) => {
+  const generateAcceptanceNotificationEmail = (quoteData: any, rotInfo: ROTFormData, rutPnr: string) => {
     const customerName = quoteData?.customer?.name || 'Kund';
     const quoteAmount = formatCurrency(quoteData?.total_amount || 0);
     const rotAmount = quoteData?.include_rot ? formatCurrency(calculateROTAmount(quoteData?.total_amount || 0)) : null;
+    const rutAmount = quoteData?.include_rut ? formatCurrency(calculateRUTAmount(quoteData?.total_amount || 0)) : null;
 
     return `
       <!DOCTYPE html>
@@ -331,6 +348,12 @@ function QuoteAcceptance() {
                 <tr>
                   <td style="padding: 5px 0; color: #059669;">ROT-avdrag:</td>
                   <td style="padding: 5px 0; font-weight: bold; color: #059669;">-${rotAmount}</td>
+                </tr>
+                ` : ''}
+                ${rutAmount ? `
+                <tr>
+                  <td style="padding: 5px 0; color: #7c3aed;">RUT-avdrag:</td>
+                  <td style="padding: 5px 0; font-weight: bold; color: #7c3aed;">-${rutAmount}</td>
                 </tr>
                 ` : ''}
                 <tr>
@@ -384,8 +407,12 @@ function QuoteAcceptance() {
     return quote?.include_rot ? calculateROTAmount(quote.total_amount) : 0;
   };
 
+  const calculateRUTDeduction = () => {
+    return quote?.include_rut ? calculateRUTAmount(quote.total_amount) : 0;
+  };
+
   const calculateFinalAmount = () => {
-    return quote?.total_amount - calculateROTDeduction();
+    return quote?.total_amount - calculateROTDeduction() - calculateRUTDeduction();
   };
 
   if (loading) {
@@ -440,6 +467,12 @@ function QuoteAcceptance() {
                   <li className="flex items-start">
                     <Calculator className="w-4 h-4 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
                     <span>ROT-avdraget på {formatROTAmount(calculateROTDeduction())} kommer att dras av från fakturan</span>
+                  </li>
+                )}
+                {quote?.include_rut && calculateRUTDeduction() > 0 && (
+                  <li className="flex items-start">
+                    <Calculator className="w-4 h-4 text-purple-600 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>RUT-avdraget på {formatRUTAmount(calculateRUTDeduction())} kommer att dras av från fakturan</span>
                   </li>
                 )}
               </ul>
@@ -655,6 +688,59 @@ function QuoteAcceptance() {
                     <p className="text-xs text-gray-500 mt-1">
                       Fastighetsbeteckning finns på fastighetsregistret eller kan fås från kommun
                     </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* RUT Section */}
+            {quote?.include_rut && (
+              <div className="card-padded border-l-4 border-purple-500">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                  <span className="mr-2">✨</span> RUT-avdrag
+                </h3>
+
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-purple-800 leading-relaxed">
+                    {getRUTExplanationText()}
+                  </p>
+                  <p className="text-sm text-purple-700 mt-2 font-medium">
+                    Uppskattad RUT-avdrag: {formatRUTAmount(calculateRUTDeduction())}
+                  </p>
+                </div>
+
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-purple-800">
+                    <strong>Vill du använda RUT-avdrag?</strong> Fyll i ditt personnummer nedan.
+                    Om du inte vill använda RUT-avdrag kan du lämna fältet tomt och bara godkänna offerten.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Personnummer <span className="text-gray-400 font-normal">(valfritt)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={rutPersonnummer}
+                      onChange={(e) => {
+                        const formatted = e.target.value.length >= 10
+                          ? formatRUTPersonnummer(e.target.value)
+                          : e.target.value;
+                        setRutPersonnummer(formatted);
+                      }}
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-purple-500 focus:border-purple-500 ${rutPersonnummer && !validateRUTPersonnummer(rutPersonnummer)
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-gray-300'
+                        }`}
+                      placeholder="YYYYMMDD-XXXX"
+                    />
+                    {rutPersonnummer && !validateRUTPersonnummer(rutPersonnummer) && (
+                      <p className="text-xs text-red-600 mt-1">
+                        Ogiltigt personnummer format. Använd format: YYYYMMDD-XXXX
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

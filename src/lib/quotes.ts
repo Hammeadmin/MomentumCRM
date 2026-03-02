@@ -126,6 +126,10 @@ export const acceptQuoteAndCreateOrder = async (
       rot_organisationsnummer: quote.rot_organisationsnummer,
       rot_fastighetsbeteckning: quote.rot_fastighetsbeteckning,
       rot_amount: quote.rot_amount,
+      // Copy RUT data if it exists
+      include_rut: quote.include_rut,
+      rut_personnummer: quote.rut_personnummer,
+      rut_amount: quote.rut_amount,
       primary_salesperson_id: quote.lead?.assigned_to_user_id || null,
     };
 

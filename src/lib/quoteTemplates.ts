@@ -90,7 +90,12 @@ export type ContentBlockType =
   | 'f_skatt_text'     // "Godkänd för F-skatt" legal disclaimer
   // Quote-specific blocks
   | 'quote_validity'   // "Offerten giltig till..." display
-  | 'acceptance_section'; // Digital signature / acceptance area
+  | 'acceptance_section' // Digital signature / acceptance area
+  // Multi-page / premium blocks
+  | 'page_break'       // Force a new page in print/PDF
+  | 'cover_page'       // Full-page cover with background image, title, subtitle
+  | 'split_content'    // Side-by-side image + text (About Us, etc.)
+  | 'testimonials';    // Grid of customer review cards
 
 export interface ContentBlock {
   id: string;
@@ -575,6 +580,92 @@ export const createDefaultTemplates = async (
         settings: {
           default_vat_rate: 25,
           default_payment_terms: 30,
+          template_type: 'quote'
+        }
+      },
+      // ==================== PREMIUM MULTI-PAGE TEMPLATE ====================
+      {
+        organisation_id: organisationId,
+        name: 'Premium Offert (Flersidig)',
+        description: 'Professionell flersidig offert med framsida, om oss, offertdetaljer, garantier och omdömen',
+        content_structure: [
+          // ---- PAGE 1: COVER ----
+          {
+            id: 'p1', type: 'cover_page',
+            content: {
+              backgroundImage: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200',
+              title: 'Professionell Offert',
+              subtitle: 'Skräddarsydd lösning för ert projekt',
+              showLogo: true
+            }
+          },
+          { id: 'pb1', type: 'page_break', content: null },
+
+          // ---- PAGE 2: ABOUT US ----
+          {
+            id: 'p2a', type: 'split_content',
+            content: {
+              imageUrl: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=600',
+              headline: 'Om Oss',
+              paragraph: 'Vi är ett erfaret team med passion för kvalitet och kundnöjdhet. Med över 10 års erfarenhet levererar vi skräddarsydda lösningar som överträffar förväntningar.\n\nVår filosofi bygger på transparens, pålitlighet och hantverksskicklighet.',
+              imagePosition: 'left'
+            }
+          },
+          { id: 'p2s', type: 'spacer', content: null, settings: { spacerHeight: 32 } },
+          {
+            id: 'p2b', type: 'split_content',
+            content: {
+              imageUrl: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600',
+              headline: 'Varför Välja Oss?',
+              paragraph: '✓ Certifierade och försäkrade\n✓ Garanti på allt arbete\n✓ Miljövänliga metoder\n✓ Snabb och pålitlig service\n✓ Konkurrenskraftiga priser',
+              imagePosition: 'right'
+            }
+          },
+          { id: 'pb2', type: 'page_break', content: null },
+
+          // ---- PAGE 3: QUOTE DETAILS ----
+          { id: 'p3row', type: 'header_row', content: null },
+          { id: 'p3cust', type: 'customer_info', content: null },
+          { id: 'p3sp', type: 'spacer', content: null, settings: { spacerHeight: 20 } },
+          { id: 'p3h', type: 'header', content: 'Offertspecifikation', settings: { fontSize: '2xl', fontWeight: 'bold', textAlign: 'center' } },
+          { id: 'p3desc', type: 'text_block', content: 'Nedan presenterar vi vår detaljerade offert baserad på era önskemål och vår besiktning.' },
+          {
+            id: 'p3items', type: 'line_items_table', content: [
+              { name: 'Exempeltjänst', description: 'Beskrivning av tjänsten', quantity: 1, unit_price: 5000, unit: 'st', category: 'Tjänster' }
+            ]
+          },
+          { id: 'p3tot', type: 'totals', content: null },
+          { id: 'p3div', type: 'divider', content: null },
+          { id: 'p3val', type: 'quote_validity', content: null },
+          { id: 'pb3', type: 'page_break', content: null },
+
+          // ---- PAGE 4: GUARANTEES & TERMS ----
+          { id: 'p4h', type: 'header', content: 'Garantier & Villkor', settings: { fontSize: '2xl', fontWeight: 'bold', textAlign: 'center' } },
+          { id: 'p4sp', type: 'spacer', content: null, settings: { spacerHeight: 16 } },
+          { id: 'p4terms', type: 'terms', content: 'Betalningsvillkor: 30 dagar netto.\n\nGaranti: Vi lämnar 5 års garanti på allt utfört arbete.\n\nFörsäkring: Vi är fullt försäkrade för alla typer av skador som kan uppstå.\n\nMiljö: Vi använder uteslutande miljögodkända produkter och metoder.\n\nÄndringar: Eventuella tilläggsarbeten faktureras separat efter skriftlig överenskommelse.' },
+          { id: 'p4acc', type: 'acceptance_section', content: null },
+          { id: 'pb4', type: 'page_break', content: null },
+
+          // ---- PAGE 5: TESTIMONIALS ----
+          { id: 'p5h', type: 'header', content: 'Vad Våra Kunder Säger', settings: { fontSize: '2xl', fontWeight: 'bold', textAlign: 'center' } },
+          { id: 'p5sp', type: 'spacer', content: null, settings: { spacerHeight: 16 } },
+          {
+            id: 'p5t', type: 'testimonials',
+            content: [
+              { name: 'Anna Svensson', rating: 5, quote: 'Fantastiskt arbete! Resultatet överträffade alla våra förväntningar. Rekommenderas varmt.' },
+              { name: 'Erik Johansson', rating: 5, quote: 'Professionella från start till slut. Punktliga, noggranna och vänliga. Kommer definitivt anlita igen.' },
+              { name: 'Maria Lindberg', rating: 4, quote: 'Mycket nöjd med kvaliteten. Bra kommunikation genom hela projektet och rimligt pris.' }
+            ]
+          },
+          { id: 'p5sp2', type: 'spacer', content: null, settings: { spacerHeight: 24 } },
+
+          // ---- FOOTER ----
+          { id: 'pfoot', type: 'page_footer', content: null }
+        ],
+        settings: {
+          default_vat_rate: 25,
+          default_payment_terms: 30,
+          notes: 'Premium flersidig offertmall med framsida, om oss, offertdetaljer, garantier och kundomdömen',
           template_type: 'quote'
         }
       }

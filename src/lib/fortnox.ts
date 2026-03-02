@@ -30,6 +30,8 @@ export interface Customer {
     include_rot?: boolean;
     rot_personnummer?: string;
     rot_fastighetsbeteckning?: string;
+    include_rut?: boolean;
+    rut_personnummer?: string;
     fortnox_customer_number?: string;
     created_at?: string;
 }

@@ -46,6 +46,11 @@ export const quoteCreateSchema = z.object({
     rot_organisationsnummer: z.string().optional().nullable(),
     rot_fastighetsbeteckning: z.string().optional().nullable(),
     rot_amount: z.number().min(0, { message: 'ROT-belopp måste vara positivt' }).optional().nullable(),
+
+    // RUT fields
+    include_rut: z.boolean().optional().nullable(),
+    rut_personnummer: z.string().optional().nullable(),
+    rut_amount: z.number().min(0, { message: 'RUT-belopp måste vara positivt' }).optional().nullable(),
 });
 
 export type QuoteCreateInput = z.infer<typeof quoteCreateSchema>;
@@ -86,6 +91,11 @@ const baseOrderSchema = z.object({
     rot_organisationsnummer: z.string().optional().nullable(),
     rot_fastighetsbeteckning: z.string().optional().nullable(),
     rot_amount: z.number().min(0, { message: 'ROT-belopp måste vara positivt' }).optional().nullable(),
+
+    // RUT fields
+    include_rut: z.boolean().optional().nullable(),
+    rut_personnummer: z.string().optional().nullable(),
+    rut_amount: z.number().min(0, { message: 'RUT-belopp måste vara positivt' }).optional().nullable(),
 
     // Commission fields
     primary_salesperson_id: z.string().uuid({ message: 'Ogiltig säljare-ID' }).optional().nullable(),
@@ -201,6 +211,11 @@ export const invoiceCreateSchema = z.object({
     rot_organisationsnummer: z.string().optional().nullable(),
     rot_fastighetsbeteckning: z.string().optional().nullable(),
     rot_amount: z.number().min(0, { message: 'ROT-belopp måste vara positivt' }).optional().nullable(),
+
+    // RUT fields
+    include_rut: z.boolean().optional().nullable(),
+    rut_personnummer: z.string().optional().nullable(),
+    rut_amount: z.number().min(0, { message: 'RUT-belopp måste vara positivt' }).optional().nullable(),
 
     // Assignment fields
     assignment_type: z.enum(['individual', 'team'], {

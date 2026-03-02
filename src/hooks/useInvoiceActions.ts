@@ -191,6 +191,10 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 rot_organisationsnummer: formData.rot_organisationsnummer,
                 rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
                 rot_amount: formData.rot_amount,
+                // RUT fields
+                include_rut: formData.include_rut,
+                rut_personnummer: formData.rut_personnummer,
+                rut_amount: formData.rut_amount,
                 ocr_number: ocrNumber,
             };
 
@@ -244,6 +248,10 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 rot_organisationsnummer: formData.rot_organisationsnummer,
                 rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
                 rot_amount: formData.rot_amount,
+                // RUT fields
+                include_rut: formData.include_rut,
+                rut_personnummer: formData.rut_personnummer,
+                rut_amount: formData.rut_amount,
             };
 
             const result = await updateInvoice(editingInvoice.id, invoiceUpdates, formData.line_items);
@@ -290,6 +298,15 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                     rot_organisationsnummer: formData.rot_organisationsnummer,
                     rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
                     rot_amount: formData.rot_amount,
+                };
+            }
+
+            let currentRutState;
+            if (activeTab === 'orders' && !orderArg) {
+                currentRutState = {
+                    include_rut: formData.include_rut,
+                    rut_personnummer: formData.rut_personnummer,
+                    rut_amount: formData.rut_amount,
                 };
             }
 
@@ -359,6 +376,10 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 rot_organisationsnummer: currentRotState ? (currentRotState.rot_organisationsnummer as string | null) : order.rot_organisationsnummer,
                 rot_fastighetsbeteckning: currentRotState ? (currentRotState.rot_fastighetsbeteckning as string | null) : order.rot_fastighetsbeteckning,
                 rot_amount: currentRotState ? (currentRotState.rot_amount as number) : order.rot_amount,
+                // RUT fields
+                include_rut: currentRutState ? (currentRutState.include_rut as boolean) : order.include_rut,
+                rut_personnummer: currentRutState ? (currentRutState.rut_personnummer as string | null) : order.rut_personnummer,
+                rut_amount: currentRutState ? (currentRutState.rut_amount as number) : order.rut_amount,
             };
 
             const result = await createInvoice(invoiceData, lineItemsFromOrder, user?.id);
@@ -436,6 +457,10 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 rot_organisationsnummer: formData.rot_organisationsnummer,
                 rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
                 rot_amount: formData.rot_amount,
+                // RUT fields
+                include_rut: formData.include_rut,
+                rut_personnummer: formData.rut_personnummer,
+                rut_amount: formData.rut_amount,
             };
 
             const result = await createInvoice(invoiceData, lineItems, user?.id);

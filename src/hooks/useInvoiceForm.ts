@@ -24,6 +24,10 @@ interface FormDataShape {
     rot_organisationsnummer: string | null;
     rot_fastighetsbeteckning: string | null;
     rot_amount: number;
+    // RUT fields
+    include_rut: boolean;
+    rut_personnummer: string | null;
+    rut_amount: number;
 }
 
 // Shape of the manual customer form
@@ -49,6 +53,10 @@ const INITIAL_FORM_DATA: FormDataShape = {
     rot_organisationsnummer: null,
     rot_fastighetsbeteckning: null,
     rot_amount: 0,
+    // RUT fields
+    include_rut: false,
+    rut_personnummer: null,
+    rut_amount: 0,
 };
 
 const INITIAL_MANUAL_CUSTOMER_FORM: ManualCustomerFormShape = {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings as SettingsIcon, User, Users2, Bell, Shield, CreditCard, Mail, Building, Asterisk as System, Zap, FormInput, FileText, Package, Send, MessageSquare, Calculator } from 'lucide-react';
+import { Settings as SettingsIcon, User, Users2, Bell, Shield, CreditCard, Mail, Building, Asterisk as System, Zap, FormInput, FileText, Package, Send, MessageSquare, Calculator, Sparkles } from 'lucide-react';
 import ReminderManagement from '../components/ReminderManagement';
 import CompanyProfileSettings from '../components/settings/CompanyProfileSettings';
 import UserProfileSettings from '../components/settings/UserProfileSettings';
@@ -12,9 +12,10 @@ import EmailSettings from '../components/settings/EmailSettings';
 import SmsSettings from '../components/settings/SmsSettings';
 import TeamManagement from '../components/TeamManagement';
 import ROTReport from '../components/ROTReport';
+import RUTReport from '../components/RUTReport';
 
 function Settings() {
-  const [activeTab, setActiveTab] = React.useState<'company' | 'user' | 'system' | 'integrations' | 'email' | 'sms' | 'forms' | 'templates' | 'products' | 'reminders' | 'rot' | 'general'>('company');
+  const [activeTab, setActiveTab] = React.useState<'company' | 'user' | 'system' | 'integrations' | 'email' | 'sms' | 'forms' | 'templates' | 'products' | 'reminders' | 'rot' | 'rut' | 'general'>('company');
 
   const settingsCategories = [
     {
@@ -68,7 +69,8 @@ function Settings() {
             { id: 'templates', label: 'Mallar', icon: FileText },
             { id: 'products', label: 'Artiklar', icon: Package },
             { id: 'reminders', label: 'Påminnelser', icon: Mail },
-            { id: 'rot', label: 'ROT-rapport', icon: Calculator }
+            { id: 'rot', label: 'ROT-rapport', icon: Calculator },
+            { id: 'rut', label: 'RUT-rapport', icon: Sparkles }
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -111,6 +113,7 @@ function Settings() {
       {activeTab === 'products' && <ProductLibrarySettings />}
       {activeTab === 'reminders' && <ReminderManagement />}
       {activeTab === 'rot' && <ROTReport />}
+      {activeTab === 'rut' && <RUTReport />}
       {activeTab === 'general' && (
         <>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">

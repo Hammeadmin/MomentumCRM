@@ -20,6 +20,7 @@ import {
   createQuoteTemplate,
   updateQuoteTemplate,
   deleteQuoteTemplate,
+  createDefaultTemplates,
   createDefaultInvoiceTemplates,
   reorderQuoteTemplates,
   calculateTemplateTotal,

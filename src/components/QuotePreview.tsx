@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Building, Mail, Phone, MapPin, Trash2, GripVertical, Settings } from 'lucide-react';
+import { Building, Mail, Phone, MapPin, Trash2, GripVertical, Settings, Star } from 'lucide-react';
 import type { QuoteTemplate, ContentBlock, BlockStyleSettings } from '../lib/quoteTemplates';
 import { formatCurrency, formatDate } from '../lib/database';
 import { UNIT_LABELS } from '../lib/quoteTemplates';
@@ -1032,6 +1032,198 @@ function QuotePreview({
         );
         break;
 
+      // ==================== MULTI-PAGE / PREMIUM BLOCKS ====================
+      case 'page_break':
+        // Zero-height element that forces a page break in print/PDF
+        innerContent = (
+          <div
+            className="break-after-page"
+            style={{
+              height: 0,
+              width: '100%',
+              pageBreakAfter: 'always',
+              breakAfter: 'page' as any,
+            }}
+            aria-hidden="true"
+          >
+            {/* Visible indicator only on screen, hidden in print */}
+            <div className="border-t-2 border-dashed border-gray-300 my-4 relative print:hidden" style={{ height: 'auto' }}>
+              <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-xs text-gray-400 font-medium tracking-widest">
+                SIDBRYTNING
+              </span>
+            </div>
+          </div>
+        );
+        break;
+
+      case 'cover_page':
+        // Full-page cover with background image, dark overlay, logo, title, and subtitle
+        const cover = block.content || {};
+        const coverStyles = getBlockStyles(block.settings, font_family);
+        innerContent = (
+          <div
+            className="relative flex flex-col items-center justify-center text-center text-white overflow-hidden rounded-lg print:rounded-none"
+            style={{
+              height: '250mm',
+              maxHeight: '250mm',
+              overflow: 'hidden',
+              backgroundImage: cover.backgroundImage ? `url(${cover.backgroundImage})` : undefined,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundColor: cover.backgroundImage ? undefined : (coverStyles.backgroundColor || '#1e293b'),
+              ...coverStyles,
+            }}
+          >
+            {/* Dark overlay */}
+            <div className="absolute inset-0 bg-black" style={{ opacity: 0.55 }} />
+
+            {/* Content */}
+            <div className="relative z-10 px-12 py-8 flex flex-col items-center justify-center h-full">
+              {/* Logo */}
+              {cover.showLogo !== false && (
+                <div className="mb-8">
+                  {logoUrl ? (
+                    <img
+                      src={logoUrl}
+                      alt="Logo"
+                      className="h-24 w-auto object-contain mx-auto"
+                      style={{ filter: 'brightness(0) invert(1)' }}
+                      onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
+                      <Building className="w-10 h-10 text-white" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Title */}
+              <EditableElement
+                tagName="h1"
+                className="text-5xl font-bold tracking-tight mb-4"
+                style={{ fontFamily: font_family, color: '#ffffff', textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
+                initialContent={cover.title || 'Offert'}
+                isEditable={isEditable}
+                onSave={(val) => onBlockUpdate?.(block.id, { ...cover, title: val })}
+              />
+
+              {/* Subtitle */}
+              <EditableElement
+                tagName="p"
+                className="text-xl opacity-90 max-w-lg"
+                style={{ fontFamily: font_family, color: '#e2e8f0', textShadow: '0 1px 4px rgba(0,0,0,0.2)' }}
+                initialContent={cover.subtitle || ''}
+                isEditable={isEditable}
+                onSave={(val) => onBlockUpdate?.(block.id, { ...cover, subtitle: val })}
+              />
+
+              {/* Company name */}
+              {company.name && (
+                <p className="mt-12 text-sm uppercase tracking-widest opacity-70" style={{ fontFamily: font_family }}>
+                  {company.name}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+        break;
+
+      case 'split_content':
+        // Side-by-side image + text content block
+        const split = block.content || {};
+        const splitStyles = getBlockStyles(block.settings, font_family);
+        const imgOnRight = split.imagePosition === 'right';
+        innerContent = (
+          <div
+            className={`flex gap-8 items-start my-6 ${imgOnRight ? 'flex-row-reverse' : ''}`}
+            style={splitStyles}
+          >
+            {/* Image */}
+            <div className="w-2/5 flex-shrink-0">
+              {split.imageUrl ? (
+                <img
+                  src={split.imageUrl}
+                  alt={split.headline || ''}
+                  className="w-full h-auto rounded-lg shadow-md object-cover"
+                  style={{ maxHeight: '300px' }}
+                  onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { e.currentTarget.style.display = 'none'; }}
+                />
+              ) : (
+                <div className="w-full bg-gray-100 rounded-lg flex items-center justify-center" style={{ height: '200px' }}>
+                  <span className="text-gray-400 text-sm">Ingen bild</span>
+                </div>
+              )}
+            </div>
+
+            {/* Text */}
+            <div className="flex-1">
+              <EditableElement
+                tagName="h2"
+                className="text-2xl font-bold text-gray-900 mb-3"
+                style={{ fontFamily: font_family, color: splitStyles.color || primary_color }}
+                initialContent={split.headline || 'Rubrik'}
+                isEditable={isEditable}
+                onSave={(val) => onBlockUpdate?.(block.id, { ...split, headline: val })}
+              />
+              <EditableElement
+                tagName="p"
+                className="text-gray-700 leading-relaxed whitespace-pre-wrap"
+                style={{ fontFamily: font_family }}
+                initialContent={split.paragraph || ''}
+                isEditable={isEditable}
+                onSave={(val) => onBlockUpdate?.(block.id, { ...split, paragraph: val })}
+              />
+            </div>
+          </div>
+        );
+        break;
+
+      case 'testimonials':
+        // Grid of customer review cards with star ratings
+        const testimonials = Array.isArray(block.content) ? block.content : [];
+        const testimonialStyles = getBlockStyles(block.settings, font_family);
+        innerContent = (
+          <div className="my-6" style={testimonialStyles}>
+            {testimonials.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 italic">
+                Inga kundomdömen tillagda
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {testimonials.map((review: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="bg-gray-50 rounded-xl p-6 border border-gray-100 shadow-sm"
+                    style={{ fontFamily: font_family }}
+                  >
+                    {/* Stars */}
+                    <div className="flex items-center gap-0.5 mb-3">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`w-4 h-4 ${star <= (review.rating || 0) ? 'text-amber-400 fill-amber-400' : 'text-gray-300'}`}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Quote */}
+                    <p className="text-gray-700 text-sm italic leading-relaxed mb-4">
+                      "{review.quote || 'Kundomdöme'}"
+                    </p>
+
+                    {/* Reviewer name */}
+                    <p className="text-sm font-semibold text-gray-900">
+                      — {review.name || 'Anonym'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+        break;
+
       default:
         return null;
     }
@@ -1083,7 +1275,7 @@ function QuotePreview({
       )}
 
       {/* Content area with print margins */}
-      <div className="p-8 print:p-0 print:px-[15mm] print:py-[10mm]">
+      <div className="p-8 print:p-0">
 
         {/* 100% Block-Based Layout - No Hardcoded Sections */}
         {(!template?.content_structure || template.content_structure.length === 0) && isEditable && (
@@ -1214,8 +1406,20 @@ function QuotePreview({
             margin: 15mm 10mm;
           }
           
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
           .print\\:hidden {
             display: none !important;
+          }
+          
+          .break-after-page {
+            page-break-after: always !important;
+            break-after: page !important;
+            height: 0 !important;
+            overflow: hidden !important;
           }
           
           /* Prevent page breaks inside important elements */
@@ -1228,7 +1432,7 @@ function QuotePreview({
             page-break-after: avoid;
           }
           
-          /* Reset shadows and backgrounds for better printing */
+          /* Reset shadows for better printing */
           * {
             box-shadow: none !important;
           }

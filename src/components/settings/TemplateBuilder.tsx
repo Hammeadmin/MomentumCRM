@@ -19,7 +19,11 @@ import {
     Info,
     Minus,
     Columns,
-    LayoutGrid
+    LayoutGrid,
+    FileMinus,
+    LayoutTemplate,
+    Star,
+    AlertTriangle
 } from 'lucide-react';
 import {
     QuoteTemplate,
@@ -27,6 +31,9 @@ import {
     createQuoteTemplate,
     updateQuoteTemplate,
     deleteQuoteTemplate,
+    reorderQuoteTemplates,
+    createDefaultTemplates,
+    createDefaultInvoiceTemplates,
     ContentBlock,
     BlockStyleSettings
 } from '../../lib/quoteTemplates';
@@ -34,6 +41,7 @@ import QuotePreview from '../QuotePreview';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import StyleEditor from './StyleEditor';
+import ConfirmDialog from '../ConfirmDialog';
 
 function TemplateBuilder() {
     const { session } = useAuth();
@@ -45,6 +53,8 @@ function TemplateBuilder() {
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [creatingDefaults, setCreatingDefaults] = useState(false);
 
     // Default design options
     const defaultDesignOptions = {
@@ -429,6 +439,23 @@ function TemplateBuilder() {
                 content = { headerText: 'Acceptera offert', showDigitalSignature: true };
                 settings = { fontSize: 'base' };
                 break;
+            // Multi-page / Premium blocks
+            case 'page_break':
+                content = null;
+                settings = {};
+                break;
+            case 'cover_page':
+                content = { backgroundImage: '', title: 'Offertens Titel', subtitle: 'Undertitel', showLogo: true };
+                settings = {};
+                break;
+            case 'split_content':
+                content = { imageUrl: '', headline: 'Rubrik', paragraph: 'Beskriv ert innehåll här...', imagePosition: 'left' };
+                settings = {};
+                break;
+            case 'testimonials':
+                content = [];
+                settings = {};
+                break;
             default:
                 content = '';
         }
@@ -454,6 +481,89 @@ function TemplateBuilder() {
             content_structure: selectedTemplate.content_structure.filter(b => b.id !== blockId)
         });
         if (selectedBlockId === blockId) setSelectedBlockId(null);
+    };
+
+    // Delete template entirely
+    const handleDeleteTemplate = async () => {
+        if (!selectedTemplate || selectedTemplate.id === 'new_template') return;
+        const { error } = await deleteQuoteTemplate(selectedTemplate.id);
+        if (!error) {
+            setTemplates(templates.filter(t => t.id !== selectedTemplate.id));
+            setSelectedTemplate(null);
+            setSelectedBlockId(null);
+        }
+        setShowDeleteConfirm(false);
+    };
+
+    // Create default templates from quoteTemplates.ts
+    const handleCreateDefaults = async () => {
+        const { data: profile } = await supabase.from('user_profiles').select('organisation_id').eq('id', session?.user?.id).single();
+        if (!profile?.organisation_id) return;
+        setCreatingDefaults(true);
+        try {
+            const templateType = selectedTemplate?.settings?.template_type || 'quote';
+            if (templateType === 'invoice') {
+                await createDefaultInvoiceTemplates(profile.organisation_id);
+            } else {
+                await createDefaultTemplates(profile.organisation_id);
+            }
+            await fetchTemplates();
+        } catch (err) {
+            console.error('Error creating default templates:', err);
+        } finally {
+            setCreatingDefaults(false);
+        }
+    };
+
+    // Create Premium Multi-page Starter
+    const handleCreatePremiumStarter = () => {
+        const newTemplate: QuoteTemplate = {
+            id: 'new_template',
+            organisation_id: templates[0]?.organisation_id || '',
+            name: 'Premium Offert (Flersidig)',
+            description: 'Professionell flersidig offert med framsida, om oss, offertdetaljer, garantier och omdömen',
+            content_structure: [
+                { id: crypto.randomUUID(), type: 'cover_page', content: { backgroundImage: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200', title: 'Professionell Offert', subtitle: 'Skräddarsydd lösning för ert projekt', showLogo: true }, settings: {} },
+                { id: crypto.randomUUID(), type: 'page_break', content: null, settings: {} },
+                { id: crypto.randomUUID(), type: 'split_content', content: { imageUrl: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=600', headline: 'Om Oss', paragraph: 'Vi är ett erfaret team med passion för kvalitet och kundnöjdhet. Med över 10 års erfarenhet levererar vi skräddarsydda lösningar som överträffar förväntningar.', imagePosition: 'left' }, settings: {} },
+                { id: crypto.randomUUID(), type: 'spacer', content: null, settings: { spacerHeight: 32 } },
+                { id: crypto.randomUUID(), type: 'split_content', content: { imageUrl: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600', headline: 'Varför Välja Oss?', paragraph: '✓ Certifierade och försäkrade\n✓ Garanti på allt arbete\n✓ Miljövänliga metoder\n✓ Snabb och pålitlig service\n✓ Konkurrenskraftiga priser', imagePosition: 'right' }, settings: {} },
+                { id: crypto.randomUUID(), type: 'page_break', content: null, settings: {} },
+                { id: crypto.randomUUID(), type: 'header_row', content: { showLogo: true }, settings: { logoPosition: 'left' } },
+                { id: crypto.randomUUID(), type: 'customer_info', content: { label: 'Till' }, settings: { showBorder: false } },
+                { id: crypto.randomUUID(), type: 'spacer', content: null, settings: { spacerHeight: 20 } },
+                { id: crypto.randomUUID(), type: 'header', content: 'Offertspecifikation', settings: { fontSize: '2xl', fontWeight: 'bold', textAlign: 'center' } },
+                { id: crypto.randomUUID(), type: 'text_block', content: 'Nedan presenterar vi vår detaljerade offert baserad på era önskemål och vår besiktning.', settings: { fontSize: 'base', textAlign: 'left' } },
+                { id: crypto.randomUUID(), type: 'line_items_table', content: [], settings: { table_header: 'Specifikation' } },
+                { id: crypto.randomUUID(), type: 'totals', content: { showSubtotal: true, showVat: true, showTotal: true, showRot: true }, settings: { textAlign: 'right' } },
+                { id: crypto.randomUUID(), type: 'divider', content: null, settings: { marginTop: 16, marginBottom: 16 } },
+                { id: crypto.randomUUID(), type: 'quote_validity', content: { days: 30 }, settings: { fontSize: 'sm' } },
+                { id: crypto.randomUUID(), type: 'page_break', content: null, settings: {} },
+                { id: crypto.randomUUID(), type: 'header', content: 'Garantier & Villkor', settings: { fontSize: '2xl', fontWeight: 'bold', textAlign: 'center' } },
+                { id: crypto.randomUUID(), type: 'terms', content: 'Betalningsvillkor: 30 dagar netto.\n\nGaranti: Vi lämnar 5 års garanti på allt utfört arbete.\n\nFörsäkring: Vi är fullt försäkrade för alla typer av skador som kan uppstå.', settings: { fontSize: 'sm' } },
+                { id: crypto.randomUUID(), type: 'acceptance_section', content: { headerText: 'Acceptera offert', showDigitalSignature: true }, settings: { fontSize: 'base' } },
+                { id: crypto.randomUUID(), type: 'page_break', content: null, settings: {} },
+                { id: crypto.randomUUID(), type: 'header', content: 'Vad Våra Kunder Säger', settings: { fontSize: '2xl', fontWeight: 'bold', textAlign: 'center' } },
+                { id: crypto.randomUUID(), type: 'spacer', content: null, settings: { spacerHeight: 16 } },
+                {
+                    id: crypto.randomUUID(), type: 'testimonials', content: [
+                        { name: 'Anna Svensson', rating: 5, quote: 'Fantastiskt arbete! Resultatet överträffade alla våra förväntningar.' },
+                        { name: 'Erik Johansson', rating: 5, quote: 'Professionella från start till slut. Punktliga och noggranna.' },
+                        { name: 'Maria Lindberg', rating: 4, quote: 'Mycket nöjd med kvaliteten. Bra kommunikation genom hela projektet.' }
+                    ], settings: {}
+                },
+                { id: crypto.randomUUID(), type: 'page_footer', content: { showCompanyInfo: true }, settings: { fontSize: 'xs', textAlign: 'center' } }
+            ],
+            settings: {
+                template_type: 'quote',
+                default_vat_rate: 25,
+                default_payment_terms: 30
+            },
+            design_options: { ...defaultDesignOptions }
+        };
+        setSelectedTemplate(newTemplate);
+        setPreviewMode(false);
+        setSelectedBlockId(null);
     };
 
     const handleBlockMove = (dragIndex: number, hoverIndex: number) => {
@@ -535,7 +645,12 @@ function TemplateBuilder() {
         // Layout elements (available in both)
         { type: 'header_row', label: 'Sidhuvud (2-kolumn)', icon: Columns, category: 'layout', docType: 'both' },
         { type: 'divider', label: 'Avdelare', icon: Minus, category: 'layout', docType: 'both' },
-        { type: 'spacer', label: 'Mellanrum', icon: LayoutGrid, category: 'layout', docType: 'both' }
+        { type: 'spacer', label: 'Mellanrum', icon: LayoutGrid, category: 'layout', docType: 'both' },
+        // Premium / Multi-page blocks (quote only)
+        { type: 'page_break', label: 'Sidbrytning', icon: FileMinus, category: 'premium', docType: 'quote' },
+        { type: 'cover_page', label: 'Framsida', icon: LayoutTemplate, category: 'premium', docType: 'quote' },
+        { type: 'split_content', label: 'Delat Innehåll', icon: Columns, category: 'premium', docType: 'both' },
+        { type: 'testimonials', label: 'Omdömen', icon: Star, category: 'premium', docType: 'quote' }
     ];
 
     // Filter blocks based on current template type
@@ -580,6 +695,12 @@ function TemplateBuilder() {
                                         📄 Offertmall (Standard)
                                     </button>
                                     <button
+                                        onClick={() => { handleCreatePremiumStarter(); setDropdownOpen(false); }}
+                                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    >
+                                        ⭐ Premium Offert (Flersidig)
+                                    </button>
+                                    <button
                                         onClick={() => { handleCreateInvoiceStarter(); setDropdownOpen(false); }}
                                         className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                                     >
@@ -599,6 +720,22 @@ function TemplateBuilder() {
                                         className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:text-gray-400"
                                     >
                                         Kopiera vald
+                                    </button>
+                                    <div className="border-t border-gray-100 my-1"></div>
+                                    <div className="px-4 py-1 text-xs font-semibold text-gray-500 uppercase">Hantera</div>
+                                    <button
+                                        onClick={() => { handleCreateDefaults(); setDropdownOpen(false); }}
+                                        disabled={creatingDefaults}
+                                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:text-gray-400"
+                                    >
+                                        {creatingDefaults ? '⏳ Skapar...' : '📦 Skapa standardmallar'}
+                                    </button>
+                                    <button
+                                        onClick={() => { setShowDeleteConfirm(true); setDropdownOpen(false); }}
+                                        disabled={!selectedTemplate || selectedTemplate.id === 'new_template'}
+                                        className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:text-gray-400"
+                                    >
+                                        🗑️ Ta bort vald mall
                                     </button>
                                 </div>
                             </div>
@@ -889,6 +1026,175 @@ function TemplateBuilder() {
                                         </div>
                                     )}
 
+                                    {/* COVER_PAGE BLOCK */}
+                                    {selectedBlock.type === 'cover_page' && (
+                                        <div className="mb-4 pb-4 border-b border-gray-200 space-y-3">
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Framsida</label>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Bakgrundsbild URL</label>
+                                                <input
+                                                    type="text"
+                                                    value={selectedBlock.content?.backgroundImage || ''}
+                                                    onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, backgroundImage: e.target.value })}
+                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    placeholder="https://images.unsplash.com/..."
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Titel</label>
+                                                <input
+                                                    type="text"
+                                                    value={selectedBlock.content?.title || ''}
+                                                    onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, title: e.target.value })}
+                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    placeholder="Offertens titel"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Undertitel</label>
+                                                <input
+                                                    type="text"
+                                                    value={selectedBlock.content?.subtitle || ''}
+                                                    onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, subtitle: e.target.value })}
+                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    placeholder="Kort beskrivning"
+                                                />
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sm text-gray-700">Visa logotyp</span>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedBlock.content?.showLogo !== false}
+                                                    onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, showLogo: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* SPLIT_CONTENT BLOCK */}
+                                    {selectedBlock.type === 'split_content' && (
+                                        <div className="mb-4 pb-4 border-b border-gray-200 space-y-3">
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Delat Innehåll</label>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Bild-URL</label>
+                                                <input
+                                                    type="text"
+                                                    value={selectedBlock.content?.imageUrl || ''}
+                                                    onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, imageUrl: e.target.value })}
+                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    placeholder="https://..."
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Rubrik</label>
+                                                <input
+                                                    type="text"
+                                                    value={selectedBlock.content?.headline || ''}
+                                                    onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, headline: e.target.value })}
+                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    placeholder="Rubrik"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Brödtext</label>
+                                                <textarea
+                                                    value={selectedBlock.content?.paragraph || ''}
+                                                    onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, paragraph: e.target.value })}
+                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    rows={4}
+                                                    placeholder="Beskrivning..."
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Bildposition</label>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, imagePosition: 'left' })}
+                                                        className={`flex-1 px-3 py-1.5 text-xs rounded border ${selectedBlock.content?.imagePosition !== 'right' ? 'bg-blue-100 border-blue-400 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                                                    >
+                                                        ◀ Vänster
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, imagePosition: 'right' })}
+                                                        className={`flex-1 px-3 py-1.5 text-xs rounded border ${selectedBlock.content?.imagePosition === 'right' ? 'bg-blue-100 border-blue-400 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                                                    >
+                                                        Höger ▶
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* TESTIMONIALS BLOCK */}
+                                    {selectedBlock.type === 'testimonials' && (
+                                        <div className="mb-4 pb-4 border-b border-gray-200 space-y-3">
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Omdömen</label>
+                                            {(Array.isArray(selectedBlock.content) ? selectedBlock.content : []).map((review: any, idx: number) => (
+                                                <div key={idx} className="border border-gray-200 rounded-lg p-2 space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        value={review.name || ''}
+                                                        onChange={(e) => {
+                                                            const updated = [...(selectedBlock.content || [])];
+                                                            updated[idx] = { ...updated[idx], name: e.target.value };
+                                                            handleUpdateBlockContent(selectedBlock.id, updated);
+                                                        }}
+                                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                                                        placeholder="Kundens namn"
+                                                    />
+                                                    <select
+                                                        value={review.rating || 5}
+                                                        onChange={(e) => {
+                                                            const updated = [...(selectedBlock.content || [])];
+                                                            updated[idx] = { ...updated[idx], rating: parseInt(e.target.value) };
+                                                            handleUpdateBlockContent(selectedBlock.id, updated);
+                                                        }}
+                                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                                                    >
+                                                        {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{'★'.repeat(v)}{'☆'.repeat(5 - v)}</option>)}
+                                                    </select>
+                                                    <input
+                                                        type="text"
+                                                        value={review.quote || ''}
+                                                        onChange={(e) => {
+                                                            const updated = [...(selectedBlock.content || [])];
+                                                            updated[idx] = { ...updated[idx], quote: e.target.value };
+                                                            handleUpdateBlockContent(selectedBlock.id, updated);
+                                                        }}
+                                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                                                        placeholder="Kundens omdöme..."
+                                                    />
+                                                    <button
+                                                        onClick={() => {
+                                                            const updated = (selectedBlock.content || []).filter((_: any, i: number) => i !== idx);
+                                                            handleUpdateBlockContent(selectedBlock.id, updated);
+                                                        }}
+                                                        className="text-xs text-red-500 hover:text-red-700"
+                                                    >
+                                                        Ta bort
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <button
+                                                onClick={() => {
+                                                    const current = Array.isArray(selectedBlock.content) ? selectedBlock.content : [];
+                                                    handleUpdateBlockContent(selectedBlock.id, [...current, { name: '', rating: 5, quote: '' }]);
+                                                }}
+                                                className="w-full px-3 py-1.5 text-xs border border-dashed border-gray-300 rounded text-gray-600 hover:bg-gray-50"
+                                            >
+                                                + Lägg till omdöme
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* PAGE_BREAK BLOCK */}
+                                    {selectedBlock.type === 'page_break' && (
+                                        <div className="mb-4 pb-4 border-b border-gray-200">
+                                            <p className="text-xs text-gray-500">Tvingar en ny sida vid utskrift/PDF. Inga inställningar behövs.</p>
+                                        </div>
+                                    )}
+
                                     {/* LINE_ITEMS_TABLE BLOCK */}
                                     {selectedBlock.type === 'line_items_table' && (
                                         <div className="mb-4 pb-4 border-b border-gray-200">
@@ -1020,6 +1326,25 @@ function TemplateBuilder() {
                                                     key={block.type}
                                                     onClick={() => handleAddBlock(block.type as any)}
                                                     className="flex flex-col items-center justify-center p-2.5 border border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors text-gray-700 hover:text-purple-600"
+                                                >
+                                                    <block.icon className="w-4 h-4 mb-0.5" />
+                                                    <span className="text-[10px] font-medium">{block.label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Premium / Multi-page Elements */}
+                                    <div>
+                                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                                            Premium / Flersidig
+                                        </h3>
+                                        <div className="grid grid-cols-2 gap-1.5">
+                                            {filteredBlockTypes.filter(b => b.category === 'premium').map((block) => (
+                                                <button
+                                                    key={block.type}
+                                                    onClick={() => handleAddBlock(block.type as any)}
+                                                    className="flex flex-col items-center justify-center p-2.5 border border-gray-200 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition-colors text-gray-700 hover:text-amber-600"
                                                 >
                                                     <block.icon className="w-4 h-4 mb-0.5" />
                                                     <span className="text-[10px] font-medium">{block.label}</span>
@@ -1192,6 +1517,17 @@ function TemplateBuilder() {
                     )}
                 </div>
             </div>
+
+            {/* Delete Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                onConfirm={handleDeleteTemplate}
+                title="Ta bort mall"
+                message={`Är du säker på att du vill ta bort mallen "${selectedTemplate?.name}"? Denna åtgärd kan inte ångras.`}
+                confirmText="Ta bort"
+                type="danger"
+            />
         </div>
     );
 }
