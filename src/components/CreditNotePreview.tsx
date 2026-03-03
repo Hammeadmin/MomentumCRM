@@ -29,8 +29,8 @@ function CreditNotePreview({ creditNote, logoUrl, systemSettings }: CreditNotePr
               <Building className="w-8 h-8 text-white" />
             </div>
           )}
-          <h1 className="text-xl font-bold text-gray-900">Momentum CRM</h1>
-          <p className="text-gray-600 text-sm">Företagsgatan 123, 123 45 Stockholm</p>
+          <h1 className="text-xl font-bold text-gray-900">Företagsnamn</h1>
+          <p className="text-gray-600 text-sm">Företagsadress 1, 123 45 Staden</p>
         </div>
 
         {/* Right Column: Credit Note Title and Details */}
@@ -43,7 +43,7 @@ function CreditNotePreview({ creditNote, logoUrl, systemSettings }: CreditNotePr
             <span className="font-semibold">Kreditnr:</span> {creditNote.credit_note_number}
           </p>
           <p className="text-gray-600">
-            <span className="font-semibold">Datum:</span> {formatDate(creditNote.created_at)}
+            <span className="font-semibold">Datum:</span> {creditNote.created_at ? formatDate(creditNote.created_at) : ''}
           </p>
           <p className="text-gray-600">
             <span className="font-semibold">Avser faktura:</span> {creditNote.original_invoice?.invoice_number}
@@ -79,7 +79,7 @@ function CreditNotePreview({ creditNote, logoUrl, systemSettings }: CreditNotePr
           ) : creditNote.assignment_type === 'individual' && creditNote.assigned_user ? (
             <p>{creditNote.assigned_user.full_name}</p>
           ) : (
-            <p>Momentum CRM</p>
+            <p>Företagsnamn</p>
           )}
         </div>
       </div>
@@ -164,7 +164,7 @@ function CreditNotePreview({ creditNote, logoUrl, systemSettings }: CreditNotePr
       <div className="mt-8 pt-6 border-t">
         <h4 className="font-semibold text-gray-800 mb-2">Villkor för kreditfaktura</h4>
         <p className="text-xs text-gray-500">
-          Denna kreditfaktura minskar ert utestående belopp med angivet belopp. 
+          Denna kreditfaktura minskar ert utestående belopp med angivet belopp.
           Vid frågor om kreditfakturan, kontakta oss inom 8 dagar från utfärdandedatum.
           {creditNote.original_invoice?.status === 'paid' && ' Återbetalning sker till det konto som användes för ursprunglig betalning.'}
         </p>
@@ -176,7 +176,7 @@ function CreditNotePreview({ creditNote, logoUrl, systemSettings }: CreditNotePr
           <p className="text-sm text-gray-700 mb-4">{systemSettings.invoice_footer_text}</p>
         )}
         <p>Tack för ert förtroende!</p>
-        <p>Momentum CRM AB | Org.nr: 556123-4567 | info@momentum.se</p>
+        <p>Företagsnamn | info@exempel.se</p>
       </div>
     </div>
   );

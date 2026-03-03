@@ -59,6 +59,14 @@ export interface BlockStyleSettings {
   borderWidth?: number;
   borderColor?: string;
   borderRadius?: number;
+
+  // Image display settings
+  imageSize?: 'small' | 'medium' | 'large' | 'full';
+  imageOpacity?: number; // 0-100
+  objectFit?: 'cover' | 'contain' | 'fill';
+  imageEffect?: 'none' | 'fade' | 'rounded' | 'shadow';
+  overlayOpacity?: number; // 0-100, for cover_page overlay
+  backgroundPosition?: 'center' | 'top' | 'bottom';
 }
 
 // All possible block types that can appear in a template

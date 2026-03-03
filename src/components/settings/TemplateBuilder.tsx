@@ -23,7 +23,9 @@ import {
     FileMinus,
     LayoutTemplate,
     Star,
-    AlertTriangle
+    AlertTriangle,
+    Upload,
+    Loader2
 } from 'lucide-react';
 import {
     QuoteTemplate,
@@ -40,6 +42,7 @@ import {
 import QuotePreview from '../QuotePreview';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { uploadTemplateImage } from '../../lib/storage';
 import StyleEditor from './StyleEditor';
 import ConfirmDialog from '../ConfirmDialog';
 
@@ -55,6 +58,53 @@ function TemplateBuilder() {
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [creatingDefaults, setCreatingDefaults] = useState(false);
+    const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const [pendingUploadBlockId, setPendingUploadBlockId] = useState<string | null>(null);
+    const [pendingUploadField, setPendingUploadField] = useState<string | null>(null);
+
+    const handleImageUpload = async (file: File, blockId: string, fieldName?: string) => {
+        const orgId = templates[0]?.organisation_id || session?.user?.id;
+        if (!orgId) return;
+
+        try {
+            setUploadingBlockId(blockId);
+            const publicUrl = await uploadTemplateImage(file, orgId);
+
+            if (publicUrl && selectedTemplate) {
+                // Update the correct block
+                const updatedStructure = selectedTemplate.content_structure.map(b => {
+                    if (b.id !== blockId) return b;
+
+                    if (fieldName) {
+                        return { ...b, content: { ...(b.content as any), [fieldName]: publicUrl } };
+                    }
+                    return { ...b, content: publicUrl };
+                });
+
+                setSelectedTemplate({ ...selectedTemplate, content_structure: updatedStructure });
+            }
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            alert('Det gick inte att ladda upp bilden.');
+        } finally {
+            setUploadingBlockId(null);
+        }
+    };
+
+    const triggerFileUpload = (blockId: string, fieldName?: string) => {
+        setPendingUploadBlockId(blockId);
+        setPendingUploadField(fieldName || null);
+        fileInputRef.current?.click();
+    };
+
+    const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file && pendingUploadBlockId) {
+            handleImageUpload(file, pendingUploadBlockId, pendingUploadField || undefined);
+        }
+        e.target.value = '';
+    };
 
     // Default design options
     const defaultDesignOptions = {
@@ -78,7 +128,9 @@ function TemplateBuilder() {
             case 'footer':
                 return { fontSize: 'sm', textAlign: 'center' };
             case 'image':
-                return { alignment: 'center' };
+                return { alignment: 'center', imageSize: 'large', imageOpacity: 100, objectFit: 'contain', imageEffect: 'none' };
+            case 'cover_page':
+                return { overlayOpacity: 55, backgroundPosition: 'center', imageSize: 'full', alignment: 'center', objectFit: 'cover', imageEffect: 'none' };
             case 'logo':
                 return { alignment: 'left', maxHeight: 80 };
             case 'company_info':
@@ -113,7 +165,7 @@ function TemplateBuilder() {
         return blocks.map(block => ({
             ...block,
             id: crypto.randomUUID(),
-            settings: block.settings || getDefaultBlockSettings(block.type)
+            settings: { ...getDefaultBlockSettings(block.type), ...(block.settings || {}) }
         }));
     };
 
@@ -121,7 +173,7 @@ function TemplateBuilder() {
     const ensureBlockSettings = (blocks: ContentBlock[]): ContentBlock[] => {
         return blocks.map(block => ({
             ...block,
-            settings: block.settings || getDefaultBlockSettings(block.type)
+            settings: { ...getDefaultBlockSettings(block.type), ...(block.settings || {}) }
         }));
     };
 
@@ -647,7 +699,7 @@ function TemplateBuilder() {
         { type: 'divider', label: 'Avdelare', icon: Minus, category: 'layout', docType: 'both' },
         { type: 'spacer', label: 'Mellanrum', icon: LayoutGrid, category: 'layout', docType: 'both' },
         // Premium / Multi-page blocks (quote only)
-        { type: 'page_break', label: 'Sidbrytning', icon: FileMinus, category: 'premium', docType: 'quote' },
+        { type: 'page_break', label: 'Ny Sida', icon: FileMinus, category: 'premium', docType: 'quote' },
         { type: 'cover_page', label: 'Framsida', icon: LayoutTemplate, category: 'premium', docType: 'quote' },
         { type: 'split_content', label: 'Delat Innehåll', icon: Columns, category: 'premium', docType: 'both' },
         { type: 'testimonials', label: 'Omdömen', icon: Star, category: 'premium', docType: 'quote' }
@@ -819,15 +871,98 @@ function TemplateBuilder() {
 
                                     {/* IMAGE BLOCK */}
                                     {selectedBlock.type === 'image' && (
-                                        <div className="mb-4 pb-4 border-b border-gray-200">
-                                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Bild URL</label>
-                                            <input
-                                                type="text"
-                                                value={typeof selectedBlock.content === 'string' ? selectedBlock.content : ''}
-                                                onChange={(e) => handleUpdateBlockContent(selectedBlock.id, e.target.value)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                                                placeholder="https://..."
-                                            />
+                                        <div className="mb-4 pb-4 border-b border-gray-200 space-y-4">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Bild URL</label>
+                                                <div className="flex space-x-2">
+                                                    <input
+                                                        type="text"
+                                                        value={typeof selectedBlock.content === 'string' ? selectedBlock.content : ''}
+                                                        onChange={(e) => handleUpdateBlockContent(selectedBlock.id, e.target.value)}
+                                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                                        placeholder="https://..."
+                                                    />
+                                                    <button
+                                                        onClick={() => triggerFileUpload(selectedBlock.id)}
+                                                        disabled={uploadingBlockId === selectedBlock.id}
+                                                        className="px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 flex items-center shrink-0"
+                                                        title="Ladda upp bild"
+                                                    >
+                                                        {uploadingBlockId === selectedBlock.id ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                                        ) : (
+                                                            <Upload className="w-4 h-4" />
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Storlek</label>
+                                                    <select
+                                                        value={selectedBlock.settings?.imageSize || 'large'}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'imageSize', e.target.value)}
+                                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    >
+                                                        <option value="small">Liten (25%)</option>
+                                                        <option value="medium">Mellan (50%)</option>
+                                                        <option value="large">Stor (75%)</option>
+                                                        <option value="full">Fullbredd (100%)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Justering</label>
+                                                    <select
+                                                        value={selectedBlock.settings?.alignment || 'center'}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'alignment', e.target.value)}
+                                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    >
+                                                        <option value="left">Vänster</option>
+                                                        <option value="center">Centrerad</option>
+                                                        <option value="right">Höger</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Utseende</label>
+                                                    <select
+                                                        value={selectedBlock.settings?.imageEffect || 'none'}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'imageEffect', e.target.value)}
+                                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    >
+                                                        <option value="none">Standard</option>
+                                                        <option value="fade">Tona ut nedåt</option>
+                                                        <option value="rounded">Rundade hörn</option>
+                                                        <option value="shadow">Skugga</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Passform</label>
+                                                    <select
+                                                        value={selectedBlock.settings?.objectFit || 'contain'}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'objectFit', e.target.value)}
+                                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    >
+                                                        <option value="contain">Innanför (Contain)</option>
+                                                        <option value="cover">Täckande (Cover)</option>
+                                                        <option value="fill">Fyll hela (Fill)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1 text-center">
+                                                    Opacitet: {selectedBlock.settings?.imageOpacity ?? 100}%
+                                                </label>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="100"
+                                                    value={selectedBlock.settings?.imageOpacity ?? 100}
+                                                    onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'imageOpacity', parseInt(e.target.value))}
+                                                    className="w-full accent-blue-600"
+                                                />
+                                            </div>
                                         </div>
                                     )}
 
@@ -1032,13 +1167,124 @@ function TemplateBuilder() {
                                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Framsida</label>
                                             <div>
                                                 <label className="block text-xs text-gray-500 mb-1">Bakgrundsbild URL</label>
-                                                <input
-                                                    type="text"
-                                                    value={selectedBlock.content?.backgroundImage || ''}
-                                                    onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, backgroundImage: e.target.value })}
-                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
-                                                    placeholder="https://images.unsplash.com/..."
-                                                />
+                                                <div className="flex space-x-2">
+                                                    <input
+                                                        type="text"
+                                                        value={selectedBlock.content?.backgroundImage || ''}
+                                                        onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, backgroundImage: e.target.value })}
+                                                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                        placeholder="https://images.unsplash.com/..."
+                                                    />
+                                                    <button
+                                                        onClick={() => triggerFileUpload(selectedBlock.id, 'backgroundImage')}
+                                                        disabled={uploadingBlockId === selectedBlock.id}
+                                                        className="px-3 py-1.5 border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 flex items-center shrink-0"
+                                                        title="Ladda upp bild"
+                                                    >
+                                                        {uploadingBlockId === selectedBlock.id ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                                        ) : (
+                                                            <Upload className="w-4 h-4" />
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Bildstorlek</label>
+                                                    <select
+                                                        value={selectedBlock.settings?.imageSize || 'full'}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'imageSize', e.target.value)}
+                                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    >
+                                                        <option value="small">Liten (25%)</option>
+                                                        <option value="medium">Mellan (50%)</option>
+                                                        <option value="large">Stor (75%)</option>
+                                                        <option value="full">Fullbredd (100%)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Passform</label>
+                                                    <select
+                                                        value={selectedBlock.settings?.objectFit || 'cover'}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'objectFit', e.target.value)}
+                                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    >
+                                                        <option value="contain">Innanför (Contain)</option>
+                                                        <option value="cover">Täckande (Cover)</option>
+                                                        <option value="fill">Fyll hela (Fill)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Justering</label>
+                                                    <select
+                                                        value={selectedBlock.settings?.alignment || 'center'}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'alignment', e.target.value)}
+                                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    >
+                                                        <option value="left">Vänster</option>
+                                                        <option value="center">Centrerad</option>
+                                                        <option value="right">Höger</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Utseende</label>
+                                                    <select
+                                                        value={selectedBlock.settings?.imageEffect || 'none'}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'imageEffect', e.target.value)}
+                                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    >
+                                                        <option value="none">Standard</option>
+                                                        <option value="fade">Tona ut nedåt</option>
+                                                        <option value="rounded">Rundade hörn</option>
+                                                        <option value="shadow">Skugga</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3 mt-2">
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1 text-center">
+                                                        Bildopacitet: {selectedBlock.settings?.imageOpacity ?? 100}%
+                                                    </label>
+                                                    <input
+                                                        type="range"
+                                                        min="0"
+                                                        max="100"
+                                                        value={selectedBlock.settings?.imageOpacity ?? 100}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'imageOpacity', parseInt(e.target.value))}
+                                                        className="w-full accent-blue-600"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1 text-center">
+                                                        Mörktoning: {selectedBlock.settings?.overlayOpacity ?? 55}%
+                                                    </label>
+                                                    <input
+                                                        type="range"
+                                                        min="0"
+                                                        max="100"
+                                                        value={selectedBlock.settings?.overlayOpacity ?? 55}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'overlayOpacity', parseInt(e.target.value))}
+                                                        className="w-full accent-blue-600"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 gap-3 mt-2">
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Bildposition (för Täckande)</label>
+                                                    <select
+                                                        value={selectedBlock.settings?.backgroundPosition || 'center'}
+                                                        onChange={(e) => handleBlockStyleChange(selectedBlock.id, 'backgroundPosition', e.target.value)}
+                                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                    >
+                                                        <option value="top">Överkant</option>
+                                                        <option value="center">Centrerad</option>
+                                                        <option value="bottom">Nederkant</option>
+                                                    </select>
+                                                </div>
                                             </div>
                                             <div>
                                                 <label className="block text-xs text-gray-500 mb-1">Titel</label>
@@ -1078,13 +1324,27 @@ function TemplateBuilder() {
                                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Delat Innehåll</label>
                                             <div>
                                                 <label className="block text-xs text-gray-500 mb-1">Bild-URL</label>
-                                                <input
-                                                    type="text"
-                                                    value={selectedBlock.content?.imageUrl || ''}
-                                                    onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, imageUrl: e.target.value })}
-                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
-                                                    placeholder="https://..."
-                                                />
+                                                <div className="flex space-x-2">
+                                                    <input
+                                                        type="text"
+                                                        value={selectedBlock.content?.imageUrl || ''}
+                                                        onChange={(e) => handleUpdateBlockContent(selectedBlock.id, { ...selectedBlock.content, imageUrl: e.target.value })}
+                                                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                                                        placeholder="https://..."
+                                                    />
+                                                    <button
+                                                        onClick={() => triggerFileUpload(selectedBlock.id, 'imageUrl')}
+                                                        disabled={uploadingBlockId === selectedBlock.id}
+                                                        className="px-3 py-1.5 border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 flex items-center shrink-0"
+                                                        title="Ladda upp bild"
+                                                    >
+                                                        {uploadingBlockId === selectedBlock.id ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                                        ) : (
+                                                            <Upload className="w-4 h-4" />
+                                                        )}
+                                                    </button>
+                                                </div>
                                             </div>
                                             <div>
                                                 <label className="block text-xs text-gray-500 mb-1">Rubrik</label>
@@ -1507,6 +1767,7 @@ function TemplateBuilder() {
                                 onBlockDelete={handleRemoveBlock}
                                 onBlockSelect={(id) => setSelectedBlockId(id)}
                                 onTextOverrideUpdate={updateTextOverride}
+                                onAddBlock={handleAddBlock}
                             />
                         </div>
                     ) : (
@@ -1517,6 +1778,15 @@ function TemplateBuilder() {
                     )}
                 </div>
             </div>
+
+            {/* Hidden File Input for Image Uploads */}
+            <input
+                type="file"
+                ref={fileInputRef}
+                onChange={onFileSelected}
+                className="hidden"
+                accept="image/*"
+            />
 
             {/* Delete Confirmation Dialog */}
             <ConfirmDialog

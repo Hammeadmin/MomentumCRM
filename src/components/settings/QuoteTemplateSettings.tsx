@@ -564,6 +564,7 @@ function QuoteTemplateSettings() {
                 <BlockBasedTemplateEditor
                   blocks={editingTemplate.content_structure}
                   onBlocksChange={handleBlocksChange}
+                  organisationId={userProfile?.organisation_id}
                 />
               </div>
 

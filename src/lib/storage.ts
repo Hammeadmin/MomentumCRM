@@ -152,3 +152,23 @@ export async function getSignedDocumentUrl(path: string): Promise<string | null>
 
     return data?.signedUrl || null;
 }
+
+/**
+ * Uploads an image for use in quote/invoice templates.
+ * Compresses the image, uploads to Supabase Storage, and returns the public URL.
+ * @param file The image file to upload
+ * @param organisationId The organisation ID for folder scoping
+ * @returns The public URL of the uploaded image
+ */
+export async function uploadTemplateImage(
+    file: File,
+    organisationId: string
+): Promise<string> {
+    const filePath = await uploadImage(file, `template-images/${organisationId}`, 'documents');
+
+    const { data } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath);
+
+    return data.publicUrl;
+}

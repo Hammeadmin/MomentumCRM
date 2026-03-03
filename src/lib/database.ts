@@ -18,7 +18,9 @@ import type {
   JobStatus,
   JobPriority,
   QuoteLineItem,
-  SavedLineItem
+  SavedLineItem,
+  RichSavedLineItem,
+  ProductMetadata
 } from '../types/database';
 import { LEAD_STATUS_LABELS, JOB_STATUS_LABELS, JOB_PRIORITY_LABELS, EmploymentType } from '../types/database';
 
@@ -589,7 +591,7 @@ export const getSystemSettings = async (organisationId: string) => {
 
 export const getSavedLineItems = async (
   organisationId: string
-): Promise<{ data: SavedLineItem[] | null; error: Error | null }> => {
+): Promise<{ data: RichSavedLineItem[] | null; error: Error | null }> => {
   try {
     const { data, error } = await supabase
       .from('saved_line_items')
@@ -607,8 +609,14 @@ export const getSavedLineItems = async (
 
 export const createSavedLineItem = async (
   organisationId: string,
-  itemData: { name: string; description?: string; unit_price: number }
-): Promise<{ data: SavedLineItem | null; error: Error | null }> => {
+  itemData: {
+    name: string;
+    description?: string;
+    unit_price: number;
+    item_type?: string;
+    metadata?: ProductMetadata;
+  }
+): Promise<{ data: RichSavedLineItem | null; error: Error | null }> => {
   try {
     const { data, error } = await supabase
       .from('saved_line_items')
@@ -618,6 +626,8 @@ export const createSavedLineItem = async (
           name: itemData.name,
           description: itemData.description || itemData.name,
           unit_price: itemData.unit_price,
+          item_type: itemData.item_type || null,
+          metadata: itemData.metadata || null,
         },
       ])
       .select()
@@ -628,6 +638,55 @@ export const createSavedLineItem = async (
   } catch (err) {
     console.error('Error creating saved line item:', err);
     return { data: null, error: err as Error };
+  }
+};
+
+export const updateSavedLineItem = async (
+  id: string,
+  itemData: {
+    name: string;
+    description?: string;
+    unit_price: number;
+    item_type?: string;
+    metadata?: ProductMetadata;
+  }
+): Promise<{ data: RichSavedLineItem | null; error: Error | null }> => {
+  try {
+    const { data, error } = await supabase
+      .from('saved_line_items')
+      .update({
+        name: itemData.name,
+        description: itemData.description || itemData.name,
+        unit_price: itemData.unit_price,
+        item_type: itemData.item_type || null,
+        metadata: itemData.metadata || null,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (err) {
+    console.error('Error updating saved line item:', err);
+    return { data: null, error: err as Error };
+  }
+};
+
+export const deleteSavedLineItem = async (
+  id: string
+): Promise<{ error: Error | null }> => {
+  try {
+    const { error } = await supabase
+      .from('saved_line_items')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    return { error: null };
+  } catch (err) {
+    console.error('Error deleting saved line item:', err);
+    return { error: err as Error };
   }
 };
 

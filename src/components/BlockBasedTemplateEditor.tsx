@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   GripVertical,
   Plus,
@@ -8,17 +8,17 @@ import {
   Package,
   MessageSquare,
   Edit,
-  Save,
-  X,
   Image as ImageIcon,
-  Layout,
   FileMinus,
   LayoutTemplate,
   Columns,
-  Star
+  Star,
+  Upload,
+  Loader2
 } from 'lucide-react';
-import { UNIT_LABELS, UNIT_DESCRIPTIONS, type QuoteLineItemTemplate } from '../lib/quoteTemplates';
+import { UNIT_DESCRIPTIONS, type QuoteLineItemTemplate } from '../lib/quoteTemplates';
 import { formatCurrency } from '../lib/database';
+import { uploadTemplateImage } from '../lib/storage';
 
 export interface ContentBlock {
   id: string;
@@ -31,12 +31,52 @@ interface BlockBasedTemplateEditorProps {
   blocks: ContentBlock[];
   onBlocksChange: (blocks: ContentBlock[]) => void;
   className?: string;
+  organisationId?: string;
 }
 
-function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '' }: BlockBasedTemplateEditorProps) {
+function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '', organisationId }: BlockBasedTemplateEditorProps) {
   const [draggedBlock, setDraggedBlock] = useState<ContentBlock | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [editingBlock, setEditingBlock] = useState<string | null>(null);
+  const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingUploadBlockId, setPendingUploadBlockId] = useState<string | null>(null);
+
+  const handleImageUpload = async (file: File, blockId: string) => {
+    if (!organisationId) return;
+    try {
+      setUploadingBlockId(blockId);
+      const publicUrl = await uploadTemplateImage(file, organisationId);
+      const block = blocks.find(b => b.id === blockId);
+      if (!block) return;
+
+      if (block.type === 'image') {
+        updateBlock(blockId, publicUrl);
+      } else if (block.type === 'cover_page') {
+        updateBlock(blockId, { ...(block.content || {}), backgroundImage: publicUrl });
+      } else if (block.type === 'split_content') {
+        updateBlock(blockId, { ...(block.content || {}), imageUrl: publicUrl });
+      }
+    } catch (err) {
+      console.error('Error uploading image:', err);
+    } finally {
+      setUploadingBlockId(null);
+    }
+  };
+
+  const triggerFileUpload = (blockId: string) => {
+    setPendingUploadBlockId(blockId);
+    fileInputRef.current?.click();
+  };
+
+  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && pendingUploadBlockId) {
+      handleImageUpload(file, pendingUploadBlockId);
+    }
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+  };
 
   const blockTypes = [
     { type: 'header', label: 'Rubrik', icon: Type, description: 'Huvudrubrik för offerten' },
@@ -383,42 +423,123 @@ function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '' }: Bl
         );
 
       case 'image':
+        const isUploading = uploadingBlockId === block.id;
         return (
           <div className="space-y-2">
-            <div className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+            <div className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-300">
               <Icon className="w-4 h-4" />
               <span>{getBlockLabel(block.type)}</span>
             </div>
             {isEditing ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
+                {/* Upload + URL */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Bild-URL</label>
-                  <input
-                    type="text"
-                    value={block.content}
-                    onChange={(e) => updateBlock(block.id, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="https://..."
-                    autoFocus
-                  />
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bild</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={block.content || ''}
+                      onChange={(e) => updateBlock(block.id, e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                      placeholder="Klistra in URL eller ladda upp..."
+                    />
+                    <button
+                      onClick={() => triggerFileUpload(block.id)}
+                      disabled={isUploading}
+                      className="inline-flex items-center px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm transition-colors"
+                    >
+                      {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      <span className="ml-1.5">{isUploading ? 'Laddar...' : 'Ladda upp'}</span>
+                    </button>
+                  </div>
                 </div>
+
+                {/* Preview */}
+                {block.content && (
+                  <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-2 bg-gray-50 dark:bg-gray-800">
+                    <img src={block.content} alt="Förhandsvisning" className="max-h-32 mx-auto object-contain rounded" onError={(e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = 'none'; }} />
+                  </div>
+                )}
+
+                {/* Display settings grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Justering</label>
+                    <select
+                      value={block.settings?.alignment || 'center'}
+                      onChange={(e) => updateBlock(block.id, block.content, { alignment: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                    >
+                      <option value="left">Vänster</option>
+                      <option value="center">Centrerad</option>
+                      <option value="right">Höger</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Storlek</label>
+                    <select
+                      value={block.settings?.imageSize || 'large'}
+                      onChange={(e) => updateBlock(block.id, block.content, { imageSize: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                    >
+                      <option value="small">Liten (25%)</option>
+                      <option value="medium">Mellan (50%)</option>
+                      <option value="large">Stor (75%)</option>
+                      <option value="full">Helbredd (100%)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Anpassning</label>
+                    <select
+                      value={block.settings?.objectFit || 'contain'}
+                      onChange={(e) => updateBlock(block.id, block.content, { objectFit: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                    >
+                      <option value="contain">Anpassa (contain)</option>
+                      <option value="cover">Fyll (cover)</option>
+                      <option value="fill">Sträck (fill)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Effekt</label>
+                    <select
+                      value={block.settings?.imageEffect || 'none'}
+                      onChange={(e) => updateBlock(block.id, block.content, { imageEffect: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                    >
+                      <option value="none">Ingen</option>
+                      <option value="fade">Tonad kant</option>
+                      <option value="rounded">Rundade hörn</option>
+                      <option value="shadow">Skugga</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Opacity slider */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Justering</label>
-                  <select
-                    value={block.settings?.alignment || 'center'}
-                    onChange={(e) => updateBlock(block.id, block.content, { alignment: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                  >
-                    <option value="left">Vänster</option>
-                    <option value="center">Centrerad</option>
-                    <option value="right">Höger</option>
-                  </select>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Opacitet: {block.settings?.imageOpacity ?? 100}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={block.settings?.imageOpacity ?? 100}
+                    onChange={(e) => updateBlock(block.id, block.content, { imageOpacity: parseInt(e.target.value) })}
+                    className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                  />
                 </div>
               </div>
             ) : (
               <div className="flex items-center space-x-4">
-                <img src={block.content} alt="Block" className="h-10 w-10 object-cover rounded bg-gray-100" />
-                <span className="text-gray-500 truncate">{block.content || 'Ingen bild vald'}</span>
+                {block.content ? (
+                  <img src={block.content} alt="Block" className="h-10 w-10 object-cover rounded bg-gray-100 dark:bg-gray-700" />
+                ) : (
+                  <div className="h-10 w-10 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                    <ImageIcon className="w-5 h-5 text-gray-400" />
+                  </div>
+                )}
+                <span className="text-gray-500 dark:text-gray-400 truncate">{block.content ? 'Bild inställd' : 'Ingen bild vald'}</span>
               </div>
             )}
           </div>
@@ -441,58 +562,103 @@ function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '' }: Bl
 
       case 'cover_page':
         const coverContent = block.content || {};
+        const isCoverUploading = uploadingBlockId === block.id;
         return (
           <div className="space-y-3">
-            <div className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+            <div className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-300">
               <LayoutTemplate className="w-4 h-4" />
               <span>Framsida</span>
             </div>
             {isEditing ? (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Bakgrundsbild URL</label>
-                  <input
-                    type="text"
-                    value={coverContent.backgroundImage || ''}
-                    onChange={(e) => updateBlock(block.id, { ...coverContent, backgroundImage: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    placeholder="https://images.unsplash.com/..."
-                  />
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bakgrundsbild</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={coverContent.backgroundImage || ''}
+                      onChange={(e) => updateBlock(block.id, { ...coverContent, backgroundImage: e.target.value })}
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                      placeholder="Klistra in URL eller ladda upp..."
+                    />
+                    <button
+                      onClick={() => triggerFileUpload(block.id)}
+                      disabled={isCoverUploading}
+                      className="inline-flex items-center px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm transition-colors"
+                    >
+                      {isCoverUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      <span className="ml-1.5">{isCoverUploading ? 'Laddar...' : 'Ladda upp'}</span>
+                    </button>
+                  </div>
+                  {coverContent.backgroundImage && (
+                    <div className="mt-2 border border-gray-200 dark:border-gray-600 rounded-lg p-2 bg-gray-50 dark:bg-gray-800">
+                      <img src={coverContent.backgroundImage} alt="Förhandsvisning" className="max-h-24 mx-auto object-contain rounded" onError={(e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = 'none'; }} />
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Titel</label>
-                  <input
-                    type="text"
-                    value={coverContent.title || ''}
-                    onChange={(e) => updateBlock(block.id, { ...coverContent, title: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    placeholder="Offertens titel"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Titel</label>
+                    <input
+                      type="text"
+                      value={coverContent.title || ''}
+                      onChange={(e) => updateBlock(block.id, { ...coverContent, title: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                      placeholder="Offertens titel"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Undertitel</label>
+                    <input
+                      type="text"
+                      value={coverContent.subtitle || ''}
+                      onChange={(e) => updateBlock(block.id, { ...coverContent, subtitle: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                      placeholder="Kort beskrivning eller slogan"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Undertitel</label>
-                  <input
-                    type="text"
-                    value={coverContent.subtitle || ''}
-                    onChange={(e) => updateBlock(block.id, { ...coverContent, subtitle: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    placeholder="Kort beskrivning eller slogan"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Överlagringsopacitet: {block.settings?.overlayOpacity ?? 55}%
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={block.settings?.overlayOpacity ?? 55}
+                      onChange={(e) => updateBlock(block.id, coverContent, { overlayOpacity: parseInt(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bildposition</label>
+                    <select
+                      value={block.settings?.backgroundPosition || 'center'}
+                      onChange={(e) => updateBlock(block.id, coverContent, { backgroundPosition: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                    >
+                      <option value="top">Toppen</option>
+                      <option value="center">Centrum</option>
+                      <option value="bottom">Botten</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
                     checked={coverContent.showLogo !== false}
                     onChange={(e) => updateBlock(block.id, { ...coverContent, showLogo: e.target.checked })}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
                   />
-                  <label className="text-xs font-medium text-gray-700">Visa logotyp</label>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Visa logotyp</label>
                 </div>
               </div>
             ) : (
               <div className="bg-gray-800 rounded-lg p-6 text-white text-center relative overflow-hidden" style={{ minHeight: '120px' }}>
                 {coverContent.backgroundImage && (
-                  <img src={coverContent.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />
+                  <img src={coverContent.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ opacity: (block.settings?.overlayOpacity ?? 55) / 100 * 0.7 + 0.1 }} />
                 )}
                 <div className="relative z-10">
                   <p className="text-lg font-bold">{coverContent.title || 'Titel'}</p>
@@ -506,55 +672,71 @@ function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '' }: Bl
 
       case 'split_content':
         const splitContent = block.content || {};
+        const isSplitUploading = uploadingBlockId === block.id;
         return (
           <div className="space-y-3">
-            <div className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+            <div className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-300">
               <Columns className="w-4 h-4" />
               <span>Delat Innehåll</span>
             </div>
             {isEditing ? (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Bild-URL</label>
-                  <input
-                    type="text"
-                    value={splitContent.imageUrl || ''}
-                    onChange={(e) => updateBlock(block.id, { ...splitContent, imageUrl: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    placeholder="https://..."
-                  />
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bild</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={splitContent.imageUrl || ''}
+                      onChange={(e) => updateBlock(block.id, { ...splitContent, imageUrl: e.target.value })}
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                      placeholder="Klistra in URL eller ladda upp..."
+                    />
+                    <button
+                      onClick={() => triggerFileUpload(block.id)}
+                      disabled={isSplitUploading}
+                      className="inline-flex items-center px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm transition-colors"
+                    >
+                      {isSplitUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      <span className="ml-1.5">{isSplitUploading ? 'Laddar...' : 'Ladda upp'}</span>
+                    </button>
+                  </div>
+                  {splitContent.imageUrl && (
+                    <div className="mt-2 border border-gray-200 dark:border-gray-600 rounded-lg p-2 bg-gray-50 dark:bg-gray-800">
+                      <img src={splitContent.imageUrl} alt="Förhandsvisning" className="max-h-20 mx-auto object-contain rounded" onError={(e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = 'none'; }} />
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Rubrik</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Rubrik</label>
                   <input
                     type="text"
                     value={splitContent.headline || ''}
                     onChange={(e) => updateBlock(block.id, { ...splitContent, headline: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
                     placeholder="Rubrik"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Brödtext</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Brödtext</label>
                   <textarea
                     value={splitContent.paragraph || ''}
                     onChange={(e) => updateBlock(block.id, { ...splitContent, paragraph: e.target.value })}
                     rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
                     placeholder="Beskrivning..."
                   />
                 </div>
                 <div className="flex items-center space-x-3">
-                  <label className="text-xs font-medium text-gray-700">Bildposition:</label>
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Bildposition:</label>
                   <button
                     onClick={() => updateBlock(block.id, { ...splitContent, imagePosition: 'left' })}
-                    className={`px-3 py-1 text-xs rounded-md border ${splitContent.imagePosition !== 'right' ? 'bg-blue-100 border-blue-400 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                    className={`px-3 py-1 text-xs rounded-lg border transition-colors ${splitContent.imagePosition !== 'right' ? 'bg-primary-100 dark:bg-primary-900/30 border-primary-400 dark:border-primary-600 text-primary-700 dark:text-primary-400' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                   >
                     ◀ Bild vänster
                   </button>
                   <button
                     onClick={() => updateBlock(block.id, { ...splitContent, imagePosition: 'right' })}
-                    className={`px-3 py-1 text-xs rounded-md border ${splitContent.imagePosition === 'right' ? 'bg-blue-100 border-blue-400 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                    className={`px-3 py-1 text-xs rounded-lg border transition-colors ${splitContent.imagePosition === 'right' ? 'bg-primary-100 dark:bg-primary-900/30 border-primary-400 dark:border-primary-600 text-primary-700 dark:text-primary-400' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                   >
                     Bild höger ▶
                   </button>
@@ -562,7 +744,7 @@ function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '' }: Bl
               </div>
             ) : (
               <div className={`flex gap-4 items-start ${splitContent.imagePosition === 'right' ? 'flex-row-reverse' : ''}`}>
-                <div className="w-24 h-20 bg-gray-200 rounded flex-shrink-0 overflow-hidden">
+                <div className="w-24 h-20 bg-gray-200 dark:bg-gray-700 rounded flex-shrink-0 overflow-hidden">
                   {splitContent.imageUrl ? (
                     <img src={splitContent.imageUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -570,8 +752,8 @@ function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '' }: Bl
                   )}
                 </div>
                 <div className="flex-1">
-                  <p className="font-semibold text-gray-900 text-sm">{splitContent.headline || 'Rubrik'}</p>
-                  <p className="text-gray-600 text-xs mt-1 line-clamp-3">{splitContent.paragraph || 'Brödtext...'}</p>
+                  <p className="font-semibold text-gray-900 dark:text-white text-sm">{splitContent.headline || 'Rubrik'}</p>
+                  <p className="text-gray-600 dark:text-gray-400 text-xs mt-1 line-clamp-3">{splitContent.paragraph || 'Brödtext...'}</p>
                 </div>
               </div>
             )}
@@ -686,6 +868,15 @@ function BlockBasedTemplateEditor({ blocks, onBlocksChange, className = '' }: Bl
 
   return (
     <div className={`space-y-4 ${className}`}>
+      {/* Hidden file input for image uploads */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={onFileSelected}
+      />
+
       {/* Add Block Buttons */}
       <div className="flex flex-wrap gap-2 p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
         <span className="text-sm font-medium text-gray-700 mr-2">Lägg till block:</span>

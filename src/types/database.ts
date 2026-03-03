@@ -201,6 +201,45 @@ export interface SavedLineItem {
   metadata?: any | null;
 }
 
+export interface CustomField {
+  key: string;
+  label: string;
+  type: 'number' | 'select' | 'checkbox';
+  unit?: string;
+  options?: string[];
+  defaultValue?: number | string | boolean;
+  placeholder?: string;
+}
+
+export interface IncludedItem {
+  label: string;
+  default: boolean;
+}
+
+export interface ProductMetadata {
+  unit?: string;
+  vat_rate?: number;
+  category?: string;
+  cost_price?: number;
+  base_price?: number;
+  custom_fields?: CustomField[];
+  pricing_formula?: string;
+  time_formula?: string;
+  time_unit?: string;
+  included_items?: IncludedItem[];
+}
+
+export interface RichSavedLineItem {
+  id: string;
+  organisation_id: string;
+  name: string;
+  description: string | null;
+  unit_price: number;
+  item_type: string | null;
+  metadata: ProductMetadata | null;
+  created_at: string | null;
+}
+
 export interface Customer {
   id: string;
   organisation_id?: string | null;

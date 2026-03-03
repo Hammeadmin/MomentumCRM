@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Building, Mail, Phone, MapPin, Trash2, GripVertical, Settings, Star } from 'lucide-react';
+import { Building, Mail, Phone, MapPin, Trash2, GripVertical, Settings, Star, FileMinus, Plus } from 'lucide-react';
 import type { QuoteTemplate, ContentBlock, BlockStyleSettings } from '../lib/quoteTemplates';
 import { formatCurrency, formatDate } from '../lib/database';
 import { UNIT_LABELS } from '../lib/quoteTemplates';
@@ -42,7 +42,15 @@ const getBlockStyles = (settings?: BlockStyleSettings, fontFamily?: string): Rea
     borderColor: settings.borderColor,
     borderRadius: settings.borderRadius ? `${settings.borderRadius}px` : undefined,
     borderStyle: settings.borderWidth ? 'solid' : undefined,
-  };
+    // Add custom properties used for image and cover_page blocks
+    imageSize: settings.imageSize,
+    alignment: (settings as any).alignment,
+    imageEffect: settings.imageEffect,
+    imageOpacity: settings.imageOpacity,
+    objectFit: settings.objectFit,
+    backgroundPosition: settings.backgroundPosition,
+    overlayOpacity: settings.overlayOpacity,
+  } as any; // Cast as any since we're returning custom non-CSS properties
 };
 
 // --- Interfaces ---
@@ -61,6 +69,7 @@ interface QuotePreviewProps {
   onBlockDelete?: (blockId: string) => void;
   onBlockSelect?: (blockId: string) => void;
   onTextOverrideUpdate?: (key: string, value: string) => void;
+  onAddBlock?: (type: ContentBlock['type']) => void;
 }
 
 interface EditableElementProps {
@@ -215,7 +224,8 @@ function QuotePreview({
   onBlockMove,
   onBlockDelete,
   onBlockSelect,
-  onTextOverrideUpdate
+  onTextOverrideUpdate,
+  onAddBlock
 }: QuotePreviewProps) {
   const subtotal = quote.subtotal || 0;
   const vatAmount = quote.vat_amount || 0;
@@ -224,13 +234,13 @@ function QuotePreview({
   const finalAmount = total - rotAmount;
 
   const defaultCompany = {
-    name: 'Momentum CRM AB',
-    org_number: '556123-4567',
-    email: 'info@momentum.se',
-    phone: '+46 8 123 456 78',
-    address: 'Företagsgatan 123',
-    postal_code: '123 45',
-    city: 'Stockholm'
+    name: 'Företagsnamn',
+    org_number: '',
+    email: '',
+    phone: '',
+    address: '',
+    postal_code: '',
+    city: ''
   };
 
   const defaultCustomer = {
@@ -486,17 +496,45 @@ function QuotePreview({
 
       case 'image':
         const alignment = block.settings?.alignment || 'center';
-        // In edit mode, maybe show alignment controls? 
-        // For now, render the image.
+        const imgSize = block.settings?.imageSize || 'large';
+        const imgOpacity = (block.settings?.imageOpacity ?? 100) / 100;
+        const imgObjectFit = block.settings?.objectFit || 'contain';
+        const imgEffect = block.settings?.imageEffect || 'none';
+
+        const sizeMap: Record<string, string> = { small: '25%', medium: '50%', large: '75%', full: '100%' };
+        const maxW = sizeMap[imgSize] || '75%';
+
+        const imgStyle: React.CSSProperties = {
+          maxWidth: maxW,
+          width: maxW,
+          height: 'auto',
+          maxHeight: '500px',
+          objectFit: imgObjectFit as any,
+          opacity: imgOpacity,
+          ...(imgEffect === 'rounded' ? { borderRadius: '12px' } : {}),
+          ...(imgEffect === 'shadow' ? { boxShadow: '0 8px 30px rgba(0,0,0,0.15)' } : {}),
+        };
+
+        const fadeOverlay = imgEffect === 'fade';
+
         innerContent = (
           <div className={`mb-6 flex ${alignment === 'left' ? 'justify-start' : alignment === 'right' ? 'justify-end' : 'justify-center'}`}>
-            <img
-              src={block.content as string}
-              alt="Block"
-              className="max-w-full h-auto rounded-lg shadow-sm"
-              style={{ maxHeight: '400px' }}
-              onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { e.currentTarget.style.display = 'none'; }}
-            />
+            <div className="relative inline-block" style={{ maxWidth: maxW, width: maxW }}>
+              <img
+                src={block.content as string}
+                alt="Block"
+                style={imgStyle}
+                onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { e.currentTarget.style.display = 'none'; }}
+              />
+              {fadeOverlay && (
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: 'linear-gradient(to bottom, transparent 60%, white 100%)',
+                  }}
+                />
+              )}
+            </div>
             {isEditable && (
               <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-10 transition-all cursor-pointer flex items-center justify-center opacity-0 hover:opacity-100">
                 <span className="bg-white px-2 py-1 rounded text-xs shadow">Klicka för inställningar</span>
@@ -1034,24 +1072,28 @@ function QuotePreview({
 
       // ==================== MULTI-PAGE / PREMIUM BLOCKS ====================
       case 'page_break':
-        // Zero-height element that forces a page break in print/PDF
+        // Element that forces a page break in print/PDF, and visually separates pages in the editor
         innerContent = (
           <div
             className="break-after-page"
             style={{
-              height: 0,
-              width: '100%',
               pageBreakAfter: 'always',
               breakAfter: 'page' as any,
             }}
-            aria-hidden="true"
+            aria-hidden={!isEditable}
           >
             {/* Visible indicator only on screen, hidden in print */}
-            <div className="border-t-2 border-dashed border-gray-300 my-4 relative print:hidden" style={{ height: 'auto' }}>
-              <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-xs text-gray-400 font-medium tracking-widest">
-                SIDBRYTNING
-              </span>
-            </div>
+            {isEditable ? (
+              <div className="mx--8 my-8 bg-gray-100 py-8 px-4 border-y border-gray-300 shadow-inner print:hidden flex flex-col items-center justify-center">
+                <div className="bg-white rounded shadow-sm border border-gray-200 px-6 py-2 flex items-center gap-2 text-sm font-medium text-gray-500">
+                  <FileMinus className="w-4 h-4" />
+                  Sidbrytning — Ny Sida
+                </div>
+              </div>
+            ) : (
+              // In preview mode (not editing), just hide it on screen
+              <div className="h-0 w-full print:hidden"></div>
+            )}
           </div>
         );
         break;
@@ -1060,6 +1102,32 @@ function QuotePreview({
         // Full-page cover with background image, dark overlay, logo, title, and subtitle
         const cover = block.content || {};
         const coverStyles = getBlockStyles(block.settings, font_family);
+        const customStyles = coverStyles as any; // Bypass TS CSSProperty checking for custom props
+
+        // If settings are missing (old template), assume standard full-cover behavior
+        const currentSize = customStyles.imageSize || 'full';
+        const currentFit = customStyles.objectFit || 'cover';
+
+        // Image Settings for Cover Page (similar to standard image block)
+        const coverSizeCls = currentSize === 'small' ? 'w-1/4' :
+          currentSize === 'medium' ? 'w-2/4' :
+            currentSize === 'large' ? 'w-3/4' : 'w-full';
+
+        // If it's cover or fill, and width is full, we typically want h-full too so it fills the screen
+        const isFullBg = coverSizeCls === 'w-full' && (currentFit === 'cover' || currentFit === 'fill');
+        const heightCls = isFullBg ? 'h-full' : 'h-auto';
+
+        const coverAlignCls = customStyles.alignment === 'left' ? 'justify-start' :
+          customStyles.alignment === 'right' ? 'justify-end' : 'justify-center';
+
+        let coverEffectCls = '';
+        if (customStyles.imageEffect === 'fade') coverEffectCls = '[mask-image:linear-gradient(to_bottom,black_60%,transparent_100%)]';
+        if (customStyles.imageEffect === 'rounded') coverEffectCls = 'rounded-2xl';
+        if (customStyles.imageEffect === 'shadow') coverEffectCls = 'shadow-2xl';
+
+        const coverOpacity = customStyles.imageOpacity !== undefined ? customStyles.imageOpacity / 100 : 1;
+        const coverObjPosition = customStyles.backgroundPosition || 'center';
+
         innerContent = (
           <div
             className="relative flex flex-col items-center justify-center text-center text-white overflow-hidden rounded-lg print:rounded-none"
@@ -1067,18 +1135,31 @@ function QuotePreview({
               height: '250mm',
               maxHeight: '250mm',
               overflow: 'hidden',
-              backgroundImage: cover.backgroundImage ? `url(${cover.backgroundImage})` : undefined,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundColor: cover.backgroundImage ? undefined : (coverStyles.backgroundColor || '#1e293b'),
-              ...coverStyles,
+              backgroundColor: coverStyles.backgroundColor || '#1e293b',
+              ...coverStyles, // allow other block styles if any
             }}
           >
+            {/* The actual image rendered via <img> tag to support advanced settings */}
+            {cover.backgroundImage && (
+              <div className={`absolute inset-0 z-0 flex ${coverAlignCls} items-center overflow-hidden`}>
+                <img
+                  src={cover.backgroundImage}
+                  alt="Bakgrund"
+                  className={`${coverSizeCls} ${heightCls} ${coverEffectCls}`}
+                  style={{
+                    objectFit: currentFit as 'contain' | 'cover' | 'fill',
+                    objectPosition: coverObjPosition,
+                    opacity: coverOpacity
+                  }}
+                />
+              </div>
+            )}
+
             {/* Dark overlay */}
-            <div className="absolute inset-0 bg-black" style={{ opacity: 0.55 }} />
+            <div className="absolute inset-0 bg-black z-0" style={{ opacity: (block.settings?.overlayOpacity ?? 55) / 100 }} />
 
             {/* Content */}
-            <div className="relative z-10 px-12 py-8 flex flex-col items-center justify-center h-full">
+            <div className="relative z-10 px-12 py-8 flex flex-col items-center justify-center h-full w-full">
               {/* Logo */}
               {cover.showLogo !== false && (
                 <div className="mb-8">
@@ -1395,6 +1476,19 @@ function QuotePreview({
         {/* Render ALL blocks from content_structure (template-based) */}
         <div className="space-y-2 print:space-y-4">
           {template?.content_structure?.map((block, index) => renderContentBlock(block, index))}
+
+          {/* Add New Page Button within the editor canvas */}
+          {isEditable && onAddBlock && (
+            <div className="mt-12 mb-4 flex justify-center print:hidden">
+              <button
+                onClick={() => onAddBlock('page_break')}
+                className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors shadow-sm"
+              >
+                <Plus className="w-5 h-5" />
+                <span className="font-medium">Lägg till ny sida</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
