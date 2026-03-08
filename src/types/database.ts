@@ -283,6 +283,9 @@ export interface Lead {
   created_at?: string | null;
   lead_score?: number | null;
   last_activity_at?: string | null;
+  form_id?: string | null;
+  form_data?: Record<string, any> | null;
+  city?: string | null;
   customer?: Customer;
   assigned_to?: UserProfile;
 }

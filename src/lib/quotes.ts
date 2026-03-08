@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import type { Quote, Customer, Lead, QuoteLineItem, QuoteStatus, Order } from '../types/database';
 import { createOrder } from './orders'; // Import createOrder
+import { getSavedLineItemById } from './database';
+import { evaluate } from 'mathjs';
 
 export interface QuoteWithRelations extends Quote {
   customer?: Customer;
@@ -548,9 +550,29 @@ export const sendOrderConfirmationEmail = async (
   }
 };
 
+// ============================================================================
+// Formula helpers (copied from ProductConfigurator.tsx)
+// ============================================================================
+
+const safeEvaluate = (formula: string, fieldValues: Record<string, number | string | boolean>): number => {
+  if (!formula?.trim()) return 0;
+  try {
+    const scope: Record<string, number> = {};
+    Object.entries(fieldValues).forEach(([k, v]) => {
+      scope[k] = typeof v === 'number' ? v : 0;
+    });
+    const result = evaluate(formula, scope);
+    if (typeof result !== 'number' || !isFinite(result) || isNaN(result)) return 0;
+    return Math.max(0, Math.round(result * 100) / 100);
+  } catch {
+    return 0;
+  }
+};
+
 export const createQuoteFromLead = async (
-  lead: Lead,
-  organisationId: string
+  lead: Lead & { form_data?: Record<string, any> | null },
+  organisationId: string,
+  linkedProductId?: string
 ): Promise<{ data: Quote | null; error: Error | null }> => {
   try {
     if (!lead.customer_id) {
@@ -565,20 +587,90 @@ export const createQuoteFromLead = async (
       return { data: null, error: new Error('Failed to generate quote number.') };
     }
 
+    // ---- Smart line-item calculation ----
+    let calculatedPrice = lead.estimated_value || 0;
+    let lineItemToInsert: Omit<QuoteLineItem, 'id' | 'quote_id'> | null = null;
+
+    if (linkedProductId && lead.form_data && Object.keys(lead.form_data).length > 0) {
+      const { data: product } = await getSavedLineItemById(linkedProductId);
+
+      if (product) {
+        const meta = product.metadata;
+
+        if (meta?.pricing_formula && meta?.custom_fields) {
+          // Build scope: match each custom_field key to a form_data value
+          const scope: Record<string, number | string | boolean> = {};
+          for (const cf of meta.custom_fields) {
+            // Exact key match first
+            let val = lead.form_data[cf.key];
+            // Case-insensitive fallback
+            if (val === undefined) {
+              const lowerKey = cf.key.toLowerCase();
+              const match = Object.entries(lead.form_data).find(([k]) => k.toLowerCase() === lowerKey);
+              val = match ? match[1] : undefined;
+            }
+            scope[cf.key] = val !== undefined ? (typeof val === 'number' ? val : Number(val) || 0) : 0;
+          }
+
+          const formulaResult = safeEvaluate(meta.pricing_formula, scope);
+          const basePrice = meta.base_price ?? 0;
+          calculatedPrice = formulaResult + basePrice;
+
+          // Zero result → fallback to unit_price
+          if (calculatedPrice === 0) {
+            calculatedPrice = product.unit_price;
+          }
+        } else {
+          // No formula — use product unit_price
+          calculatedPrice = product.unit_price;
+        }
+
+        // Build auto-description from form_data values
+        const descParts: string[] = [];
+        if (meta?.custom_fields) {
+          for (const cf of meta.custom_fields) {
+            const val = lead.form_data[cf.key] ?? lead.form_data[cf.key.toLowerCase()];
+            if (val !== undefined && val !== '' && val !== 0) {
+              descParts.push(`${val}${cf.unit ? ` ${cf.unit}` : ''}`);
+            }
+          }
+        }
+        const autoDescription = descParts.length > 0
+          ? `${product.name} - ${descParts.join(', ')}`
+          : product.description || product.name;
+
+        lineItemToInsert = {
+          organisation_id: organisationId,
+          name: product.name,
+          description: autoDescription,
+          quantity: 1,
+          unit_price: calculatedPrice,
+          total: calculatedPrice,
+          unit: meta?.unit || null,
+          category: meta?.category || null,
+          vat_rate: meta?.vat_rate ?? 25,
+          is_library_item: true,
+          sort_order: 0,
+        } as Omit<QuoteLineItem, 'id' | 'quote_id'>;
+      }
+    }
+
+    // ---- Create the quote ----
     const quoteData = {
       organisation_id: organisationId,
       customer_id: lead.customer_id,
       lead_id: lead.id,
-      quote_number: quoteNumber, // <-- ADD THIS LINE
+      quote_number: quoteNumber,
       title: lead.title,
       description: lead.description,
-      total_amount: lead.estimated_value || 0,
+      total_amount: calculatedPrice,
       status: 'draft' as const,
-      subtotal: lead.estimated_value || 0,
+      subtotal: calculatedPrice,
       vat_amount: 0,
     };
 
-    const result = await createQuote(quoteData as any, []);
+    const lineItems = lineItemToInsert ? [lineItemToInsert] : [];
+    const result = await createQuote(quoteData as any, lineItems);
 
     return result;
 

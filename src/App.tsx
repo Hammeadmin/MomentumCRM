@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import OfflineIndicator from './components/OfflineIndicator';
 import RealtimeManager from './components/RealtimeManager';
 import QuoteAcceptance from './pages/QuoteAcceptance';
+import PublicLeadForm from './components/PublicLeadForm';
 import AppRoutes from './components/AppRoutes';
 import LoginPage from './pages/LoginPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
@@ -60,6 +61,7 @@ function App() {
 
               {/* Public standalone routes */}
               <Route path="/quote-accept/:token" element={<QuoteAcceptance />} />
+              <Route path="/forms/:formId" element={<PublicLeadForm />} />
 
               {/* ===========================
                   PROTECTED APP ROUTES

@@ -55,6 +55,7 @@ export interface LeadFilters {
   status?: string;
   assignedTo?: string;
   source?: string;
+  city?: string;
   dateFrom?: string;
   dateTo?: string;
   search?: string;
@@ -119,6 +120,10 @@ export const getLeads = async (
 
     if (filters.maxScore !== undefined) {
       query = query.lte('lead_score', filters.maxScore);
+    }
+
+    if (filters.city) {
+      query = query.eq('city', filters.city);
     }
 
     // Apply pagination

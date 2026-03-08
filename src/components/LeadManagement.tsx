@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import {
     Plus, X, Rss, Zap, Briefcase, Filter, User, Phone, Mail, MapPin, Edit, Trash2, Calendar,
     MessageSquare, DollarSign, ChevronDown, CheckSquare, Square, RefreshCw, AlertTriangle, Target, Loader2,
-    TrendingUp, BarChart3, Clock, Users, ArrowRight, LayoutGrid, List, PhoneCall, Send
+    TrendingUp, BarChart3, Clock, Users, ArrowRight, LayoutGrid, List, PhoneCall, Send, FormInput
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
@@ -18,10 +18,11 @@ import {
     type LeadWithRelations, type SalesTask, type RSSArticle, type AILeadSuggestion,
     type LeadFilters
 } from '../lib/leads';
-import { formatDate, formatCurrency, getCustomers, getTeamMembers, createCustomer } from '../lib/database';
+import { formatDate, formatCurrency, getCustomers, getTeamMembers, createCustomer, getSavedLineItemById } from '../lib/database';
 import { supabase } from '../lib/supabase';
 import { createQuoteFromLead } from '../lib/quotes';
-import type { LeadStatus, Customer, UserProfile } from '../types/database';
+import { evaluate } from 'mathjs';
+import type { LeadStatus, Customer, UserProfile, RichSavedLineItem } from '../types/database';
 
 import EmptyState from './EmptyState';
 import ConfirmDialog from './ConfirmDialog';
@@ -38,6 +39,31 @@ interface LeadAnalytics {
     sourcePerformance: Array<{ source: string; count: number; conversion: number }>;
     wonLeads: number;
 }
+
+// Quote preview state for smart quote creation
+interface QuotePreviewData {
+    productName: string;
+    calculatedPrice: number;
+    fieldDetails: Array<{ label: string; value: string | number }>;
+    linkedProductId: string;
+    lead: LeadWithRelations;
+}
+
+// Formula helper (same as ProductConfigurator.tsx)
+const safeEvaluate = (formula: string, fieldValues: Record<string, number | string | boolean>): number => {
+    if (!formula?.trim()) return 0;
+    try {
+        const scope: Record<string, number> = {};
+        Object.entries(fieldValues).forEach(([k, v]) => {
+            scope[k] = typeof v === 'number' ? v : 0;
+        });
+        const result = evaluate(formula, scope);
+        if (typeof result !== 'number' || !isFinite(result) || isNaN(result)) return 0;
+        return Math.max(0, Math.round(result * 100) / 100);
+    } catch {
+        return 0;
+    }
+};
 
 // Status configuration - matches actual DB enum values with SHARPER professional colors
 const LEAD_STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bgColor: string; headerColor: string }> = {
@@ -497,6 +523,8 @@ const LeadManagement: React.FC = () => {
     // Quote Modal State
     const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
     const [quoteLead, setQuoteLead] = useState<LeadWithRelations | null>(null);
+    const [quotePreview, setQuotePreview] = useState<QuotePreviewData | null>(null);
+    const [quotePreviewLoading, setQuotePreviewLoading] = useState(false);
 
     // Get unique sources for filter dropdown
     const uniqueSources = useMemo(() => {
@@ -504,12 +532,27 @@ const LeadManagement: React.FC = () => {
         return [...new Set(sources)];
     }, [leads]);
 
+    // Get unique cities for filter dropdown (Part C)
+    const uniqueCities = useMemo(() => {
+        const cities = leads.map((l: LeadWithRelations) => (l as any).city).filter(Boolean) as string[];
+        return [...new Set(cities)].sort();
+    }, [leads]);
+
     useEffect(() => {
         if (!user) return;
         loadInitialData();
 
         const leadChannel = supabase.channel('public:leads')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => refetchLeads())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload) => {
+                // Part D: toast notification for new web leads
+                if (payload.eventType === 'INSERT') {
+                    const newLead = payload.new as any;
+                    if (newLead.source === 'Webbformulär' || newLead.form_id) {
+                        success('Ny webb-lead', `Ny webb-lead: ${newLead.title || 'Utan titel'}`);
+                    }
+                }
+                refetchLeads();
+            })
             .subscribe();
 
         const taskChannel = supabase.channel('public:sales_tasks')
@@ -620,15 +663,114 @@ const LeadManagement: React.FC = () => {
         loadAnalytics();
     };
 
-    // Create quote from a lead - open quote modal WITHOUT changing status
-    // Status will be updated to 'proposal' only after quote is successfully created
-    const handleCreateQuote = (lead: LeadWithRelations) => {
+    // Create quote from a lead — smart preview if form_data + linked product exist
+    const handleCreateQuote = async (lead: LeadWithRelations) => {
         if (!organisationId) return;
 
-        // Store the lead and open the quote creation modal
-        // Status update happens in onQuoteCreated callback
+        const formData = (lead as any).form_data;
+        const formId = (lead as any).form_id;
+
+        // If lead has form_data and form_id, try to resolve the linked product
+        if (formData && formId && Object.keys(formData).length > 0) {
+            setQuotePreviewLoading(true);
+            try {
+                // Fetch the form to get linkedProductId from settings
+                const { data: formRow } = await supabase
+                    .from('lead_forms')
+                    .select('form_config')
+                    .eq('id', formId)
+                    .single();
+
+                const linkedProductId = formRow?.form_config?.settings?.linkedProductId;
+
+                if (linkedProductId) {
+                    const { data: product } = await getSavedLineItemById(linkedProductId);
+
+                    if (product) {
+                        const meta = product.metadata;
+                        let calculatedPrice = product.unit_price;
+                        const fieldDetails: Array<{ label: string; value: string | number }> = [];
+
+                        if (meta?.pricing_formula && meta?.custom_fields) {
+                            const scope: Record<string, number | string | boolean> = {};
+                            for (const cf of meta.custom_fields) {
+                                let val = formData[cf.key];
+                                if (val === undefined) {
+                                    const lowerKey = cf.key.toLowerCase();
+                                    const match = Object.entries(formData).find(([k]) => k.toLowerCase() === lowerKey);
+                                    val = match ? match[1] : undefined;
+                                }
+                                const numVal = val !== undefined ? (typeof val === 'number' ? val : Number(val) || 0) : 0;
+                                scope[cf.key] = numVal;
+                                fieldDetails.push({ label: cf.label || cf.key, value: val !== undefined ? val : 0 });
+                            }
+
+                            const formulaResult = safeEvaluate(meta.pricing_formula, scope);
+                            const basePrice = meta.base_price ?? 0;
+                            calculatedPrice = formulaResult + basePrice;
+                            if (calculatedPrice === 0) calculatedPrice = product.unit_price;
+                        } else {
+                            // No formula — show product fields for context
+                            if (meta?.custom_fields) {
+                                for (const cf of meta.custom_fields) {
+                                    const val = formData[cf.key] ?? formData[cf.key?.toLowerCase()];
+                                    if (val !== undefined) fieldDetails.push({ label: cf.label || cf.key, value: val });
+                                }
+                            }
+                        }
+
+                        setQuotePreview({
+                            productName: product.name,
+                            calculatedPrice,
+                            fieldDetails,
+                            linkedProductId,
+                            lead,
+                        });
+                        setQuotePreviewLoading(false);
+                        return; // Show preview instead of opening modal
+                    }
+                }
+            } catch (err) {
+                console.error('Error resolving quote preview:', err);
+            }
+            setQuotePreviewLoading(false);
+        }
+
+        // Fallback: open quote creation modal (old behavior)
         setQuoteLead(lead);
         setIsQuoteModalOpen(true);
+    };
+
+    // Create quote with smart line item from preview
+    const handleCreateSmartQuote = async () => {
+        if (!quotePreview || !organisationId) return;
+        setQuotePreviewLoading(true);
+        try {
+            const { data: quote, error } = await createQuoteFromLead(
+                quotePreview.lead as any,
+                organisationId,
+                quotePreview.linkedProductId
+            );
+            if (error) {
+                showError('Kunde inte skapa offert', error.message);
+            } else {
+                success('Offert skapad', `Offert skapad med ${quotePreview.productName} — ${quotePreview.calculatedPrice.toLocaleString('sv-SE')} kr`);
+                refetchLeads();
+                loadAnalytics();
+            }
+        } catch (err) {
+            showError('Fel', 'Ett oväntat fel uppstod.');
+        }
+        setQuotePreview(null);
+        setQuotePreviewLoading(false);
+    };
+
+    // Create empty quote from preview (old behavior)
+    const handleCreateEmptyQuote = () => {
+        if (!quotePreview) return;
+        setQuoteLead(quotePreview.lead);
+        setIsQuoteModalOpen(true);
+        setQuotePreview(null);
     };
 
     const handleCreateFromArticle = async (article: RSSArticle) => {
@@ -760,6 +902,17 @@ const LeadManagement: React.FC = () => {
                                     <option key={tm.id} value={tm.id}>{tm.full_name}</option>
                                 ))}
                             </select>
+                            {/* Part C: City / Ort filter */}
+                            <select
+                                value={filters.city || 'all'}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters({ ...filters, city: e.target.value === 'all' ? undefined : e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            >
+                                <option value="all">Alla orter</option>
+                                {uniqueCities.map((city: string) => (
+                                    <option key={city} value={city}>{city}</option>
+                                ))}
+                            </select>
                             <button
                                 onClick={clearFilters}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 flex items-center justify-center gap-2"
@@ -789,7 +942,12 @@ const LeadManagement: React.FC = () => {
                             <div className="w-96 flex-shrink-0 bg-white rounded-xl shadow-lg border border-gray-200 p-6 overflow-y-auto max-h-[calc(100vh-200px)] animate-in slide-in-from-right">
                                 <div className="flex justify-between items-start mb-4">
                                     <div>
-                                        <h3 className="font-bold text-lg text-gray-800">{selectedLead.title}</h3>
+                                        <h3 className="font-bold text-lg text-gray-800">
+                                            {selectedLead.title}
+                                            {selectedLead.source === 'Webbformulär' && (
+                                                <span className="ml-2 inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-100 text-green-700">Webb-lead</span>
+                                            )}
+                                        </h3>
                                         <div className="flex items-center gap-2 mt-1">
                                             <span className={`px-2 py-1 rounded text-xs font-semibold ${LEAD_STATUS_CONFIG[selectedLead.status].bgColor} ${LEAD_STATUS_CONFIG[selectedLead.status].color}`}>
                                                 {LEAD_STATUS_CONFIG[selectedLead.status].label}
@@ -810,8 +968,34 @@ const LeadManagement: React.FC = () => {
                                 {/* Quick Actions */}
                                 <div className="flex flex-wrap gap-2 mb-4">
                                     <Button variant="outline" size="sm" icon={<Edit className="w-4 h-4" />} onClick={() => selectedLead && handleEditLead(selectedLead)}>Redigera</Button>
-                                    <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => selectedLead && handleCreateQuote(selectedLead)}>Skapa offert</Button>
+                                    <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => selectedLead && handleCreateQuote(selectedLead)}>{quotePreviewLoading ? 'Laddar...' : 'Skapa offert'}</Button>
                                 </div>
+
+                                {/* Smart Quote Preview (Kanban) */}
+                                {quotePreview && selectedLead && quotePreview.lead.id === selectedLead.id && (
+                                    <div className="mb-4 border border-green-200 bg-green-50 rounded-xl p-4 animate-in fade-in">
+                                        <h4 className="text-sm font-bold text-green-800 mb-2 flex items-center gap-2">
+                                            <DollarSign className="w-4 h-4" /> Offert förhandsgranskning
+                                        </h4>
+                                        <div className="text-sm space-y-1 mb-3">
+                                            <div className="flex justify-between"><span className="text-gray-600">Tjänst:</span><span className="font-semibold text-gray-900">{quotePreview.productName}</span></div>
+                                            <div className="flex justify-between"><span className="text-gray-600">Beräknat pris:</span><span className="font-bold text-green-700">{quotePreview.calculatedPrice.toLocaleString('sv-SE')} kr</span></div>
+                                        </div>
+                                        {quotePreview.fieldDetails.length > 0 && (
+                                            <div className="text-xs text-gray-600 mb-3">
+                                                <span className="font-semibold">Baserat på: </span>
+                                                {quotePreview.fieldDetails.map((f, i) => (
+                                                    <span key={f.label}>{i > 0 ? ', ' : ''}{f.label}: {f.value}</span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <button onClick={handleCreateSmartQuote} disabled={quotePreviewLoading} className="flex-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50">Skapa offert med dessa uppgifter</button>
+                                            <button onClick={handleCreateEmptyQuote} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 transition-colors">Tom offert</button>
+                                            <button onClick={() => setQuotePreview(null)} className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600"><X className="w-3.5 h-3.5" /></button>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Customer Info */}
                                 {selectedLead.customer && (
@@ -839,6 +1023,29 @@ const LeadManagement: React.FC = () => {
                                         {getNextActionSuggestion(selectedLead)}
                                     </p>
                                 </div>
+
+                                {/* Part B: Formulärdata (Kanban detail) */}
+                                {(() => {
+                                    const fd = (selectedLead as any).form_data;
+                                    if (!fd || typeof fd !== 'object' || Object.keys(fd).length === 0) return null;
+                                    const entries = Object.entries(fd).filter(([k]) => !k.startsWith('_') && k !== 'form_id');
+                                    if (entries.length === 0) return null;
+                                    return (
+                                        <div className="mt-4">
+                                            <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-2">
+                                                <FormInput className="w-4 h-4 text-indigo-500" /> Formulärdata
+                                            </h4>
+                                            <div className="grid grid-cols-1 gap-2 text-sm bg-indigo-50 rounded-lg p-3">
+                                                {entries.map(([key, value]) => (
+                                                    <div key={key} className="flex justify-between">
+                                                        <span className="text-gray-600 capitalize">{key.replace(/_/g, ' ')}</span>
+                                                        <span className="text-gray-900 font-medium text-right">{String(value ?? '')}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         )}
                     </div>
@@ -877,7 +1084,12 @@ const LeadManagement: React.FC = () => {
                                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                                     <div className="flex justify-between items-center mb-4 pb-4 border-b">
                                         <div>
-                                            <h2 className="text-2xl font-bold text-gray-900">{selectedLead.title}</h2>
+                                            <h2 className="text-2xl font-bold text-gray-900">
+                                                {selectedLead.title}
+                                                {selectedLead.source === 'Webbformulär' && (
+                                                    <span className="ml-2 inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-100 text-green-700">Webb-lead</span>
+                                                )}
+                                            </h2>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className={`px-2 py-1 rounded text-xs font-semibold ${LEAD_STATUS_CONFIG[selectedLead.status]?.bgColor} ${LEAD_STATUS_CONFIG[selectedLead.status]?.color}`}>
                                                     {LEAD_STATUS_CONFIG[selectedLead.status]?.label}
@@ -899,8 +1111,34 @@ const LeadManagement: React.FC = () => {
                                         <Button variant="outline" size="sm" icon={<PhoneCall className="w-4 h-4" />}>Ring</Button>
                                         <Button variant="outline" size="sm" icon={<Mail className="w-4 h-4" />}>E-post</Button>
                                         <Button variant="outline" size="sm" icon={<Calendar className="w-4 h-4" />}>Boka möte</Button>
-                                        <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => selectedLead && handleCreateQuote(selectedLead)}>Skapa offert</Button>
+                                        <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => selectedLead && handleCreateQuote(selectedLead)}>{quotePreviewLoading ? 'Laddar...' : 'Skapa offert'}</Button>
                                     </div>
+
+                                    {/* Smart Quote Preview (List view) */}
+                                    {quotePreview && selectedLead && quotePreview.lead.id === selectedLead.id && (
+                                        <div className="mb-4 border border-green-200 bg-green-50 rounded-xl p-5 animate-in fade-in">
+                                            <h3 className="text-base font-bold text-green-800 mb-3 flex items-center gap-2">
+                                                <DollarSign className="w-5 h-5" /> Offert förhandsgranskning
+                                            </h3>
+                                            <div className="text-sm space-y-2 mb-4">
+                                                <div className="flex justify-between"><span className="text-gray-600">Tjänst:</span><span className="font-semibold text-gray-900">{quotePreview.productName}</span></div>
+                                                <div className="flex justify-between"><span className="text-gray-600">Beräknat pris:</span><span className="font-bold text-green-700 text-lg">{quotePreview.calculatedPrice.toLocaleString('sv-SE')} kr</span></div>
+                                            </div>
+                                            {quotePreview.fieldDetails.length > 0 && (
+                                                <div className="text-sm text-gray-600 mb-4 bg-white/60 rounded-lg p-3">
+                                                    <span className="font-semibold">Baserat på: </span>
+                                                    {quotePreview.fieldDetails.map((f, i) => (
+                                                        <span key={f.label}>{i > 0 ? ', ' : ''}{f.label}: {f.value}</span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            <div className="flex gap-3">
+                                                <button onClick={handleCreateSmartQuote} disabled={quotePreviewLoading} className="flex-1 px-4 py-2 text-sm font-semibold rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50">Skapa offert med dessa uppgifter</button>
+                                                <button onClick={handleCreateEmptyQuote} className="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 transition-colors">Skapa tom offert</button>
+                                                <button onClick={() => setQuotePreview(null)} className="px-2 py-2 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Next Action Suggestion */}
                                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
@@ -926,6 +1164,29 @@ const LeadManagement: React.FC = () => {
                                         </div>
                                         <div><strong className="font-semibold text-gray-600">Senaste aktivitet:</strong> <p className="text-gray-800 mt-1">{formatDate(selectedLead.last_activity_at || selectedLead.created_at || '')}</p></div>
                                     </div>
+
+                                    {/* Part B: Formulärdata (List-view detail) */}
+                                    {(() => {
+                                        const fd = (selectedLead as any).form_data;
+                                        if (!fd || typeof fd !== 'object' || Object.keys(fd).length === 0) return null;
+                                        const entries = Object.entries(fd).filter(([k]) => !k.startsWith('_') && k !== 'form_id');
+                                        if (entries.length === 0) return null;
+                                        return (
+                                            <div className="mt-6 border-t pt-4">
+                                                <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2 mb-3">
+                                                    <FormInput className="w-5 h-5 text-indigo-500" /> Formulärdata
+                                                </h3>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm bg-indigo-50 rounded-lg p-4">
+                                                    {entries.map(([key, value]) => (
+                                                        <div key={key} className="flex justify-between gap-4">
+                                                            <span className="text-gray-600 capitalize">{key.replace(/_/g, ' ')}</span>
+                                                            <span className="text-gray-900 font-medium text-right">{String(value ?? '')}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                     <div className="border-t pt-4 mt-6">
                                         <h3 className="text-lg font-semibold mb-2 flex items-center"><Zap className="w-5 h-5 mr-2 text-purple-500" />AI-Assistent: Nästa Steg</h3>
                                         {loading.ai ? <Loader2 className="w-5 h-5 mx-auto animate-spin text-purple-600" /> : (aiSuggestions.length > 0 ? aiSuggestions.map(suggestion => (

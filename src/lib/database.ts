@@ -607,6 +607,24 @@ export const getSavedLineItems = async (
   }
 };
 
+export const getSavedLineItemById = async (
+  id: string
+): Promise<{ data: RichSavedLineItem | null; error: Error | null }> => {
+  try {
+    const { data, error } = await supabase
+      .from('saved_line_items')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (err) {
+    console.error('Error fetching saved line item by id:', err);
+    return { data: null, error: err as Error };
+  }
+};
+
 export const createSavedLineItem = async (
   organisationId: string,
   itemData: {
@@ -2523,4 +2541,135 @@ const getActivitySummaryFallback = async (
     },
     error: null
   };
+};
+
+// ─── Lead Form types and CRUD ────────────────────────────────────────────────
+
+export interface FormField {
+  id: string;
+  type: 'text' | 'email' | 'phone' | 'textarea' | 'select' | 'checkbox' | 'radio' | 'number' | 'date';
+  label: string;
+  placeholder?: string;
+  required: boolean;
+  options?: string[];
+  validation?: { minLength?: number; maxLength?: number; pattern?: string };
+}
+
+export interface LeadForm {
+  id: string;
+  organisation_id: string;
+  name: string;
+  description?: string | null;
+  form_config: {
+    fields: FormField[];
+    settings: {
+      submitButtonText: string;
+      successMessage: string;
+      redirectUrl?: string;
+      emailNotification: boolean;
+      autoAssignUserId?: string;
+      leadSource: string;
+      linkedProductId?: string;
+    };
+  };
+  is_active: boolean;
+  submission_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const getLeadForms = async (
+  organisationId: string
+): Promise<{ data: LeadForm[] | null; error: Error | null }> => {
+  try {
+    const { data, error } = await supabase
+      .from('lead_forms')
+      .select('*')
+      .eq('organisation_id', organisationId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return { data: null, error: handleDatabaseError(error) };
+    }
+
+    return { data: data || [], error: null };
+  } catch (err) {
+    return { data: null, error: handleDatabaseError(err) };
+  }
+};
+
+export const createLeadForm = async (
+  form: Omit<LeadForm, 'id' | 'created_at' | 'updated_at' | 'submission_count'>
+): Promise<{ data: LeadForm | null; error: Error | null }> => {
+  try {
+    const { data, error } = await supabase
+      .from('lead_forms')
+      .insert([{
+        organisation_id: form.organisation_id,
+        name: form.name,
+        description: form.description || null,
+        form_config: form.form_config,
+        is_active: form.is_active,
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      return { data: null, error: handleDatabaseError(error) };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: handleDatabaseError(err) };
+  }
+};
+
+export const updateLeadForm = async (
+  id: string,
+  updates: Partial<Omit<LeadForm, 'id' | 'organisation_id' | 'created_at'>>
+): Promise<{ data: LeadForm | null; error: Error | null }> => {
+  try {
+    const { data, error } = await supabase
+      .from('lead_forms')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      return { data: null, error: handleDatabaseError(error) };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: handleDatabaseError(err) };
+  }
+};
+
+export const deleteLeadForm = async (
+  id: string
+): Promise<{ error: Error | null }> => {
+  try {
+    const { error } = await supabase
+      .from('lead_forms')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      return { error: handleDatabaseError(error) };
+    }
+
+    return { error: null };
+  } catch (err) {
+    return { error: handleDatabaseError(err) };
+  }
+};
+
+export const getLeadFormPublicUrl = (): string => {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  return `${supabaseUrl}/functions/v1/submit-lead-form`;
+};
+
+export const getLeadFormPageUrl = (formId: string): string => {
+  return `${window.location.origin}/forms/${formId}`;
 };
