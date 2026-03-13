@@ -9,6 +9,7 @@ export interface LineItem {
     quantity: number;
     unit_price: number;
     total: number;
+    unit?: string;
 }
 
 // Shape of the main invoice form
@@ -47,7 +48,7 @@ const INITIAL_FORM_DATA: FormDataShape = {
     order_id: '',
     amount: '',
     due_date: '',
-    line_items: [{ description: '', quantity: 1, unit_price: 0, total: 0 }],
+    line_items: [{ description: '', quantity: 1, unit_price: 0, total: 0, unit: '' }],
     include_rot: false,
     rot_personnummer: null,
     rot_organisationsnummer: null,
@@ -163,6 +164,7 @@ export function useInvoiceForm({
             quantity: 1,
             unit_price: itemToAdd.unit_price,
             total: itemToAdd.unit_price,
+            unit: (itemToAdd as any).metadata?.unit || '',
         };
 
         const currentItems = formDataState.values.line_items;

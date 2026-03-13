@@ -579,8 +579,8 @@ export default function CreateEditInvoiceModal({
                                     );
 
                                     return (
-                                        <div key={index} className="grid grid-cols-12 gap-3 items-center">
-                                            <div className="col-span-5">
+                                        <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                                            <div className="col-span-4">
                                                 {index === 0 && (
                                                     <label className="block text-xs font-medium text-gray-700 mb-1">Beskrivning</label>
                                                 )}
@@ -611,6 +611,27 @@ export default function CreateEditInvoiceModal({
 
                                             <div className="col-span-2">
                                                 {index === 0 && (
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Enhet</label>
+                                                )}
+                                                <select
+                                                    value={item.unit || ''}
+                                                    onChange={(e) => updateLineItem(index, 'unit', e.target.value)}
+                                                    className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                                                >
+                                                    <option value="">-</option>
+                                                    <option value="st">st</option>
+                                                    <option value="tim">tim</option>
+                                                    <option value="m">m</option>
+                                                    <option value="m2">m²</option>
+                                                    <option value="m3">m³</option>
+                                                    <option value="kg">kg</option>
+                                                    <option value="l">l</option>
+                                                    <option value="paket">paket</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="col-span-2">
+                                                {index === 0 && (
                                                     <label className="block text-xs font-medium text-gray-700 mb-1">Enhetspris</label>
                                                 )}
                                                 <input
@@ -623,7 +644,7 @@ export default function CreateEditInvoiceModal({
                                                 />
                                             </div>
 
-                                            <div className="col-span-2">
+                                            <div className="col-span-1">
                                                 {index === 0 && (
                                                     <label className="block text-xs font-medium text-gray-700 mb-1">Summa</label>
                                                 )}

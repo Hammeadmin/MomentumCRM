@@ -126,7 +126,7 @@ export interface QuoteLineItemTemplate {
   description: string;
   quantity: number;
   unit_price: number;
-  unit: 'st' | 'kvm' | 'tim' | 'löpm' | 'kg' | 'liter' | 'meter';
+  unit: 'st' | 'kvm' | 'tim' | 'h' | 'löpm' | 'kg' | 'liter' | 'meter';
   category?: string;
 }
 

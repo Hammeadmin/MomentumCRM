@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Building, Mail, Phone, MapPin } from 'lucide-react';
 import type { InvoiceWithRelations } from '../lib/invoices';
 import { formatCurrency, formatDate } from '../lib/database';
@@ -39,6 +39,71 @@ function InvoicePreview({
     show_signature_area = false, // Default false for invoices usually
     show_product_images = false
   } = template?.design_options || {};
+
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const handleDownloadPDF = () => {
+    const element = printRef.current;
+    if (!element) return;
+
+    const originalBody = document.body.innerHTML;
+    const printContent = element.outerHTML;
+
+    document.body.innerHTML = `
+      <html>
+        <head>
+          <title>Faktura ${invoice.invoice_number}</title>
+          <style>
+              @page {
+                size: A4;
+                margin: 0;
+              }
+              body { 
+                margin: 0; 
+                padding: 0; 
+                font-family: ${font_family}, sans-serif;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              @media print {
+                html, body { 
+                    width: 210mm; 
+                    height: 297mm !important; 
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important; 
+                }
+                #invoice-container { 
+                    zoom: 0.90 !important;
+                    height: 100% !important; 
+                    max-height: 100% !important;
+                    padding: 15mm 20mm !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    margin: 0 !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                    overflow: hidden !important;
+                    page-break-after: avoid !important;
+                    page-break-before: avoid !important;
+                    page-break-inside: avoid !important;
+                }
+                * { box-sizing: border-box; }
+                .no-break { page-break-inside: avoid; }
+              }
+            </style>
+          <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+        </head>
+        <body>${printContent}</body>
+      </html>
+    `;
+
+    setTimeout(() => {
+      window.print();
+      document.body.innerHTML = originalBody;
+      window.location.reload();
+    }, 500);
+  };
 
   const interpolateVariables = (text: string) => {
     if (!text) return '';
@@ -88,7 +153,7 @@ function InvoicePreview({
         if (lineItems.length === 0) return null;
 
         return (
-          <div className="mb-8 flex-grow">
+          <div className="mb-8">
             <h3 className="text-lg font-semibold text-gray-800 mb-4" style={{ color: primary_color, fontFamily: font_family }}>Fakturaspecifikation</h3>
             {invoice.job_description && (
               <p className="text-sm text-gray-600 pb-4 border-b mb-4">
@@ -190,169 +255,183 @@ function InvoicePreview({
   ];
 
   return (
-    <div className="bg-white p-8 border border-gray-200 rounded-lg shadow-sm max-w-4xl mx-auto flex flex-col h-full" style={{ fontFamily: font_family }}>
-
-      {/* Dynamic Header */}
-      <div className={`flex ${logo_position === 'center' ? 'flex-col items-center text-center' : 'justify-between items-start'} pb-8 border-b-2 border-gray-200`}>
-
-        {/* Left Side (or Center Top) */}
-        <div className={`flex-1 ${logo_position === 'right' ? '' : 'order-1'} ${logo_position === 'center' ? 'w-full' : ''}`}>
-          {(logo_position === 'left' || logo_position === 'center') && <Logo />}
-
-          <div className={logo_position === 'center' ? 'mb-6' : ''}>
-            <h1 className="text-xl font-bold text-gray-900" style={{ color: primary_color }}>{organisation?.name || 'Företagsnamn'}</h1>
-            {organisation?.org_number && (
-              <p className="text-sm text-gray-600">Org.nr: {organisation.org_number}</p>
-            )}
-          </div>
-
-          <div className={`space-y-1 text-sm text-gray-600 mt-4 ${logo_position === 'center' ? 'flex flex-col items-center' : ''}`}>
-            {organisation?.address && <p>{organisation.address}</p>}
-            {organisation?.postal_code && organisation?.city && (
-              <p>{`${organisation.postal_code} ${organisation.city}`}</p>
-            )}
-            {organisation?.phone && <div className="flex items-center justify-center"><Phone className="w-4 h-4 mr-2" />{organisation.phone}</div>}
-            {organisation?.email && <div className="flex items-center justify-center"><Mail className="w-4 h-4 mr-2" />{organisation.email}</div>}
-          </div>
-        </div>
-
-        {/* Right Side (or Center Bottom) */}
-        <div className={`${logo_position === 'right' ? 'order-1 text-right' : 'order-2 text-right'} ${logo_position === 'center' ? 'w-full text-center mt-6 pt-6 border-t' : ''}`}>
-          {logo_position === 'right' && (
-            <div className="flex justify-end"><Logo /></div>
-          )}
-          <h2 className="text-3xl font-bold mb-2" style={{ color: primary_color }}>FAKTURA</h2>
-          <div className="space-y-1 text-sm">
-            <p><span className="font-semibold">Fakturanr:</span> {invoice.invoice_number}</p>
-            <p><span className="font-semibold">Datum:</span> {formatDate(invoice.created_at)}</p>
-          </div>
-        </div>
+    <>
+      <div className="flex justify-end mb-3 max-w-4xl mx-auto">
+        <button
+          onClick={handleDownloadPDF}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors"
+          style={{ backgroundColor: primary_color }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Ladda ner PDF
+        </button>
       </div>
+      <div ref={printRef} id="invoice-container" className="bg-white p-8 border border-gray-200 rounded-lg shadow-sm max-w-4xl mx-auto flex flex-col min-h-full" style={{ fontFamily: font_family }}>
 
+        {/* Dynamic Header */}
+        <div className={`flex ${logo_position === 'center' ? 'flex-col items-center text-center' : 'justify-between items-start'} pb-8 border-b-2 border-gray-200`}>
 
-      {/* Customer Info */}
-      <div className="grid grid-cols-2 gap-8 mt-8 mb-6">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2" style={{ color: primary_color }}>Fakturera till</h3>
-          <p className="font-bold">{invoice.customer?.name}</p>
-          {invoice.customer?.address && <p>{invoice.customer.address}</p>}
-          {invoice.customer?.postal_code && invoice.customer?.city && (
-            <p>{`${invoice.customer.postal_code} ${invoice.customer.city}`}</p>
-          )}
-          {invoice.customer?.email && <p className="mt-1 flex items-center text-gray-600"><Mail className="w-3 h-3 mr-1" /> {invoice.customer.email}</p>}
-          {invoice.customer?.phone_number && <p className="flex items-center text-gray-600"><Phone className="w-3 h-3 mr-1" /> {invoice.customer.phone_number}</p>}
-        </div>
+          {/* Left Side (or Center Top) */}
+          <div className={`flex-1 ${logo_position === 'right' ? '' : 'order-1'} ${logo_position === 'center' ? 'w-full' : ''}`}>
+            {(logo_position === 'left' || logo_position === 'center') && <Logo />}
 
-        <div>
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2" style={{ color: primary_color }}>Arbete utfört av</h3>
-          <div className="text-gray-600">
-            {invoice.assignment_type === 'team' && invoice.assigned_team ? (
-              <p>{invoice.assigned_team.name}</p>
-            ) : invoice.assignment_type === 'individual' && invoice.assigned_user ? (
-              <p>{invoice.assigned_user.full_name}</p>
-            ) : (
-              <p>Momentum CRM</p>
+            <div className={logo_position === 'center' ? 'mb-6' : ''}>
+              <h1 className="text-xl font-bold text-gray-900" style={{ color: primary_color }}>{organisation?.name || 'Företagsnamn'}</h1>
+              {organisation?.org_number && (
+                <p className="text-sm text-gray-600">Org.nr: {organisation.org_number}</p>
+              )}
+            </div>
+
+            <div className={`space-y-1 text-sm text-gray-600 mt-4 ${logo_position === 'center' ? 'flex flex-col items-center' : ''}`}>
+              {organisation?.address && <p>{organisation.address}</p>}
+              {organisation?.postal_code && organisation?.city && (
+                <p>{`${organisation.postal_code} ${organisation.city}`}</p>
+              )}
+              {organisation?.phone && <div className="flex items-center justify-center"><Phone className="w-4 h-4 mr-2" />{organisation.phone}</div>}
+              {organisation?.email && <div className="flex items-center justify-center"><Mail className="w-4 h-4 mr-2" />{organisation.email}</div>}
+            </div>
+          </div>
+
+          {/* Right Side (or Center Bottom) */}
+          <div className={`${logo_position === 'right' ? 'order-1 text-right' : 'order-2 text-right'} ${logo_position === 'center' ? 'w-full text-center mt-6 pt-6 border-t' : ''}`}>
+            {logo_position === 'right' && (
+              <div className="flex justify-end"><Logo /></div>
             )}
+            <h2 className="text-3xl font-bold mb-2" style={{ color: primary_color }}>FAKTURA</h2>
+            <div className="space-y-1 text-sm">
+              <p><span className="font-semibold">Fakturanr:</span> {invoice.invoice_number}</p>
+              <p><span className="font-semibold">Datum:</span> {formatDate(invoice.created_at)}</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Render Content Blocks (including line items) */}
-      <div className="flex-grow">
-        {contentStructure.map((block: any, index: number) => (
-          <div key={block.id || index}>
-            {renderContentBlock(block)}
+
+        {/* Customer Info */}
+        <div className="grid grid-cols-2 gap-8 mt-8 mb-6">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2" style={{ color: primary_color }}>Fakturera till</h3>
+            <p className="font-bold">{invoice.customer?.name}</p>
+            {invoice.customer?.address && <p>{invoice.customer.address}</p>}
+            {invoice.customer?.postal_code && invoice.customer?.city && (
+              <p>{`${invoice.customer.postal_code} ${invoice.customer.city}`}</p>
+            )}
+            {invoice.customer?.email && <p className="mt-1 flex items-center text-gray-600"><Mail className="w-3 h-3 mr-1" /> {invoice.customer.email}</p>}
+            {invoice.customer?.phone_number && <p className="flex items-center text-gray-600"><Phone className="w-3 h-3 mr-1" /> {invoice.customer.phone_number}</p>}
           </div>
-        ))}
-      </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2" style={{ color: primary_color }}>Arbete utfört av</h3>
+            <div className="text-gray-600">
+              {invoice.assignment_type === 'team' && invoice.assigned_team ? (
+                <p>{invoice.assigned_team.name}</p>
+              ) : invoice.assignment_type === 'individual' && invoice.assigned_user ? (
+                <p>{invoice.assigned_user.full_name}</p>
+              ) : (
+                <p>Momentum CRM</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Render Content Blocks (including line items) */}
+        <div className="flex-grow">
+          {contentStructure.map((block: any, index: number) => (
+            <div key={block.id || index}>
+              {renderContentBlock(block)}
+            </div>
+          ))}
+        </div>
 
 
-      {/* Totals & Footer Info */}
-      <div className="mt-auto">
-        {/* Totals */}
-        <div className="flex justify-end mt-4 pt-4 border-t">
-          <div className="w-full max-w-xs space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Subtotal:</span>
-              <span className="font-medium">{formatCurrency(subtotal)}</span>
+        {/* Totals & Footer Info */}
+        <div className="mt-auto">
+          {/* Totals */}
+          <div className="flex justify-end mt-4 pt-4 border-t">
+            <div className="w-full max-w-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Subtotal:</span>
+                <span className="font-medium">{formatCurrency(subtotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Moms ({(vatAmount / subtotal * 100 || 25).toFixed(0)}%):</span>
+                <span className="font-medium">{formatCurrency(vatAmount)}</span>
+              </div>
+              <div className="flex justify-between text-xl font-bold text-gray-900 pt-2 border-t">
+                <span>Totalt att betala:</span>
+                <span>{formatCurrency(invoice.amount)}</span>
+              </div>
+              {rotAmount > 0 && (
+                <>
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>ROT-avdrag (30%):</span>
+                    <span className="font-medium">-{formatCurrency(rotAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-xl font-bold text-green-700 pt-2 border-t border-green-300">
+                    <span>Att betala efter ROT:</span>
+                    <span>{formatCurrency(finalAmount)}</span>
+                  </div>
+                </>
+              )}
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Moms ({(vatAmount / subtotal * 100 || 25).toFixed(0)}%):</span>
-              <span className="font-medium">{formatCurrency(vatAmount)}</span>
-            </div>
-            <div className="flex justify-between text-xl font-bold text-gray-900 pt-2 border-t">
-              <span>Totalt att betala:</span>
-              <span>{formatCurrency(invoice.amount)}</span>
-            </div>
-            {rotAmount > 0 && (
-              <>
-                <div className="flex justify-between text-sm text-green-600">
-                  <span>ROT-avdrag (30%):</span>
-                  <span className="font-medium">-{formatCurrency(rotAmount)}</span>
+          </div>
+
+          {/* Payment & Terms */}
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="grid grid-cols-2 gap-8">
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-2" style={{ color: primary_color }}>Betalningsinformation</h4>
+                <div className="text-sm text-gray-700 space-y-1">
+                  {organisation?.bank_account && <p><strong>Bankkonto / BG:</strong> {organisation.bank_account}</p>}
+                  {organisation?.bank_name && <p><strong>Bank:</strong> {organisation.bank_name}</p>}
+                  {invoice.ocr_number && <p><strong>OCR:</strong> {invoice.ocr_number}</p>}
                 </div>
-                <div className="flex justify-between text-xl font-bold text-green-700 pt-2 border-t border-green-300">
-                  <span>Att betala efter ROT:</span>
-                  <span>{formatCurrency(finalAmount)}</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Payment & Terms */}
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <div className="grid grid-cols-2 gap-8">
-            <div>
-              <h4 className="font-semibold text-gray-800 mb-2" style={{ color: primary_color }}>Betalningsinformation</h4>
-              <div className="text-sm text-gray-700 space-y-1">
-                {organisation?.bank_account && <p><strong>Bankkonto / BG:</strong> {organisation.bank_account}</p>}
-                {organisation?.bank_name && <p><strong>Bank:</strong> {organisation.bank_name}</p>}
-                {invoice.ocr_number && <p><strong>OCR:</strong> {invoice.ocr_number}</p>}
+              </div>
+              <div className="text-right">
+                <h4 className="font-semibold text-gray-800 mb-2" style={{ color: primary_color }}>Betalningsvillkor</h4>
+                <p className="text-sm text-gray-700 font-medium">
+                  Förfallodatum: {invoice.due_date ? formatDate(invoice.due_date) : 'N/A'}
+                </p>
+                <p className="text-sm text-gray-500">
+                  Dröjsmålsränta enl. räntelagen.
+                </p>
               </div>
             </div>
-            <div className="text-right">
-              <h4 className="font-semibold text-gray-800 mb-2" style={{ color: primary_color }}>Betalningsvillkor</h4>
-              <p className="text-sm text-gray-700 font-medium">
-                Förfallodatum: {invoice.due_date ? formatDate(invoice.due_date) : 'N/A'}
-              </p>
-              <p className="text-sm text-gray-500">
-                Dröjsmålsränta enl. räntelagen.
-              </p>
-            </div>
           </div>
-        </div>
 
-        {/* Signature Area */}
-        {show_signature_area && (
-          <div className="py-8 mt-6 border-t border-gray-200 grid grid-cols-2 gap-12">
-            <div>
-              <p className="text-sm font-medium mb-8 border-b border-gray-300">Datum & Underskrift {organisation?.name}</p>
+          {/* Signature Area */}
+          {show_signature_area && (
+            <div className="py-8 mt-6 border-t border-gray-200 grid grid-cols-2 gap-12">
+              <div>
+                <p className="text-sm font-medium mb-8 border-b border-gray-300">Datum & Underskrift {organisation?.name}</p>
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="mt-8 pt-4 border-t border-gray-200 text-center text-xs text-gray-500">
-          <p className="font-bold text-sm text-gray-700">{organisation?.name || 'Företagsnamn'}</p>
-          <p>
-            {organisation?.org_number && <span>Org.nr: {organisation.org_number} | </span>}
-            {organisation?.vat_number && <span>Momsreg.nr: {organisation.vat_number} | Godkänd för F-skatt</span>}
-          </p>
-          {(organisation?.iban || organisation?.bic) && (
-            <p className="mt-1">
-              {organisation?.iban && <span>IBAN: {organisation.iban} </span>}
-              {organisation?.iban && organisation?.bic && <span>| </span>}
-              {organisation?.bic && <span>BIC: {organisation.bic}</span>}
-            </p>
           )}
-          <p className="mt-1">
-            {organisation?.email && <span>{organisation.email} | </span>}
-            {organisation?.website && <span>{organisation.website}</span>}
-          </p>
-        </div>
-      </div>
 
-    </div>
+          {/* Footer */}
+          <div className="mt-8 pt-4 border-t border-gray-200 text-center text-xs text-gray-500">
+            <p className="font-bold text-sm text-gray-700">{organisation?.name || 'Företagsnamn'}</p>
+            <p>
+              {organisation?.org_number && <span>Org.nr: {organisation.org_number} | </span>}
+              {organisation?.vat_number && <span>Momsreg.nr: {organisation.vat_number} | Godkänd för F-skatt</span>}
+            </p>
+            {(organisation?.iban || organisation?.bic) && (
+              <p className="mt-1">
+                {organisation?.iban && <span>IBAN: {organisation.iban} </span>}
+                {organisation?.iban && organisation?.bic && <span>| </span>}
+                {organisation?.bic && <span>BIC: {organisation.bic}</span>}
+              </p>
+            )}
+            <p className="mt-1">
+              {organisation?.email && <span>{organisation.email} | </span>}
+              {organisation?.website && <span>{organisation.website}</span>}
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </>
   );
 }
 
