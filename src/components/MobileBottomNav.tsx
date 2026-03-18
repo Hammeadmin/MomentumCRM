@@ -1,56 +1,28 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  Home,
   Package,
   Users,
   Calendar,
   Plus,
   FileText,
-  Briefcase,
-  Receipt,
-  Users2,
   Settings,
-  BarChart3,
-  MessageSquare,
   X,
-  DollarSign,
-  FolderOpen,
-  Newspaper
 } from 'lucide-react';
+import { navigation as allNavigation } from '../config/navigation';
 
 function MobileBottomNav() {
   const location = useLocation();
 
-  const navigation = [
-    { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'Ordrar', href: '/ordrar', icon: Package },
-    { name: 'Kunder', href: '/kunder', icon: Users },
-    { name: 'Kalender', href: '/kalender', icon: Calendar }
-  ];
+  const pinnedNav = allNavigation.filter(item =>
+    ['/app', '/app/Orderhantering', '/app/kunder', '/app/kalender'].includes(item.href)
+  );
 
   const quickActions = [
-    { name: 'Ny Order', href: '/ordrar?action=create', icon: Package, color: 'from-blue-500 to-blue-600' },
-    { name: 'Ny Kund', href: '/kunder?action=create', icon: Users, color: 'from-green-500 to-green-600' },
-    { name: 'Ny Offert', href: '/offerter?action=create', icon: FileText, color: 'from-purple-500 to-purple-600' },
-    { name: 'Boka Möte', href: '/kalender?action=create', icon: Calendar, color: 'from-orange-500 to-orange-600' }
-  ];
-
-  const allPages = [
-    { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'Ordrar', href: '/ordrar', icon: Package },
-    { name: 'Kunder', href: '/kunder', icon: Users },
-    { name: 'Offerter', href: '/offerter', icon: FileText },
-    { name: 'Kalender', href: '/kalender', icon: Calendar },
-    { name: 'Fakturor', href: '/fakturor', icon: Receipt },
-    { name: 'Team', href: '/team', icon: Users2 },
-    { name: 'Lönehantering', href: '/lonehantering', icon: DollarSign },
-    { name: 'Kommunikation', href: '/kommunikation', icon: MessageSquare },
-    { name: 'Analys', href: '/analys', icon: BarChart3 },
-    { name: 'Inställningar', href: '/installningar', icon: Settings },
-    { name: 'Dokument', href: '/dokument', icon: FolderOpen },
-    { name: 'Rapporter', href: '/rapporter', icon: BarChart3 },
-    { name: 'Intranät', href: '/intranat', icon: Newspaper }
+    { name: 'Ny Order', href: '/app/Orderhantering?action=create', icon: Package, color: 'from-blue-500 to-blue-600' },
+    { name: 'Ny Kund', href: '/app/kunder?action=create', icon: Users, color: 'from-green-500 to-green-600' },
+    { name: 'Ny Offert', href: '/app/offerter?action=create', icon: FileText, color: 'from-purple-500 to-purple-600' },
+    { name: 'Boka Möte', href: '/app/kalender?action=create', icon: Calendar, color: 'from-orange-500 to-orange-600' }
   ];
 
   const [showQuickActions, setShowQuickActions] = React.useState(false);
@@ -114,22 +86,24 @@ function MobileBottomNav() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 p-4 max-h-80 overflow-y-auto">
-                {allPages.map((page) => {
+                {allNavigation.map((page) => {
                   const Icon = page.icon;
-                  const isActive = location.pathname === page.href;
+                  const isActive = page.href === '/app'
+                    ? location.pathname === '/app'
+                    : location.pathname.startsWith(page.href);
                   return (
                     <Link
                       key={page.href}
                       to={page.href}
                       onClick={() => setShowAllPages(false)}
                       className={`flex items-center space-x-3 p-3 rounded-xl transition-all duration-200 ${isActive
-                          ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-                          : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                        ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                        : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
                         }`}
                     >
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isActive
-                          ? 'bg-primary-200 dark:bg-primary-800'
-                          : 'bg-gray-100 dark:bg-gray-600'
+                        ? 'bg-primary-200 dark:bg-primary-800'
+                        : 'bg-gray-100 dark:bg-gray-600'
                         }`}>
                         <Icon className="w-5 h-5" />
                       </div>
@@ -146,8 +120,10 @@ function MobileBottomNav() {
       {/* Bottom Navigation Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg border-t border-gray-200/80 dark:border-gray-700/80 z-30 lg:hidden safe-area-bottom">
         <div className="grid grid-cols-6 h-16 max-w-lg mx-auto">
-          {navigation.map((item) => {
-            const isActive = location.pathname === item.href;
+          {pinnedNav.map((item) => {
+            const isActive = item.href === '/app'
+              ? location.pathname === '/app'
+              : location.pathname.startsWith(item.href);
             const Icon = item.icon;
 
             return (
@@ -155,8 +131,8 @@ function MobileBottomNav() {
                 key={item.name}
                 to={item.href}
                 className={`relative flex flex-col items-center justify-center space-y-0.5 transition-all duration-200 active:scale-95 ${isActive
-                    ? 'text-primary-600 dark:text-primary-400'
-                    : 'text-gray-500 dark:text-gray-400 active:text-gray-700 dark:active:text-gray-300'
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-gray-500 dark:text-gray-400 active:text-gray-700 dark:active:text-gray-300'
                   }`}
               >
                 {/* Active indicator bar at top */}
@@ -177,8 +153,8 @@ function MobileBottomNav() {
           <button
             onClick={() => setShowAllPages(!showAllPages)}
             className={`relative flex flex-col items-center justify-center space-y-0.5 transition-all duration-200 active:scale-95 ${showAllPages
-                ? 'text-primary-600 dark:text-primary-400'
-                : 'text-gray-500 dark:text-gray-400'
+              ? 'text-primary-600 dark:text-primary-400'
+              : 'text-gray-500 dark:text-gray-400'
               }`}
           >
             <div className={`p-1.5 rounded-xl transition-all duration-200 ${showAllPages ? 'bg-primary-100 dark:bg-primary-900/40' : ''

@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Users, Plus, Search, Edit, Trash2, Eye, Phone, Mail, MapPin, Calendar, Building, User, X, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, FileText, Briefcase, Receipt, Clock, Activity, Loader2, MessageSquare
+  Users, Plus, Search, Edit, Trash2, Eye, Phone, Mail, MapPin, Calendar, Building, User, X, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, FileText, Briefcase, Receipt, Clock, Activity, Loader2, MessageSquare, Hash
 } from 'lucide-react';
 import {
   searchCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomerInteractions, checkDuplicateCustomer, formatDate, formatDateTime, formatCurrency
 } from '../lib/database';
 import type { Customer, Lead, Quote, Job, Invoice, UserProfile } from '../types/database';
 import { LEAD_STATUS_LABELS, QUOTE_STATUS_LABELS, JOB_STATUS_LABELS, INVOICE_STATUS_LABELS } from '../types/database';
-import ROTInformation from '../components/ROTInformation';
+
 import ContactCustomerModal from './ContactCustomerModal';
 import { useAuth } from '../contexts/AuthContext';
 import { Button, Badge } from './ui';
@@ -59,6 +59,13 @@ interface CustomerFormData {
   vat_handling: '25%' | 'omvänd byggmoms';
   e_invoice_address: string;
   invoice_delivery_method: 'e-post' | 'brev' | 'e-faktura';
+  // ROT fields
+  include_rot: boolean;
+  rot_personnummer: string;
+  rot_fastighetsbeteckning: string;
+  // RUT fields
+  include_rut: boolean;
+  rut_personnummer: string;
 }
 
 interface CustomerInteractions {
@@ -81,6 +88,11 @@ const getInitialFormData = (): CustomerFormData => ({
   vat_handling: '25%',
   e_invoice_address: '',
   invoice_delivery_method: 'e-post',
+  include_rot: false,
+  rot_personnummer: '',
+  rot_fastighetsbeteckning: '',
+  include_rut: false,
+  rut_personnummer: '',
 });
 
 function CustomerManagement() {
@@ -100,6 +112,7 @@ function CustomerManagement() {
   const [customerInteractions, setCustomerInteractions] = useState<CustomerInteractions | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<'info' | 'activity'>('info');
 
   const [customerForm, setCustomerForm] = useState<CustomerFormData>(getInitialFormData());
 
@@ -166,6 +179,11 @@ function CustomerManagement() {
         org_number: customerForm.customer_type === 'company' ? customerForm.org_number || null : null,
         sales_area: customerForm.sales_area || null,
         e_invoice_address: customerForm.e_invoice_address || null,
+        include_rot: customerForm.include_rot,
+        rot_personnummer: customerForm.rot_personnummer || null,
+        rot_fastighetsbeteckning: customerForm.rot_fastighetsbeteckning || null,
+        include_rut: customerForm.include_rut,
+        rut_personnummer: customerForm.rut_personnummer || null,
       };
 
       const result = isEditing
@@ -199,7 +217,13 @@ function CustomerManagement() {
       vat_handling: customer.vat_handling || '25%',
       e_invoice_address: customer.e_invoice_address || '',
       invoice_delivery_method: customer.invoice_delivery_method || 'e-post',
+      include_rot: customer.include_rot || false,
+      rot_personnummer: customer.rot_personnummer || '',
+      rot_fastighetsbeteckning: customer.rot_fastighetsbeteckning || '',
+      include_rut: customer.include_rut || false,
+      rut_personnummer: customer.rut_personnummer || '',
     });
+    setShowDetailModal(false);
     setShowEditModal(true);
   };
 
@@ -217,6 +241,7 @@ function CustomerManagement() {
 
   const handleViewCustomer = async (customer: CustomerWithStats) => {
     setSelectedCustomer(customer);
+    setDetailTab('info');
     setShowDetailModal(true);
     setCustomerInteractions(null);
     await loadCustomerDetails(customer.id);
@@ -240,6 +265,30 @@ function CustomerManagement() {
 
   const getInteractionIcon = (type: string) => ({ lead: TrendingUp, quote: FileText, job: Briefcase, invoice: Receipt }[type] || Activity);
   const getInteractionColor = (type: string, status?: string) => ({ lead: 'text-blue-600', quote: 'text-purple-600', job: 'text-orange-600', invoice: 'text-green-600' }[type] || 'text-gray-600');
+
+  const formatPersonnummer = (value: string): string => {
+    const digits = value.replace(/[^0-9]/g, '');
+    if (digits.length === 0) return '';
+
+    // Already has century prefix (starts with 19 or 20)
+    if (digits.startsWith('19') || digits.startsWith('20')) {
+      if (digits.length <= 8) return digits;
+      return digits.slice(0, 8) + '-' + digits.slice(8, 12);
+    }
+
+    // Only add century when user has typed all 10 digits
+    if (digits.length === 10) {
+      const yy = parseInt(digits.slice(0, 2), 10);
+      const currentYearShort = new Date().getFullYear() % 100;
+      const century = yy > currentYearShort ? '19' : '20';
+      const fullDigits = century + digits;
+      return fullDigits.slice(0, 8) + '-' + fullDigits.slice(8, 12);
+    }
+
+    // Still typing — return digits as-is, insert hyphen if past position 8
+    if (digits.length <= 8) return digits;
+    return digits.slice(0, 8) + '-' + digits.slice(8, 10);
+  };
 
   return (
     <div className="space-y-6">
@@ -527,6 +576,70 @@ function CustomerManagement() {
                   <input type="text" value={customerForm.e_invoice_address} onChange={(e) => setCustomerForm(prev => ({ ...prev, e_invoice_address: e.target.value }))} className="w-full px-3 py-2 border rounded-md" placeholder="GLN-nummer eller Peppol-ID" />
                 </div>
               </div>
+
+              {/* ROT / RUT Section */}
+              {/* ROT / RUT Section */}
+              {customerForm.customer_type === 'private' && (
+                <div className="border-t pt-6">
+                  <h4 className="text-md font-semibold text-gray-800 mb-4">ROT / RUT-uppgifter</h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Personnummer (ROT)</label>
+                      <input
+                        type="text"
+                        value={customerForm.rot_personnummer}
+                        onChange={(e) => setCustomerForm(prev => ({ ...prev, rot_personnummer: formatPersonnummer(e.target.value) }))}
+                        placeholder="YYYYMMDD-XXXX"
+                        maxLength={13}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Fastighetsbeteckning</label>
+                      <input
+                        type="text"
+                        value={customerForm.rot_fastighetsbeteckning}
+                        onChange={(e) => setCustomerForm(prev => ({ ...prev, rot_fastighetsbeteckning: e.target.value }))}
+                        placeholder="t.ex. Stockholm Södermalm 1:23"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Personnummer (RUT)</label>
+                      <input
+                        type="text"
+                        value={customerForm.rut_personnummer}
+                        onChange={(e) => setCustomerForm(prev => ({ ...prev, rut_personnummer: formatPersonnummer(e.target.value) }))}
+                        placeholder="YYYYMMDD-XXXX"
+                        maxLength={13}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={customerForm.include_rot}
+                        onChange={(e) => setCustomerForm(prev => ({ ...prev, include_rot: e.target.checked, include_rut: e.target.checked ? false : prev.include_rut }))}
+                        className="rounded border-gray-300"
+                      />
+                      <span className="text-sm font-medium text-gray-700">Inkludera ROT-avdrag</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={customerForm.include_rut}
+                        onChange={(e) => setCustomerForm(prev => ({ ...prev, include_rut: e.target.checked, include_rot: e.target.checked ? false : prev.include_rot }))}
+                        className="rounded border-gray-300"
+                      />
+                      <span className="text-sm font-medium text-gray-700">Inkludera RUT-avdrag</span>
+                    </label>
+                  </div>
+                </div>
+              )}
             </form>
             <div className="flex justify-end space-x-3 p-6 border-t bg-gray-50">
               <button type="button" onClick={() => { setShowAddModal(false); setShowEditModal(false); }} className="px-4 py-2 border rounded-md">Avbryt</button>
@@ -555,92 +668,235 @@ function CustomerManagement() {
               </button>
             </div>
 
+            {/* Tab Switcher */}
+            <div className="border-b border-gray-200 px-6">
+              <nav className="flex space-x-8" aria-label="Tabs">
+                <button
+                  onClick={() => setDetailTab('info')}
+                  className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${detailTab === 'info'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                >
+                  Kundinformation
+                </button>
+                <button
+                  onClick={() => setDetailTab('activity')}
+                  className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors ${detailTab === 'activity'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                >
+                  Aktivitet
+                  {customerInteractions && (() => {
+                    const count = createTimeline().length; return count > 0 ? (
+                      <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{count}</span>
+                    ) : null;
+                  })()}
+                </button>
+              </nav>
+            </div>
+
             <div className="flex-1 overflow-y-auto p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Customer Info Card */}
-                <div className="lg:col-span-1">
-                  <div className="bg-gray-50 rounded-lg p-6">
-                    <div className="flex items-center mb-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mr-4">
-                        <Building className="w-6 h-6 text-blue-600" />
+              {/* TAB 1: Kundinformation */}
+              {detailTab === 'info' && (
+                <div className="space-y-6">
+                  {/* Stats Row */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-blue-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-blue-600">{selectedCustomer.total_leads || 0}</div>
+                      <div className="text-xs font-medium text-blue-500 mt-1">Leads</div>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-green-600">{selectedCustomer.total_jobs || 0}</div>
+                      <div className="text-xs font-medium text-green-500 mt-1">Jobb</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4 text-center">
+                      <div className="text-sm font-semibold text-gray-700">
+                        {selectedCustomer.created_at ? formatDate(selectedCustomer.created_at) : '—'}
                       </div>
-                      <div>
-                        <h4 className="text-lg font-semibold text-gray-900">{selectedCustomer.name}</h4>
-                        <p className="text-sm text-gray-500">
-                          Kund sedan {selectedCustomer.created_at ? formatDate(selectedCustomer.created_at) : 'Okänt'}
-                        </p>
+                      <div className="text-xs font-medium text-gray-500 mt-1">Kund sedan</div>
+                    </div>
+                  </div>
+
+                  {/* Section: Kontaktuppgifter */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Kontaktuppgifter</h4>
+                    <div className="bg-gray-50 rounded-lg p-5">
+                      <div className="flex items-center mb-4">
+                        <div className="w-11 h-11 bg-blue-100 rounded-full flex items-center justify-center mr-4 flex-shrink-0">
+                          {selectedCustomer.customer_type === 'company'
+                            ? <Building className="w-5 h-5 text-blue-600" />
+                            : <User className="w-5 h-5 text-blue-600" />}
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">{selectedCustomer.name}</h3>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mt-0.5 ${selectedCustomer.customer_type === 'company'
+                            ? 'bg-indigo-100 text-indigo-700'
+                            : 'bg-amber-100 text-amber-700'
+                            }`}>
+                            {selectedCustomer.customer_type === 'company' ? 'Företag' : 'Privatperson'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                        {selectedCustomer.email && (
+                          <div>
+                            <div className="text-xs text-gray-500 mb-0.5">E-post</div>
+                            <a href={`mailto:${selectedCustomer.email}`} className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1.5">
+                              <Mail className="w-3.5 h-3.5" />
+                              {selectedCustomer.email}
+                            </a>
+                          </div>
+                        )}
+                        {selectedCustomer.phone_number && (
+                          <div>
+                            <div className="text-xs text-gray-500 mb-0.5">Telefon</div>
+                            <a href={`tel:${selectedCustomer.phone_number}`} className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1.5">
+                              <Phone className="w-3.5 h-3.5" />
+                              {selectedCustomer.phone_number}
+                            </a>
+                          </div>
+                        )}
+                        {(selectedCustomer.address || selectedCustomer.postal_code || selectedCustomer.city) && (
+                          <div className="sm:col-span-2">
+                            <div className="text-xs text-gray-500 mb-0.5">Adress</div>
+                            <div className="text-sm text-gray-900 flex items-start gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+                              <div>
+                                {selectedCustomer.address && <div>{selectedCustomer.address}</div>}
+                                {(selectedCustomer.postal_code || selectedCustomer.city) && (
+                                  <div>{[selectedCustomer.postal_code, selectedCustomer.city].filter(Boolean).join(' ')}</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
+                  </div>
 
-                    <div className="space-y-3">
-                      {selectedCustomer.email && (
-                        <div className="flex items-center text-sm">
-                          <Mail className="w-4 h-4 mr-2 text-gray-400" />
-                          <a href={`mailto:${selectedCustomer.email}`} className="text-blue-600 hover:text-blue-700">
-                            {selectedCustomer.email}
-                          </a>
+                  {/* Section: Företagsinformation (company only) */}
+                  {selectedCustomer.customer_type === 'company' && (selectedCustomer.org_number || selectedCustomer.vat_handling || selectedCustomer.fortnox_customer_number) && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Företagsinformation</h4>
+                      <div className="bg-gray-50 rounded-lg p-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                          {selectedCustomer.org_number && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-0.5">Organisationsnummer</div>
+                              <div className="text-sm text-gray-900 font-medium">{selectedCustomer.org_number}</div>
+                            </div>
+                          )}
+                          {selectedCustomer.vat_handling && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-0.5">Momshantering</div>
+                              <div className="text-sm text-gray-900">
+                                {selectedCustomer.vat_handling === 'omvänd byggmoms' ? 'Omvänd byggmoms' : '25% (Standard)'}
+                              </div>
+                            </div>
+                          )}
+                          {selectedCustomer.fortnox_customer_number && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-0.5">Fortnox kundnummer</div>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">
+                                <Hash className="w-3 h-3" />
+                                {selectedCustomer.fortnox_customer_number}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
+                    </div>
+                  )}
 
-                      {selectedCustomer.phone_number && (
-                        <div className="flex items-center text-sm">
-                          <Phone className="w-4 h-4 mr-2 text-gray-400" />
-                          <a href={`tel:${selectedCustomer.phone_number}`} className="text-blue-600 hover:text-blue-700">
-                            {selectedCustomer.phone_number}
-                          </a>
+                  {/* Section: Faktureringsinställningar */}
+                  {(selectedCustomer.invoice_delivery_method || selectedCustomer.sales_area || selectedCustomer.e_invoice_address) && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Faktureringsinställningar</h4>
+                      <div className="bg-gray-50 rounded-lg p-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                          {selectedCustomer.invoice_delivery_method && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-0.5">Leveranssätt för faktura</div>
+                              <div className="text-sm text-gray-900 capitalize">{selectedCustomer.invoice_delivery_method}</div>
+                            </div>
+                          )}
+                          {selectedCustomer.sales_area && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-0.5">Säljområde</div>
+                              <div className="text-sm text-gray-900">{selectedCustomer.sales_area}</div>
+                            </div>
+                          )}
+                          {selectedCustomer.e_invoice_address && (
+                            <div className="sm:col-span-2">
+                              <div className="text-xs text-gray-500 mb-0.5">E-fakturaadress</div>
+                              <div className="text-sm text-gray-900 font-mono">{selectedCustomer.e_invoice_address}</div>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
+                    </div>
+                  )}
 
-                      {(selectedCustomer.address || selectedCustomer.city) && (
-                        <div className="flex items-start text-sm">
-                          <MapPin className="w-4 h-4 mr-2 text-gray-400 mt-0.5" />
-                          <div>
-                            {selectedCustomer.address && <div>{selectedCustomer.address}</div>}
-                            {(selectedCustomer.postal_code || selectedCustomer.city) && (
+                  {/* Section: ROT / RUT (private customers with relevant data) */}
+                  {selectedCustomer.customer_type === 'private' &&
+                    (selectedCustomer.include_rot || selectedCustomer.include_rut ||
+                      selectedCustomer.rot_personnummer || selectedCustomer.rut_personnummer ||
+                      selectedCustomer.rot_fastighetsbeteckning) && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">ROT / RUT</h4>
+                        <div className="bg-gray-50 rounded-lg p-5">
+                          {/* Active badges */}
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            {selectedCustomer.include_rot && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                                ✓ ROT aktiv
+                              </span>
+                            )}
+                            {selectedCustomer.include_rut && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                                ✓ RUT aktiv
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                            {selectedCustomer.rot_personnummer && (
                               <div>
-                                {selectedCustomer.postal_code} {selectedCustomer.city}
+                                <div className="text-xs text-gray-500 mb-0.5">Personnummer (ROT)</div>
+                                <div className="text-sm text-gray-900 font-mono">{selectedCustomer.rot_personnummer}</div>
+                              </div>
+                            )}
+                            {selectedCustomer.rut_personnummer && (
+                              <div>
+                                <div className="text-xs text-gray-500 mb-0.5">Personnummer (RUT)</div>
+                                <div className="text-sm text-gray-900 font-mono">{selectedCustomer.rut_personnummer}</div>
+                              </div>
+                            )}
+                            {selectedCustomer.rot_fastighetsbeteckning && (
+                              <div className="sm:col-span-2">
+                                <div className="text-xs text-gray-500 mb-0.5">Fastighetsbeteckning</div>
+                                <div className="text-sm text-gray-900">{selectedCustomer.rot_fastighetsbeteckning}</div>
                               </div>
                             )}
                           </div>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Quick Stats */}
-                    <div className="mt-6 pt-6 border-t border-gray-200">
-                      <div className="grid grid-cols-2 gap-4 text-center">
-                        <div>
-                          <div className="text-2xl font-bold text-blue-600">{selectedCustomer.total_leads || 0}</div>
-                          <div className="text-xs text-gray-500">Leads</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-green-600">{selectedCustomer.total_jobs || 0}</div>
-                          <div className="text-xs text-gray-500">Jobb</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* ROT INFORMATION DISPLAY */}
-                    {selectedCustomer && selectedCustomer.include_rot && (
-                      <div className="mt-6 pt-6 border-t border-gray-200">
-                        <ROTInformation
-                          data={selectedCustomer}
-                          totalAmount={0} // totalAmount is not relevant here, so pass 0
-                          showDetails={true}
-                        />
                       </div>
                     )}
 
-                    {/* Quick Actions */}
-                    <div className="mt-6 space-y-2">
+                  {/* Quick Actions */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Snabbåtgärder</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <button
                         onClick={() => {
                           setShowDetailModal(false);
                           navigate('/app/leads', { state: { createForCustomer: selectedCustomer } });
                         }}
-                        className="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                        className="flex flex-col items-center justify-center px-3 py-3 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors text-sm font-medium gap-1.5"
                       >
-                        <TrendingUp className="w-4 h-4 mr-2" />
+                        <TrendingUp className="w-4 h-4" />
                         Skapa Lead
                       </button>
                       <button
@@ -648,9 +904,9 @@ function CustomerManagement() {
                           setShowDetailModal(false);
                           navigate('/app/offerter', { state: { createForCustomer: selectedCustomer } });
                         }}
-                        className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                        className="flex flex-col items-center justify-center px-3 py-3 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors text-sm font-medium gap-1.5"
                       >
-                        <FileText className="w-4 h-4 mr-2" />
+                        <FileText className="w-4 h-4" />
                         Ny Offert
                       </button>
                       <button
@@ -658,30 +914,40 @@ function CustomerManagement() {
                           setShowDetailModal(false);
                           navigate('/app/kalender', { state: { createMeetingForCustomer: selectedCustomer } });
                         }}
-                        className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                        className="flex flex-col items-center justify-center px-3 py-3 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors text-sm font-medium gap-1.5"
                       >
-                        <Calendar className="w-4 h-4 mr-2" />
+                        <Calendar className="w-4 h-4" />
                         Boka Möte
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowDetailModal(false);
+                          handleContactCustomer(selectedCustomer);
+                        }}
+                        className="flex flex-col items-center justify-center px-3 py-3 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors text-sm font-medium gap-1.5"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        Kontakta
                       </button>
                     </div>
                   </div>
                 </div>
+              )}
 
-                {/* Timeline */}
-                <div className="lg:col-span-2">
-                  <h5 className="text-lg font-semibold text-gray-900 mb-4">Interaktionshistorik</h5>
-
+              {/* TAB 2: Aktivitet */}
+              {detailTab === 'activity' && (
+                <div>
                   {!customerInteractions ? (
-                    <div className="flex items-center justify-center py-8">
+                    <div className="flex items-center justify-center py-12">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       {createTimeline().length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                          <Activity className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                          <p>Inga interaktioner ännu</p>
-                          <p className="text-sm">Skapa en lead eller offert för att komma igång</p>
+                        <div className="text-center py-12 text-gray-500">
+                          <Activity className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                          <p className="font-medium text-gray-600">Inga interaktioner ännu</p>
+                          <p className="text-sm mt-1">Skapa en lead eller offert för att komma igång</p>
                         </div>
                       ) : (
                         createTimeline().map((item) => {
@@ -722,7 +988,7 @@ function CustomerManagement() {
                     </div>
                   )}
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Footer Actions */}
