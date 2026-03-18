@@ -190,6 +190,28 @@ function QuoteAcceptance() {
         console.error('Failed to create in-app notification:', notifyErr);
       }
 
+      // Silent write-back of ROT/RUT data to customer table
+      // Never blocks acceptance flow — errors are logged only
+      if (quote.customer?.id) {
+        try {
+          if (quote.include_rot && (rotData.identifier || rotData.fastighetsbeteckning)) {
+            await supabase.from('customers').update({
+              include_rot: true,
+              rot_personnummer: rotData.identifier || null,
+              rot_fastighetsbeteckning: rotData.fastighetsbeteckning || null,
+            }).eq('id', quote.customer.id);
+          }
+          if (quote.include_rut && rutPersonnummer) {
+            await supabase.from('customers').update({
+              include_rut: true,
+              rut_personnummer: rutPersonnummer || null,
+            }).eq('id', quote.customer.id);
+          }
+        } catch (writeBackErr) {
+          console.error('Could not write ROT/RUT data back to customer:', writeBackErr);
+        }
+      }
+
       setAccepted(true);
     } catch (err) {
       console.error('Error accepting quote:', err);
@@ -731,8 +753,8 @@ function QuoteAcceptance() {
                         setRutPersonnummer(formatted);
                       }}
                       className={`w-full px-4 py-3 border rounded-lg focus:ring-purple-500 focus:border-purple-500 ${rutPersonnummer && !validateRUTPersonnummer(rutPersonnummer)
-                          ? 'border-red-300 bg-red-50'
-                          : 'border-gray-300'
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-gray-300'
                         }`}
                       placeholder="YYYYMMDD-XXXX"
                     />
