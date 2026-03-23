@@ -723,6 +723,7 @@ function QuoteManagement() {
               setQuoteToSend(null);
             }}
             quote={quoteToSend}
+            templates={templates}
           />
         )
       }

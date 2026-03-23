@@ -13,10 +13,11 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../hooks/useToast';
 import {
     getQuote, updateQuote, deleteQuote, sendQuoteEmail,
-    acceptQuoteAndCreateOrder, type QuoteWithRelations
+    acceptQuoteAndCreateOrder, saveQuoteTemplateSnapshot, type QuoteWithRelations
 } from '../lib/quotes';
 import LineItemsEditor, { type LineItem } from './LineItemsEditor';
 import type { QuoteStatus } from '../types/database';
+import type { QuoteTemplate } from '../lib/quoteTemplates';
 import ConfirmDialog from './ConfirmDialog';
 
 // ============================================================================
@@ -28,6 +29,7 @@ interface QuoteDetailModalProps {
     onClose: () => void;
     onQuoteUpdated?: () => void;
     quoteId: string;
+    templates?: QuoteTemplate[];
 }
 
 type TabType = 'details' | 'items' | 'actions';
@@ -54,7 +56,8 @@ export function QuoteDetailModal({
     isOpen,
     onClose,
     onQuoteUpdated,
-    quoteId
+    quoteId,
+    templates = []
 }: QuoteDetailModalProps) {
     const { success, error: showError } = useToast();
     const navigate = useNavigate();
@@ -77,6 +80,9 @@ export function QuoteDetailModal({
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showSendDialog, setShowSendDialog] = useState(false);
     const [sendEmail, setSendEmail] = useState('');
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
+        (quote as any)?.template_id || templates?.[0]?.id || ''
+    );
 
     // Load quote data
     useEffect(() => {
@@ -171,6 +177,18 @@ export function QuoteDetailModal({
         if (!quote || !sendEmail) return;
         setSaving(true);
         try {
+            // Snapshot template — never block sending if this fails
+            if (selectedTemplateId && templates.length > 0) {
+                const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+                if (selectedTemplate) {
+                    try {
+                        await saveQuoteTemplateSnapshot(quote.id, selectedTemplateId, selectedTemplate);
+                    } catch (err) {
+                        console.error('Template snapshot failed (non-fatal):', err);
+                    }
+                }
+            }
+
             const { error } = await sendQuoteEmail(quote.id, {
                 recipient_email: sendEmail,
                 subject: `Offert: ${quote.title}`,

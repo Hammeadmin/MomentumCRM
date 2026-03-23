@@ -3,14 +3,16 @@ import { useState, useEffect } from 'react';
 import { X, Send, Mail, MessageSquare, Loader2, User, FileText, Calendar, DollarSign, Edit2 } from 'lucide-react';
 import { Button } from './ui';
 import { useToast } from '../hooks/useToast';
-import { sendQuoteEmail, generateQuoteEmailTemplate, type QuoteWithRelations } from '../lib/quotes';
+import { sendQuoteEmail, generateQuoteEmailTemplate, saveQuoteTemplateSnapshot, type QuoteWithRelations } from '../lib/quotes';
 import { formatCurrency, formatDate } from '../lib/database';
+import type { QuoteTemplate } from '../lib/quoteTemplates';
 
 interface SendQuoteModalProps {
     isOpen: boolean;
     onClose: () => void;
     quote: QuoteWithRelations;
     onSent?: () => void;
+    templates?: QuoteTemplate[];
 }
 
 type SendMethod = 'email' | 'sms';
@@ -23,12 +25,15 @@ const TEMPLATE_OPTIONS: { value: TemplateType; label: string; description: strin
     { value: 'follow_up', label: 'Påminnelse', description: 'Uppföljning av tidigare skickad offert' },
 ];
 
-export default function SendQuoteModal({ isOpen, onClose, quote, onSent }: SendQuoteModalProps) {
+export default function SendQuoteModal({ isOpen, onClose, quote, onSent, templates = [] }: SendQuoteModalProps) {
     const { success, error: showError } = useToast();
     const [method, setMethod] = useState<SendMethod>('email');
     const [loading, setLoading] = useState(false);
     const [templateType, setTemplateType] = useState<TemplateType>('standard');
     const [isEditingCustomer, setIsEditingCustomer] = useState(false);
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
+        (quote as any)?.template_id || templates[0]?.id || ''
+    );
 
     // Form state
     const [recipient, setRecipient] = useState('');
@@ -85,6 +90,18 @@ export default function SendQuoteModal({ isOpen, onClose, quote, onSent }: SendQ
 
         setLoading(true);
         try {
+            // Snapshot template — never block sending if this fails
+            if (selectedTemplateId && templates.length > 0) {
+                const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+                if (selectedTemplate) {
+                    try {
+                        await saveQuoteTemplateSnapshot(quote.id, selectedTemplateId, selectedTemplate);
+                    } catch (err) {
+                        console.error('Template snapshot failed (non-fatal):', err);
+                    }
+                }
+            }
+
             if (method === 'email') {
                 const result = await sendQuoteEmail(quote.id, {
                     recipient_email: finalRecipient,
@@ -269,6 +286,22 @@ export default function SendQuoteModal({ isOpen, onClose, quote, onSent }: SendQ
                                     </button>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Quote Template Selector */}
+                    {templates.length > 0 && (
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Offertmall</label>
+                            <select
+                                value={selectedTemplateId}
+                                onChange={(e) => setSelectedTemplateId(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                {templates.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                            </select>
                         </div>
                     )}
 

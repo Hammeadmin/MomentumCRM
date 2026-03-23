@@ -38,6 +38,8 @@ import {
 } from '../lib/rut';
 import { formatCurrency, formatDate } from '../lib/database';
 import { supabase } from '../lib/supabase';
+import QuotePreview from '../components/QuotePreview';
+import type { QuoteTemplate } from '../lib/quoteTemplates';
 
 
 function QuoteAcceptance() {
@@ -50,6 +52,7 @@ function QuoteAcceptance() {
   const [declineReason, setDeclineReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [quote, setQuote] = useState<any>(null);
+  const [template, setTemplate] = useState<QuoteTemplate | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [declined, setDeclined] = useState(false);
   const [rotData, setRotData] = useState<ROTFormData>({
@@ -98,6 +101,25 @@ function QuoteAcceptance() {
       }
 
       setQuote(result.data);
+
+      // Template fallback chain: snapshot → fetch by template_id → no template
+      try {
+        if (result.data.template_snapshot) {
+          setTemplate(result.data.template_snapshot as QuoteTemplate);
+        } else if (result.data.template_id) {
+          const { data: tmplData } = await supabase
+            .from('quote_templates')
+            .select('*')
+            .eq('id', result.data.template_id)
+            .maybeSingle();
+          if (tmplData) {
+            setTemplate(tmplData as QuoteTemplate);
+          }
+        }
+      } catch (tmplErr) {
+        console.error('Template load failed (non-fatal):', tmplErr);
+        // template stays null — QuotePreview will render with default styling
+      }
     } catch (err) {
       console.error('Error loading quote:', err);
       setError('Ett oväntat fel inträffade vid laddning av offerten.');
@@ -536,324 +558,199 @@ function QuoteAcceptance() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Building className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {quote?.organisation?.name || 'Momentum CRM'}
-                </h1>
-                <p className="text-gray-600">Offertgodkännande</p>
-              </div>
+    <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200">
+      {/* Slim Header Bar */}
+      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Building className="w-5 h-5 text-white" />
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Offert</p>
-              <p className="text-lg font-bold text-gray-900">{quote?.quote_number}</p>
+            <div>
+              <p className="font-semibold text-gray-900 text-sm">
+                {quote?.organisation?.name || 'Momentum CRM'}
+              </p>
+              <p className="text-xs text-gray-500">Offert {quote?.quote_number}</p>
             </div>
+          </div>
+          <div className="flex items-center space-x-2 text-xs text-gray-500">
+            <Shield className="w-4 h-4 text-green-500" />
+            <span>Säker länk</span>
           </div>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Quote Details */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Quote Information */}
-            <div className="card-padded">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">{quote?.title}</h2>
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">Giltig till</p>
-                  <p className="font-medium text-gray-900">
-                    {quote?.valid_until ? formatDate(quote.valid_until) : 'Enligt överenskommelse'}
-                  </p>
-                </div>
-              </div>
+      {/* Main Content — single column, PandaDoc-style */}
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
 
-              {quote?.description && (
-                <div className="mb-6">
-                  <h3 className="font-medium text-gray-900 mb-2">Beskrivning</h3>
-                  <p className="text-gray-700 whitespace-pre-wrap">{quote.description}</p>
-                </div>
-              )}
-
-              {/* Line Items */}
-              <div className="mb-6">
-                <h3 className="font-medium text-gray-900 mb-4">Offertspecifikation</h3>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead className="border-b-2 border-gray-200">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Beskrivning</th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">Antal</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">À-pris</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">Summa</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {(quote?.quote_line_items || []).map((item: any, index: number) => (
-                        <tr key={index}>
-                          <td className="px-4 py-3 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-4 py-3 text-center text-sm text-gray-900">{item.quantity}</td>
-                          <td className="px-4 py-3 text-right text-sm text-gray-900">{formatCurrency(item.unit_price)}</td>
-                          <td className="px-4 py-3 text-right text-sm font-medium text-gray-900">{formatCurrency(item.total)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Totals */}
-              <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-end">
-                  <div className="w-full max-w-sm space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(calculateSubtotal())}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Moms (25%):</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(calculateVAT())}</span>
-                    </div>
-                    <div className="flex justify-between text-lg font-bold text-gray-900 pt-2 border-t border-gray-300">
-                      <span>Totalt:</span>
-                      <span>{formatCurrency(quote?.total_amount || 0)}</span>
-                    </div>
-
-                    {/* ROT Deduction */}
-                    {quote?.include_rot && calculateROTDeduction() > 0 && (
-                      <>
-                        <div className="flex justify-between text-sm text-green-600 border-t border-green-200 pt-2">
-                          <span>ROT-avdrag (50%):</span>
-                          <span className="font-medium">-{formatROTAmount(calculateROTDeduction())}</span>
-                        </div>
-                        <div className="flex justify-between text-lg font-bold text-green-700 border-t border-green-300 pt-2">
-                          <span>Att betala efter ROT:</span>
-                          <span>{formatROTAmount(calculateFinalAmount())}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
+        {/* ──────────────── 1. Floating Document Preview ──────────────── */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+          {/* Document header strip */}
+          <div className="bg-gray-50 border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <FileText className="w-4 h-4" />
+              <span className="font-medium">{quote?.title}</span>
             </div>
-
-            {/* ROT Information */}
-            {quote?.include_rot && (
-              <div className="card-padded">
-                <div className="flex items-center mb-4">
-                  <Calculator className="w-6 h-6 text-green-600 mr-3" />
-                  <h3 className="text-lg font-bold text-gray-900">ROT-avdrag</h3>
-                </div>
-
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-                  <p className="text-sm text-green-800 leading-relaxed">
-                    {getROTExplanationText()}
-                  </p>
-                  <p className="text-sm text-green-700 mt-2 font-medium">
-                    Uppskattad ROT-avdrag: {formatROTAmount(calculateROTDeduction())}
-                  </p>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                  <p className="text-sm text-blue-800">
-                    <strong>Vill du använda ROT-avdrag?</strong> Fyll i ditt personnummer och fastighetsbeteckning nedan.
-                    Om du inte vill använda ROT-avdrag kan du lämna fälten tomma och bara godkänna offerten.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Personnummer <span className="text-gray-400 font-normal">(valfritt)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={rotData.identifier}
-                      onChange={(e) => {
-                        const formatted = e.target.value.length >= 10
-                          ? formatSwedishPersonnummer(e.target.value)
-                          : e.target.value;
-                        setRotData(prev => ({ ...prev, identifier: formatted }));
-                      }}
-                      className={`w-full px-4 py-3 border rounded-lg focus:ring-blue-500 focus:border-blue-500 ${rotData.identifier && !validateSwedishPersonnummer(rotData.identifier)
-                        ? 'border-red-300 bg-red-50'
-                        : 'border-gray-300'
-                        }`}
-                      placeholder="YYYYMMDD-XXXX"
-                    />
-                    {rotData.identifier && !validateSwedishPersonnummer(rotData.identifier) && (
-                      <p className="text-xs text-red-600 mt-1">
-                        Ogiltigt personnummer format. Använd format: YYYYMMDD-XXXX
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Fastighetsbeteckning <span className="text-gray-400 font-normal">(krävs för ROT)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={rotData.fastighetsbeteckning}
-                      onChange={(e) => setRotData(prev => ({ ...prev, fastighetsbeteckning: e.target.value }))}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="T.ex. STOCKHOLM SÖDERMALM 1:1"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Fastighetsbeteckning finns på fastighetsregistret eller kan fås från kommun
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* RUT Section */}
-            {quote?.include_rut && (
-              <div className="card-padded border-l-4 border-purple-500">
-                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                  <span className="mr-2">✨</span> RUT-avdrag
-                </h3>
-
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
-                  <p className="text-sm text-purple-800 leading-relaxed">
-                    {getRUTExplanationText()}
-                  </p>
-                  <p className="text-sm text-purple-700 mt-2 font-medium">
-                    Uppskattad RUT-avdrag: {formatRUTAmount(calculateRUTDeduction())}
-                  </p>
-                </div>
-
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
-                  <p className="text-sm text-purple-800">
-                    <strong>Vill du använda RUT-avdrag?</strong> Fyll i ditt personnummer nedan.
-                    Om du inte vill använda RUT-avdrag kan du lämna fältet tomt och bara godkänna offerten.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Personnummer <span className="text-gray-400 font-normal">(valfritt)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={rutPersonnummer}
-                      onChange={(e) => {
-                        const formatted = e.target.value.length >= 10
-                          ? formatRUTPersonnummer(e.target.value)
-                          : e.target.value;
-                        setRutPersonnummer(formatted);
-                      }}
-                      className={`w-full px-4 py-3 border rounded-lg focus:ring-purple-500 focus:border-purple-500 ${rutPersonnummer && !validateRUTPersonnummer(rutPersonnummer)
-                        ? 'border-red-300 bg-red-50'
-                        : 'border-gray-300'
-                        }`}
-                      placeholder="YYYYMMDD-XXXX"
-                    />
-                    {rutPersonnummer && !validateRUTPersonnummer(rutPersonnummer) && (
-                      <p className="text-xs text-red-600 mt-1">
-                        Ogiltigt personnummer format. Använd format: YYYYMMDD-XXXX
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+            <div className="text-xs text-gray-500">
+              {quote?.valid_until
+                ? `Giltig till ${formatDate(quote.valid_until)}`
+                : 'Enligt överenskommelse'}
+            </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Company Contact Information */}
-            <div className="card-padded">
-              <h3 className="font-bold text-gray-900 mb-4">Kontaktuppgifter</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center">
-                  <Building className="w-4 h-4 text-gray-400 mr-2" />
-                  <span className="text-gray-900 font-medium">{quote?.organisation?.name}</span>
-                </div>
-                {quote?.organisation?.email && (
-                  <div className="flex items-center">
-                    <Mail className="w-4 h-4 text-gray-400 mr-2" />
-                    <a href={`mailto:${quote.organisation.email}`} className="text-blue-600 hover:text-blue-700">
-                      {quote.organisation.email}
-                    </a>
-                  </div>
-                )}
-                {quote?.organisation?.phone && (
-                  <div className="flex items-center">
-                    <Phone className="w-4 h-4 text-gray-400 mr-2" />
-                    <a href={`tel:${quote.organisation.phone}`} className="text-blue-600 hover:text-blue-700">
-                      {quote.organisation.phone}
-                    </a>
-                  </div>
-                )}
-                {quote?.organisation?.address && (
-                  <div className="flex items-start pt-2 border-t border-gray-100">
-                    <MapPin className="w-4 h-4 text-gray-400 mr-2 mt-0.5" />
-                    <div className="text-gray-600">
-                      <p>{quote.organisation.address}</p>
-                      {quote.organisation.postal_code && quote.organisation.city && (
-                        <p>{quote.organisation.postal_code} {quote.organisation.city}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {quote?.organisation?.org_number && (
-                  <div className="text-xs text-gray-500 pt-2 border-t border-gray-100">
-                    Org.nr: {quote.organisation.org_number}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Quote Info */}
-            <div className="card-padded">
-              <h3 className="font-bold text-gray-900 mb-4">Offertinformation</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Offertnummer:</span>
-                  <span className="text-gray-900 font-medium">{quote?.quote_number}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Datum:</span>
-                  <span className="text-gray-900">{formatDate(quote?.created_at)}</span>
-                </div>
-                {quote?.valid_until && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Giltig till:</span>
-                    <span className="text-gray-900">{formatDate(quote.valid_until)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Security Notice */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start">
-                <Shield className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-blue-900">Säker offerthantering</h4>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Denna offert är säkert krypterad och kan endast godkännas en gång.
-                    Dina uppgifter behandlas enligt GDPR.
-                  </p>
-                </div>
-              </div>
-            </div>
+          {/* The actual document — QuotePreview */}
+          <div className="p-0">
+            <QuotePreview
+              template={template || undefined}
+              quote={quote}
+              logoUrl={quote?.organisation?.logo_url}
+              companyInfo={{
+                name: quote?.organisation?.name,
+                email: quote?.organisation?.email,
+                phone: quote?.organisation?.phone,
+                address: quote?.organisation?.address,
+                postalCode: quote?.organisation?.postal_code,
+                city: quote?.organisation?.city,
+                orgNumber: quote?.organisation?.org_number,
+              }}
+              customerInfo={{
+                name: quote?.customer?.name,
+                email: quote?.customer?.email,
+                phone: quote?.customer?.phone_number,
+                address: quote?.customer?.address,
+              }}
+              quoteNumber={quote?.quote_number}
+              validUntil={quote?.valid_until}
+              isEditable={false}
+            />
           </div>
         </div>
 
-        {/* Error Display */}
+        {/* ──────────────── 2. ROT/RUT Forms (if applicable) ──────────────── */}
+        {quote?.include_rot && (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+            <div className="flex items-center mb-4">
+              <Calculator className="w-6 h-6 text-green-600 mr-3" />
+              <h3 className="text-lg font-bold text-gray-900">ROT-avdrag</h3>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-green-800 leading-relaxed">
+                {getROTExplanationText()}
+              </p>
+              <p className="text-sm text-green-700 mt-2 font-medium">
+                Uppskattad ROT-avdrag: {formatROTAmount(calculateROTDeduction())}
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-blue-800">
+                <strong>Vill du använda ROT-avdrag?</strong> Fyll i ditt personnummer och fastighetsbeteckning nedan.
+                Om du inte vill använda ROT-avdrag kan du lämna fälten tomma och bara godkänna offerten.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Personnummer <span className="text-gray-400 font-normal">(valfritt)</span>
+                </label>
+                <input
+                  type="text"
+                  value={rotData.identifier}
+                  onChange={(e) => {
+                    const formatted = e.target.value.length >= 10
+                      ? formatSwedishPersonnummer(e.target.value)
+                      : e.target.value;
+                    setRotData(prev => ({ ...prev, identifier: formatted }));
+                  }}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-blue-500 focus:border-blue-500 ${rotData.identifier && !validateSwedishPersonnummer(rotData.identifier)
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-gray-300'
+                    }`}
+                  placeholder="YYYYMMDD-XXXX"
+                />
+                {rotData.identifier && !validateSwedishPersonnummer(rotData.identifier) && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Ogiltigt personnummer format. Använd format: YYYYMMDD-XXXX
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Fastighetsbeteckning <span className="text-gray-400 font-normal">(krävs för ROT)</span>
+                </label>
+                <input
+                  type="text"
+                  value={rotData.fastighetsbeteckning}
+                  onChange={(e) => setRotData(prev => ({ ...prev, fastighetsbeteckning: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="T.ex. STOCKHOLM SÖDERMALM 1:1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Fastighetsbeteckning finns på fastighetsregistret eller kan fås från kommun
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {quote?.include_rut && (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 border-l-4 border-l-purple-500 p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+              <span className="mr-2">✨</span> RUT-avdrag
+            </h3>
+
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-purple-800 leading-relaxed">
+                {getRUTExplanationText()}
+              </p>
+              <p className="text-sm text-purple-700 mt-2 font-medium">
+                Uppskattad RUT-avdrag: {formatRUTAmount(calculateRUTDeduction())}
+              </p>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-purple-800">
+                <strong>Vill du använda RUT-avdrag?</strong> Fyll i ditt personnummer nedan.
+                Om du inte vill använda RUT-avdrag kan du lämna fältet tomt och bara godkänna offerten.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Personnummer <span className="text-gray-400 font-normal">(valfritt)</span>
+                </label>
+                <input
+                  type="text"
+                  value={rutPersonnummer}
+                  onChange={(e) => {
+                    const formatted = e.target.value.length >= 10
+                      ? formatRUTPersonnummer(e.target.value)
+                      : e.target.value;
+                    setRutPersonnummer(formatted);
+                  }}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-purple-500 focus:border-purple-500 ${rutPersonnummer && !validateRUTPersonnummer(rutPersonnummer)
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-gray-300'
+                    }`}
+                  placeholder="YYYYMMDD-XXXX"
+                />
+                {rutPersonnummer && !validateRUTPersonnummer(rutPersonnummer) && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Ogiltigt personnummer format. Använd format: YYYYMMDD-XXXX
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ──────────────── 3. Error Display ──────────────── */}
         {error && (
-          <div className="mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
             <div className="flex items-center">
               <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
               <p className="text-red-700">{error}</p>
@@ -861,8 +758,8 @@ function QuoteAcceptance() {
           </div>
         )}
 
-        {/* Accept/Decline Section */}
-        <div className="mt-8 bg-white rounded-lg shadow-sm border p-6">
+        {/* ──────────────── 4. Accept / Decline Section ──────────────── */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
           <div className="text-center">
             <h3 className="text-lg font-bold text-gray-900 mb-2">Svara på offerten</h3>
             <p className="text-gray-600 mb-6">
@@ -936,6 +833,50 @@ function QuoteAcceptance() {
               Genom att godkänna accepterar du våra allmänna villkor och bekräftar beställningen.
             </p>
           </div>
+        </div>
+
+        {/* ──────────────── 5. Company Contact Info ──────────────── */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                <Building className="w-5 h-5 text-gray-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">{quote?.organisation?.name}</p>
+                {quote?.organisation?.org_number && (
+                  <p className="text-xs text-gray-500">Org.nr: {quote.organisation.org_number}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+              {quote?.organisation?.email && (
+                <a href={`mailto:${quote.organisation.email}`} className="flex items-center hover:text-blue-600 transition-colors">
+                  <Mail className="w-4 h-4 mr-1" />
+                  {quote.organisation.email}
+                </a>
+              )}
+              {quote?.organisation?.phone && (
+                <a href={`tel:${quote.organisation.phone}`} className="flex items-center hover:text-blue-600 transition-colors">
+                  <Phone className="w-4 h-4 mr-1" />
+                  {quote.organisation.phone}
+                </a>
+              )}
+              {quote?.organisation?.address && (
+                <span className="flex items-center">
+                  <MapPin className="w-4 h-4 mr-1" />
+                  {quote.organisation.address}{quote.organisation.postal_code ? `, ${quote.organisation.postal_code}` : ''}{quote.organisation.city ? ` ${quote.organisation.city}` : ''}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center pb-6">
+          <p className="text-xs text-gray-400">
+            Powered by MomentumCRM · Säker offerthantering
+          </p>
         </div>
       </div>
     </div>

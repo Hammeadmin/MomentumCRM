@@ -880,6 +880,7 @@ export default function QuoteDetailPage() {
                     onClose={() => setShowSendModal(false)}
                     quote={quote}
                     onSent={() => loadQuoteData()}
+                    templates={templates}
                 />
             )}
 

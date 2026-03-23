@@ -569,6 +569,26 @@ const safeEvaluate = (formula: string, fieldValues: Record<string, number | stri
   }
 };
 
+export const saveQuoteTemplateSnapshot = async (
+  quoteId: string,
+  templateId: string,
+  templateSnapshot: any
+): Promise<{ error: Error | null }> => {
+  try {
+    const { error } = await supabase
+      .from('quotes')
+      .update({
+        template_id: templateId,
+        template_snapshot: templateSnapshot,
+      })
+      .eq('id', quoteId);
+    if (error) return { error: new Error(error.message) };
+    return { error: null };
+  } catch (err) {
+    return { error: err as Error };
+  }
+};
+
 export const createQuoteFromLead = async (
   lead: Lead & { form_data?: Record<string, any> | null },
   organisationId: string,
