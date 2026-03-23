@@ -358,6 +358,15 @@ async function fortnoxApiRequest<T>(
  * Map CRM Customer to Fortnox Customer format
  */
 function mapCustomerToFortnox(customer: Customer): FortnoxCustomer {
+    // Sanitize org number: strip dashes/spaces, only send for companies with valid values
+    let orgNumber: string | undefined = undefined;
+    if (customer.customer_type === 'company' && customer.org_number) {
+        const cleaned = customer.org_number.replace(/[\s\-]/g, '').trim();
+        if (cleaned.length > 0) {
+            orgNumber = cleaned;
+        }
+    }
+
     return {
         CustomerNumber: customer.fortnox_customer_number || undefined,
         Name: customer.name,
@@ -366,7 +375,7 @@ function mapCustomerToFortnox(customer: Customer): FortnoxCustomer {
         Address1: customer.address || undefined,
         ZipCode: customer.postal_code || undefined,
         City: customer.city || undefined,
-        OrganisationNumber: customer.org_number || undefined,
+        OrganisationNumber: orgNumber,
         Type: customer.customer_type === 'company' ? 'COMPANY' : 'PRIVATE',
         VATType: 'SEVAT', // Swedish VAT
     };
