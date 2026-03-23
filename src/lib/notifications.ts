@@ -242,7 +242,7 @@ export const generateOrderAssignmentNotification = (
   type: 'order_assignment',
   title: 'Ny order tilldelad',
   message: `Du har tilldelats ordern "${orderTitle}"`,
-  action_url: `/ordrar?highlight=${orderId}`,
+  action_url: `/app/ordrar?highlight=${orderId}`,
   metadata: {
     order_id: orderId,
     order_title: orderTitle
@@ -259,7 +259,7 @@ export const generateEventAssignmentNotification = (
   type: 'event_assignment',
   title: 'Ny händelse schemalagd',
   message: `Du har en ny händelse: "${eventTitle}"${eventDate ? ` den ${formatSwedishDate(eventDate)}` : ''}`,
-  action_url: `/kalender?highlight=${eventId}`,
+  action_url: `/app/kalender?highlight=${eventId}`,
   metadata: {
     event_id: eventId,
     event_title: eventTitle
@@ -295,7 +295,7 @@ export const generateTeamAssignmentNotification = (
   type: 'order_assignment',
   title: 'Nytt teamuppdrag',
   message: `Ditt team "${teamName}" har tilldelats ordern "${orderTitle}"`,
-  action_url: `/ordrar?highlight=${orderId}`,
+  action_url: `/app/ordrar?highlight=${orderId}`,
   exclude_user_id: excludeUserId
 });
 

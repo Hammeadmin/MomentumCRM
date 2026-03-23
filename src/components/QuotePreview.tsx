@@ -413,67 +413,99 @@ function QuotePreview({
                 onSave={(val) => onBlockUpdate?.(block.id, block.content, { ...block.settings, table_header: val })}
               />
             )}
-            <div className="">
-              <table className="min-w-full">
-                <thead className="border-b-2" style={{ borderColor: primary_color }}>
-                  <tr>
-                    {show_product_images && (
-                      <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
-                        <Label id="table_image" defaultText="Bild" />
-                      </th>
-                    )}
-                    <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
-                      <Label id="table_desc" defaultText="Beskrivning" />
-                    </th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
-                      <Label id="table_qty" defaultText="Antal" />
-                    </th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
-                      <Label id="table_unit" defaultText="Enhet" />
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
-                      <Label id="table_price" defaultText="À-pris" />
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
-                      <Label id="table_total" defaultText="Summa" />
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {lineItems.length === 0 && (
+            <div>
+              {/* Desktop table — hidden on mobile */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="border-b-2" style={{ borderColor: primary_color }}>
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-gray-500 italic bg-gray-50">
-                        Inga artiklar valda
-                      </td>
-                    </tr>
-                  )}
-                  {lineItems.map((item: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-gray-50">
                       {show_product_images && (
-                        <td className="px-4 py-4">
-                          {item.image_url ? (
-                            <img src={item.image_url} alt="Produkt" className="h-12 w-12 object-cover rounded border border-gray-200" />
-                          ) : (
-                            <div className="h-12 w-12 bg-gray-50 rounded border border-gray-200 flex items-center justify-center text-gray-400">
-                              <span className="text-xs">No img</span>
-                            </div>
-                          )}
-                        </td>
+                        <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                          <Label id="table_image" defaultText="Bild" />
+                        </th>
                       )}
-                      <td className="px-4 py-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900" style={{ fontFamily: font_family }}>{item.name || 'Produkt'}</p>
-                          {item.description && <p className="text-sm text-gray-600 mt-1" style={{ fontFamily: font_family }}>{item.description}</p>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-center text-sm text-gray-900" style={{ fontFamily: font_family }}>{item.quantity}</td>
-                      <td className="px-4 py-4 text-center text-sm text-gray-900" style={{ fontFamily: font_family }}>{UNIT_LABELS[item.unit as keyof typeof UNIT_LABELS] || item.unit}</td>
-                      <td className="px-4 py-4 text-right text-sm text-gray-900" style={{ fontFamily: font_family }}>{formatCurrency(item.unit_price)}</td>
-                      <td className="px-4 py-4 text-right text-sm font-medium text-gray-900" style={{ fontFamily: font_family }}>{formatCurrency(item.total || (item.quantity * item.unit_price))}</td>
+                      <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                        <Label id="table_desc" defaultText="Beskrivning" />
+                      </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                        <Label id="table_qty" defaultText="Antal" />
+                      </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                        <Label id="table_unit" defaultText="Enhet" />
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                        <Label id="table_price" defaultText="À-pris" />
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                        <Label id="table_total" defaultText="Summa" />
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {lineItems.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-gray-500 italic bg-gray-50">
+                          Inga artiklar valda
+                        </td>
+                      </tr>
+                    )}
+                    {lineItems.map((item: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        {show_product_images && (
+                          <td className="px-4 py-4">
+                            {item.image_url ? (
+                              <img src={item.image_url} alt="Produkt" className="h-12 w-12 object-cover rounded border border-gray-200" />
+                            ) : (
+                              <div className="h-12 w-12 bg-gray-50 rounded border border-gray-200 flex items-center justify-center text-gray-400">
+                                <span className="text-xs">No img</span>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                        <td className="px-4 py-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900" style={{ fontFamily: font_family }}>{item.name || 'Produkt'}</p>
+                            {item.description && <p className="text-sm text-gray-600 mt-1" style={{ fontFamily: font_family }}>{item.description}</p>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-center text-sm text-gray-900" style={{ fontFamily: font_family }}>{item.quantity}</td>
+                        <td className="px-4 py-4 text-center text-sm text-gray-900" style={{ fontFamily: font_family }}>{UNIT_LABELS[item.unit as keyof typeof UNIT_LABELS] || item.unit}</td>
+                        <td className="px-4 py-4 text-right text-sm text-gray-900" style={{ fontFamily: font_family }}>{formatCurrency(item.unit_price)}</td>
+                        <td className="px-4 py-4 text-right text-sm font-medium text-gray-900" style={{ fontFamily: font_family }}>{formatCurrency(item.total || (item.quantity * item.unit_price))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile card layout — shown only on mobile */}
+              <div className="sm:hidden space-y-3">
+                {lineItems.length === 0 && (
+                  <div className="py-8 text-center text-gray-500 italic bg-gray-50 rounded-lg">
+                    Inga artiklar valda
+                  </div>
+                )}
+                {lineItems.map((item: any, idx: number) => (
+                  <div key={idx} className="bg-gray-50 rounded-lg p-4 space-y-2">
+                    {show_product_images && item.image_url && (
+                      <img src={item.image_url} alt="Produkt" className="h-16 w-16 object-cover rounded border border-gray-200 mb-2" />
+                    )}
+                    <p className="font-medium text-gray-900 text-sm" style={{ fontFamily: font_family }}>
+                      {item.description}
+                    </p>
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Antal: <span className="font-medium text-gray-900">{item.quantity}</span></span>
+                      {item.unit && (
+                        <span>Enhet: <span className="font-medium text-gray-900">{item.unit}</span></span>
+                      )}
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">À-pris: <span className="font-medium text-gray-900">{formatCurrency(item.unit_price)}</span></span>
+                      <span className="font-semibold text-gray-900" style={{ color: primary_color }}>{formatCurrency(item.total)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         );
@@ -585,7 +617,7 @@ function QuotePreview({
         const companyStyles = getBlockStyles(block.settings, font_family);
         innerContent = (
           <div
-            className="pb-6 border-b-2"
+            className="pb-6 border-b-2 break-words"
             style={{
               borderColor: block.settings?.borderColor || '#e5e7eb',
               ...companyStyles
@@ -705,7 +737,7 @@ function QuotePreview({
         const totalsAlignClass = totalsAlign === 'left' ? 'mr-auto' : totalsAlign === 'center' ? 'mx-auto' : 'ml-auto';
         innerContent = (
           <div className="py-6 border-t border-gray-200" style={totalsStyles}>
-            <div className={`w-full max-w-sm ${totalsAlignClass} space-y-3`}>
+            <div className={`w-full sm:max-w-sm ${totalsAlignClass} space-y-3`}>
               {block.content?.showSubtotal !== false && (
                 <div className="flex justify-between text-sm" style={{ color: totalsStyles.color || '#4b5563' }}>
                   <span>Subtotal</span>
@@ -764,7 +796,7 @@ function QuotePreview({
         // Signature lines - applies block styles
         const sigStyles = getBlockStyles(block.settings, font_family);
         innerContent = (
-          <div className="mt-12 pt-12 border-t border-gray-200 grid grid-cols-2 gap-16" style={sigStyles}>
+          <div className="mt-12 pt-12 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 gap-8 sm:gap-16" style={sigStyles}>
             <div>
               <div className="h-12 border-b mb-2" style={{ borderColor: sigStyles.borderColor || '#d1d5db' }}></div>
               <EditableElement
@@ -832,7 +864,7 @@ function QuotePreview({
         innerContent = (
           <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-6 my-6" style={paymentStyles}>
             <h3 className="font-bold text-indigo-800 mb-4 text-lg">Betalningsinformation</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
               {block.content?.showDueDate !== false && (
                 <div>
                   <span className="text-gray-500 block">Förfallodatum</span>
@@ -1356,7 +1388,7 @@ function QuotePreview({
       )}
 
       {/* Content area with print margins */}
-      <div className="p-8 print:p-0">
+      <div className="p-3 sm:p-8 print:p-0">
 
         {/* 100% Block-Based Layout - No Hardcoded Sections */}
         {(!template?.content_structure || template.content_structure.length === 0) && isEditable && (
@@ -1371,7 +1403,7 @@ function QuotePreview({
         {(!template?.content_structure || template.content_structure.length === 0) && !isEditable && (
           <div className="space-y-6">
             {/* Header with company and document info */}
-            <div className="flex justify-between items-start pb-6 border-b-2" style={{ borderColor: primary_color }}>
+            <div className="flex flex-col sm:flex-row justify-between items-start pb-6 border-b-2 gap-4" style={{ borderColor: primary_color }}>
               <div>
                 <h2 className="text-xl font-bold" style={{ color: primary_color }}>{company.name}</h2>
                 <div className="text-sm mt-2 space-y-1 text-gray-600">
@@ -1381,7 +1413,7 @@ function QuotePreview({
                   {company.phone && <p>{company.phone}</p>}
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right">
                 <h1 className="text-3xl font-bold mb-2 uppercase tracking-wide" style={{ color: primary_color }}>
                   {templateType === 'invoice' ? 'FAKTURA' : 'OFFERT'}
                 </h1>
@@ -1407,43 +1439,70 @@ function QuotePreview({
             {/* Line items table */}
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-4" style={{ color: primary_color }}>Specifikation</h3>
-              <table className="min-w-full">
-                <thead className="border-b-2" style={{ borderColor: primary_color }}>
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color }}>Beskrivning</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color }}>Antal</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color }}>À-pris</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color }}>Summa</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {(!(quote.line_items || quote.quote_line_items) || (quote.line_items || quote.quote_line_items).length === 0) && (
+
+              {/* Desktop table — hidden on mobile */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="border-b-2" style={{ borderColor: primary_color }}>
                     <tr>
-                      <td colSpan={4} className="py-8 text-center text-gray-500 italic bg-gray-50">
-                        Inga artiklar valda
-                      </td>
+                      <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color }}>Beskrivning</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color }}>Antal</th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color }}>À-pris</th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color }}>Summa</th>
                     </tr>
-                  )}
-                  {(quote.line_items || quote.quote_line_items)?.map((item: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="px-4 py-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{item.name || item.description || 'Produkt'}</p>
-                          {item.description && item.name && <p className="text-sm text-gray-600 mt-1">{item.description}</p>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-center text-sm text-gray-900">{item.quantity}</td>
-                      <td className="px-4 py-4 text-right text-sm text-gray-900">{formatCurrency(item.unit_price)}</td>
-                      <td className="px-4 py-4 text-right text-sm font-medium text-gray-900">{formatCurrency(item.total || (item.quantity * item.unit_price))}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {(!(quote.line_items || quote.quote_line_items) || (quote.line_items || quote.quote_line_items).length === 0) && (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-gray-500 italic bg-gray-50">
+                          Inga artiklar valda
+                        </td>
+                      </tr>
+                    )}
+                    {(quote.line_items || quote.quote_line_items)?.map((item: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-4 py-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{item.name || item.description || 'Produkt'}</p>
+                            {item.description && item.name && <p className="text-sm text-gray-600 mt-1">{item.description}</p>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-center text-sm text-gray-900">{item.quantity}</td>
+                        <td className="px-4 py-4 text-right text-sm text-gray-900">{formatCurrency(item.unit_price)}</td>
+                        <td className="px-4 py-4 text-right text-sm font-medium text-gray-900">{formatCurrency(item.total || (item.quantity * item.unit_price))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile card layout — shown only on mobile */}
+              <div className="sm:hidden space-y-3">
+                {(!(quote.line_items || quote.quote_line_items) || (quote.line_items || quote.quote_line_items).length === 0) && (
+                  <div className="py-8 text-center text-gray-500 italic bg-gray-50 rounded-lg">
+                    Inga artiklar valda
+                  </div>
+                )}
+                {(quote.line_items || quote.quote_line_items)?.map((item: any, idx: number) => (
+                  <div key={idx} className="bg-gray-50 rounded-lg p-4 space-y-2">
+                    <p className="font-medium text-gray-900 text-sm" style={{ fontFamily: font_family }}>
+                      {item.name || item.description || 'Produkt'}
+                    </p>
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Antal: <span className="font-medium text-gray-900">{item.quantity}</span></span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">À-pris: <span className="font-medium text-gray-900">{formatCurrency(item.unit_price)}</span></span>
+                      <span className="font-semibold text-gray-900" style={{ color: primary_color }}>{formatCurrency(item.total || (item.quantity * item.unit_price))}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Totals */}
             <div className="py-6 border-t border-gray-200">
-              <div className="w-full max-w-sm ml-auto space-y-3">
+              <div className="w-full sm:max-w-sm ml-auto space-y-3">
                 <div className="flex justify-between text-sm text-gray-600">
                   <span>Subtotal</span>
                   <span>{formatCurrency(subtotal)}</span>

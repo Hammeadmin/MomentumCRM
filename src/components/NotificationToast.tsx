@@ -16,12 +16,12 @@ function NotificationToast({ notification, onDismiss, onMarkAsRead }: Notificati
   useEffect(() => {
     // Animate in
     const timer = setTimeout(() => setIsVisible(true), 100);
-    
+
     // Auto dismiss after 8 seconds
     const dismissTimer = setTimeout(() => {
       handleDismiss();
     }, 8000);
-    
+
     return () => {
       clearTimeout(timer);
       clearTimeout(dismissTimer);
@@ -35,11 +35,17 @@ function NotificationToast({ notification, onDismiss, onMarkAsRead }: Notificati
 
   const handleClick = () => {
     onMarkAsRead();
-    
+
     if (notification.action_url) {
-      navigate(notification.action_url);
+      // --- FIX: Ensure the URL always routes inside the protected app boundary ---
+      let targetUrl = notification.action_url;
+      if (targetUrl.startsWith('/') && !targetUrl.startsWith('/app/')) {
+        targetUrl = `/app${targetUrl}`;
+      }
+
+      navigate(targetUrl);
     }
-    
+
     handleDismiss();
   };
 

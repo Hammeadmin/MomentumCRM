@@ -42,7 +42,13 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
 
     // Navigate to action URL if available
     if (notification.action_url) {
-      navigate(notification.action_url);
+      // --- FIX: Ensure the URL always routes inside the protected app boundary ---
+      let targetUrl = notification.action_url;
+      if (targetUrl.startsWith('/') && !targetUrl.startsWith('/app/')) {
+        targetUrl = `/app${targetUrl}`;
+      }
+
+      navigate(targetUrl);
       onClose();
     }
   };
@@ -146,8 +152,8 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
                 key={filterOption.key}
                 onClick={() => setFilter(filterOption.key as any)}
                 className={`px-3 py-1 text-xs font-medium rounded-full transition-colors duration-200 ${filter === filterOption.key
-                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
               >
                 {filterOption.label}
@@ -201,8 +207,8 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
                 <div
                   key={notification.id}
                   className={`group relative p-4 rounded-xl border transition-all duration-200 hover:shadow-md cursor-pointer ${notification.is_read
-                      ? 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600'
-                      : 'bg-white dark:bg-gray-700 border-primary-200 dark:border-primary-700 shadow-sm'
+                    ? 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600'
+                    : 'bg-white dark:bg-gray-700 border-primary-200 dark:border-primary-700 shadow-sm'
                     }`}
                   onClick={() => handleNotificationClick(notification)}
                 >
