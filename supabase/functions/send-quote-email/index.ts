@@ -158,7 +158,7 @@ Deno.serve(async (req: Request) => {
       const siteUrl = Deno.env.get('SITE_URL')
         || Deno.env.get('PUBLIC_SITE_URL')
         || req.headers.get('origin')
-        || 'https://crm.momentumcrm.com';
+        || 'https://momentumcrm.se';
       const cleanSiteUrl = siteUrl.replace(/\/$/, '');
       acceptanceUrl = `${cleanSiteUrl}/quote-accept/${token}`;
       console.log(`Generated acceptance URL: ${acceptanceUrl}`);
@@ -231,7 +231,7 @@ Deno.serve(async (req: Request) => {
         },
       });
 
-      fromAddress = `"${senderName}" <system@momentumcrm.com>`;
+      fromAddress = `"${senderName}" <offert@momentumcrm.se>`;
     }
 
     // Build email options
@@ -299,7 +299,9 @@ function generateQuoteEmailContent(quote: any, bodyText: string, acceptanceUrl?:
   const customerName = quote.customer?.name || 'Kund';
   const quoteAmount = formatCurrency(quote.total_amount);
   const rotAmount = quote.include_rot ? calculateRotDeduction(quote.total_amount) : 0;
-  const netAmount = quote.total_amount - rotAmount;
+  const rutAmount = quote.include_rut ? calculateRutDeduction(quote.total_amount) : 0;
+  const deductionAmount = rotAmount + rutAmount;
+  const netAmount = quote.total_amount - deductionAmount;
   const validUntil = quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('sv-SE') : null;
   const createdDate = new Date(quote.created_at).toLocaleDateString('sv-SE');
 
@@ -399,6 +401,16 @@ function generateQuoteEmailContent(quote: any, bodyText: string, acceptanceUrl?:
                 <td style="padding: 12px 0 0 0; text-align: right; font-size: 22px; font-weight: 700; color: white;">${formatCurrency(netAmount)}</td>
               </tr>
               ` : ''}
+              ${quote.include_rut && rutAmount > 0 ? `
+              <tr>
+                <td style="padding: 8px 0; font-size: 14px; color: rgba(255,255,255,0.85);">RUT-avdrag (beräknat)</td>
+                <td style="padding: 8px 0; text-align: right; font-size: 16px; color: white;">-${formatCurrency(rutAmount)}</td>
+              </tr>
+              <tr style="border-top: 1px solid rgba(255,255,255,0.3);">
+                <td style="padding: 12px 0 0 0; font-size: 15px; font-weight: 600; color: white;">Att betala efter RUT</td>
+                <td style="padding: 12px 0 0 0; text-align: right; font-size: 22px; font-weight: 700; color: white;">${formatCurrency(netAmount)}</td>
+              </tr>
+              ` : ''}
             </table>
           </div>
           
@@ -408,6 +420,15 @@ function generateQuoteEmailContent(quote: any, bodyText: string, acceptanceUrl?:
             <p style="margin: 0; color: #065f46; font-size: 14px;">
               <strong>🏠 ROT-avdrag kan nyttjas!</strong><br>
               Du anger ditt personnummer när du godkänner offerten online. ROT-avdraget hanteras automatiskt.
+            </p>
+          </div>
+          ` : ''}
+          ${quote.include_rut ? `
+          <!-- RUT Info -->
+          <div style="background: #f3e8ff; border: 1px solid #d8b4fe; border-radius: 12px; padding: 20px; margin: 25px 0;">
+            <p style="margin: 0; color: #581c87; font-size: 14px;">
+              <strong>✨ RUT-avdrag kan nyttjas!</strong><br>
+              Du anger ditt personnummer när du godkänner offerten online. RUT-avdraget hanteras automatiskt.
             </p>
           </div>
           ` : ''}
@@ -479,6 +500,8 @@ BELOPP
 Totalt: ${quoteAmount}
 ${quote.include_rot && rotAmount > 0 ? `ROT-avdrag: -${formatCurrency(rotAmount)}
 Att betala: ${formatCurrency(netAmount)}` : ''}
+${quote.include_rut && rutAmount > 0 ? `RUT-avdrag: -${formatCurrency(rutAmount)}
+Att betala: ${formatCurrency(netAmount)}` : ''}
 
 ${acceptanceUrl ? `
 GODKÄNN OFFERTEN
@@ -504,6 +527,13 @@ function calculateRotDeduction(totalAmount: number): number {
   const rotPercentage = 0.30;
   const maxRot = 50000;
   return Math.min(totalAmount * rotPercentage, maxRot);
+}
+
+// Calculate RUT deduction (50% of labor, max 75k per person)
+function calculateRutDeduction(totalAmount: number): number {
+  const rutPercentage = 0.50;
+  const maxRut = 75000;
+  return Math.min(totalAmount * rutPercentage, maxRut);
 }
 
 function formatCurrency(amount: number): string {

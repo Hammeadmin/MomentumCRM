@@ -395,7 +395,7 @@ function QuotePreview({
         break;
 
       case 'line_items_table':
-        const lineItems = quote.line_items || block.content || [];
+        const lineItems = quote.line_items || quote.quote_line_items || block.content || [];
         // Table is complex update, maybe just header for now in inline?
         // Actually, user likely wants to edit column headers?
         // keeping it simple for "content" loop, but allowing header edit
@@ -1417,14 +1417,14 @@ function QuotePreview({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {(!quote.line_items || quote.line_items.length === 0) && (
+                  {(!(quote.line_items || quote.quote_line_items) || (quote.line_items || quote.quote_line_items).length === 0) && (
                     <tr>
                       <td colSpan={4} className="py-8 text-center text-gray-500 italic bg-gray-50">
                         Inga artiklar valda
                       </td>
                     </tr>
                   )}
-                  {quote.line_items?.map((item: any, idx: number) => (
+                  {(quote.line_items || quote.quote_line_items)?.map((item: any, idx: number) => (
                     <tr key={idx} className="hover:bg-gray-50">
                       <td className="px-4 py-4">
                         <div>
