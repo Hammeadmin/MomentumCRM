@@ -170,9 +170,13 @@ async function syncCustomers(
                                     Address1: customer.address || undefined,
                                     ZipCode: customer.postal_code || undefined,
                                     City: customer.city || undefined,
-                                    OrganisationNumber: customer.org_number || undefined,
                                     Type: customer.customer_type === 'company' ? 'COMPANY' : 'PRIVATE',
                                     VATType: 'SEVAT',
+                                    // Only send OrganisationNumber & VATNumber for company customers
+                                    ...(customer.customer_type === 'company' && customer.org_number ? {
+                                        OrganisationNumber: customer.org_number.replace(/[\s\-]/g, ''),
+                                        VATNumber: `SE${customer.org_number.replace(/[\s\-]/g, '')}01`,
+                                    } : {}),
                                 }
                             }
                         }
@@ -232,7 +236,12 @@ async function syncInvoices(
             .from('invoices')
             .select(`
                 *,
-                customer:customers(*),
+                customer:customers(
+                    id, name, email, phone_number, address, postal_code, city,
+                    org_number, customer_type, vat_handling, fortnox_customer_number,
+                    rot_personnummer, rot_fastighetsbeteckning, rot_organisationsnummer,
+                    rut_personnummer
+                ),
                 line_items:invoice_line_items(*)
             `)
             .eq('organisation_id', organisationId);
@@ -301,6 +310,28 @@ async function syncInvoices(
                     // Prepare invoice rows
                     const lineItems = invoice.line_items || [];
                     const vatRate = invoice.customer?.vat_handling === 'omvänd byggmoms' ? 0 : 25;
+                    // ROT/RUT invoices still use 25% VAT — the deduction is handled by Fortnox separately
+
+                    // Determine ROT/RUT type
+                    // invoice.include_rot / invoice.include_rut are the authoritative flags
+                    const isROT = invoice.include_rot === true;
+                    const isRUT = !isROT && invoice.include_rut === true;
+                    const houseWorkType = isROT ? 'ROT' : isRUT ? 'RUT' : null;
+
+                    // Personnummer: use invoice-level data first, fall back to customer-level
+                    const personnummer = isROT
+                        ? (invoice.rot_personnummer || invoice.customer?.rot_personnummer || null)
+                        : isRUT
+                            ? (invoice.rut_personnummer || invoice.customer?.rut_personnummer || null)
+                            : null;
+
+                    // Fastighetsbeteckning: only relevant for ROT
+                    const fastighetsbeteckning = isROT
+                        ? (invoice.rot_fastighetsbeteckning || invoice.customer?.rot_fastighetsbeteckning || null)
+                        : null;
+
+                    // Fortnox accepts personnummer as-is, e.g. "19801215-1234"
+                    const fortnoxPersonnummer = personnummer || undefined;
 
                     const invoiceRows = lineItems.map((item: any) => ({
                         Description: item.description,
@@ -308,6 +339,11 @@ async function syncInvoices(
                         Price: item.unit_price,
                         VAT: vatRate,
                         Unit: item.unit || 'st',
+                        // HouseWork must be on every row for Fortnox to apply the deduction
+                        ...(houseWorkType ? {
+                            HouseWork: true,
+                            HouseWorkType: houseWorkType,
+                        } : {}),
                     }));
 
                     // Format dates
@@ -331,6 +367,21 @@ async function syncInvoices(
                                     YourReference: invoice.customer?.name,
                                     Remarks: invoice.work_summary || undefined,
                                     InvoiceRows: invoiceRows,
+                                    // ROT/RUT header fields — only added when applicable
+                                    ...(houseWorkType ? {
+                                        HouseWork: true,
+                                        HouseWorkType: houseWorkType,
+                                    } : {}),
+                                    ...(fortnoxPersonnummer ? {
+                                        PersonalIdentityNumberOther: fortnoxPersonnummer,
+                                    } : {}),
+                                    ...(fastighetsbeteckning ? {
+                                        HouseWorkPropertyDesignation: fastighetsbeteckning,
+                                    } : {}),
+                                    // ROT organisation number for company ROT claims
+                                    ...(isROT && invoice.rot_organisationsnummer ? {
+                                        HouseWorkOrganisationNumber: invoice.rot_organisationsnummer,
+                                    } : {}),
                                 }
                             }
                         }

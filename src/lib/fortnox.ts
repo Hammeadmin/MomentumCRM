@@ -48,6 +48,7 @@ interface FortnoxCustomer {
     ZipCode?: string;
     City?: string;
     OrganisationNumber?: string;
+    VATNumber?: string;
     Type?: 'COMPANY' | 'PRIVATE';
     VATType?: 'SEVAT' | 'EUVAT' | 'EXPORT';
 }
@@ -376,6 +377,7 @@ function mapCustomerToFortnox(customer: Customer): FortnoxCustomer {
         ZipCode: customer.postal_code || undefined,
         City: customer.city || undefined,
         OrganisationNumber: orgNumber,
+        VATNumber: orgNumber ? `SE${orgNumber}01` : undefined,
         Type: customer.customer_type === 'company' ? 'COMPANY' : 'PRIVATE',
         VATType: 'SEVAT', // Swedish VAT
     };
