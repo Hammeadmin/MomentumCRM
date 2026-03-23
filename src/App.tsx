@@ -28,9 +28,9 @@ import VerifyEmailPage from './pages/public/VerifyEmailPage';
 function App() {
   return (
     <AuthProvider>
-      <NotificationProvider>
-        <OfflineIndicator />
-        <Router>
+      <OfflineIndicator />
+      <Router>
+        <NotificationProvider>
           <GlobalActionProvider>
             {/* Real-time subscriptions for collaborative updates */}
             <RealtimeManager />
@@ -89,8 +89,8 @@ function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </GlobalActionProvider>
-        </Router>
-      </NotificationProvider>
+        </NotificationProvider>
+      </Router>
     </AuthProvider>
   );
 }
