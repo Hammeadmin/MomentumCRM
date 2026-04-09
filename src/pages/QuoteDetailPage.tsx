@@ -24,7 +24,6 @@ import {
     CheckCircle,
     AlertCircle,
     Send,
-    Download,
     XCircle,
     Package,
     Loader2,
@@ -296,10 +295,7 @@ export default function QuoteDetailPage() {
                         Radera
                     </Button>
                     <Button variant="outline" size="sm" icon={<Printer className="w-4 h-4" />} onClick={() => handlePrintPreview()}>
-                        Skriv ut
-                    </Button>
-                    <Button variant="outline" size="sm" icon={<Download className="w-4 h-4" />} onClick={() => handlePrintPreview()}>
-                        PDF
+                        Skriv ut / PDF
                     </Button>
                     <Button
                         variant="outline"
@@ -387,9 +383,10 @@ export default function QuoteDetailPage() {
                 <div className="space-y-6">
                     {/* Customer Card */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Kund</h3>
+                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Kundinformation</h3>
                         {quote.customer ? (
-                            <div className="space-y-3">
+                            <div className="space-y-4">
+                                {/* Name + type avatar row */}
                                 <div className="flex items-start gap-3">
                                     <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
                                         <span className="text-white font-semibold text-sm">
@@ -398,81 +395,81 @@ export default function QuoteDetailPage() {
                                     </div>
                                     <div>
                                         <p className="font-semibold text-gray-900">{quote.customer.name}</p>
-                                        <p className="text-sm text-gray-500">{quote.customer.customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
+                                        <span className="inline-flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+                                            {quote.customer.customer_type === 'company'
+                                                ? <><Building2 className="w-3 h-3" /> Företag</>
+                                                : <><User className="w-3 h-3" /> Privatperson</>}
+                                        </span>
                                     </div>
                                 </div>
 
+                                {/* Contact details */}
                                 <div className="space-y-2 pt-3 border-t border-gray-100">
                                     {quote.customer.email && (
-                                        <a href={`mailto:${quote.customer.email}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600">
-                                            <Mail className="w-4 h-4" />
-                                            {quote.customer.email}
+                                        <a href={`mailto:${quote.customer.email}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600 transition-colors">
+                                            <Mail className="w-4 h-4 flex-shrink-0 text-gray-400" />
+                                            <span className="truncate">{quote.customer.email}</span>
                                         </a>
                                     )}
                                     {quote.customer.phone_number && (
-                                        <a href={`tel:${quote.customer.phone_number}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600">
-                                            <Phone className="w-4 h-4" />
+                                        <a href={`tel:${quote.customer.phone_number}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600 transition-colors">
+                                            <Phone className="w-4 h-4 flex-shrink-0 text-gray-400" />
                                             {quote.customer.phone_number}
                                         </a>
                                     )}
-                                    {quote.customer.address && (
+                                    {(quote.customer.address || quote.customer.postal_code || quote.customer.city) && (
                                         <div className="flex items-start gap-2 text-sm text-gray-600">
-                                            <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                            <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" />
                                             <span>
-                                                {quote.customer.address}
-                                                {quote.customer.postal_code && `, ${quote.customer.postal_code}`}
-                                                {quote.customer.city && ` ${quote.customer.city}`}
+                                                {quote.customer.address && <span>{quote.customer.address}<br /></span>}
+                                                {quote.customer.postal_code && `${quote.customer.postal_code} `}
+                                                {quote.customer.city}
                                             </span>
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Business details */}
+                                {(quote.customer.org_number || quote.customer.vat_handling || quote.customer.e_invoice_address) && (
+                                    <div className="space-y-2 pt-3 border-t border-gray-100">
+                                        {quote.customer.org_number && (
+                                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                <Building2 className="w-4 h-4 flex-shrink-0 text-gray-400" />
+                                                <span className="text-gray-500">Org.nr:</span>
+                                                <span className="font-medium">{quote.customer.org_number}</span>
+                                            </div>
+                                        )}
+                                        {quote.customer.vat_handling && (
+                                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                <FileText className="w-4 h-4 flex-shrink-0 text-gray-400" />
+                                                <span className="text-gray-500">Moms:</span>
+                                                <span className="font-medium">{quote.customer.vat_handling}</span>
+                                            </div>
+                                        )}
+                                        {quote.customer.e_invoice_address && (
+                                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                <MessageSquare className="w-4 h-4 flex-shrink-0 text-gray-400" />
+                                                <span className="text-gray-500">E-faktura:</span>
+                                                <span className="font-medium">{quote.customer.e_invoice_address}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* ROT personnummer if private customer */}
+                                {quote.customer.rot_personnummer && (
+                                    <div className="space-y-2 pt-3 border-t border-gray-100">
+                                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                                            <User className="w-4 h-4 flex-shrink-0 text-gray-400" />
+                                            <span className="text-gray-500">Personnummer:</span>
+                                            <span className="font-medium">{quote.customer.rot_personnummer}</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <p className="text-gray-500 text-sm">Ingen kund kopplad</p>
                         )}
-                    </div>
-
-                    {/* Quote Summary */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Sammanfattning</h3>
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-600">Delsumma</span>
-                                <span className="font-medium">{formatCurrency(quote.subtotal || 0)}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-600">Moms</span>
-                                <span className="font-medium">{formatCurrency(quote.vat_amount || 0)}</span>
-                            </div>
-                            <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
-                                <span className="font-semibold text-gray-900">Totalt</span>
-                                <span className="text-xl font-bold text-gray-900">{formatCurrency(quote.total_amount)}</span>
-                            </div>
-                            {quote.include_rot && (
-                                <div className="bg-green-50 rounded-lg p-3 mt-3">
-                                    <div className="flex justify-between items-center text-green-700">
-                                        <span className="text-sm font-medium">ROT-avdrag</span>
-                                        <span className="font-semibold">-{formatCurrency(quote.rot_amount || 0)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center mt-1 text-green-800">
-                                        <span className="text-sm">Att betala</span>
-                                        <span className="font-bold">{formatCurrency((quote.total_amount || 0) - (quote.rot_amount || 0))}</span>
-                                    </div>
-                                </div>
-                            )}
-                            {(quote as any).include_rut && (
-                                <div className="bg-purple-50 rounded-lg p-3 mt-3">
-                                    <div className="flex justify-between items-center text-purple-700">
-                                        <span className="text-sm font-medium">RUT-avdrag</span>
-                                        <span className="font-semibold">-{formatCurrency((quote as any).rut_amount || 0)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center mt-1 text-purple-800">
-                                        <span className="text-sm">Att betala</span>
-                                        <span className="font-bold">{formatCurrency((quote.total_amount || 0) - ((quote as any).rut_amount || 0))}</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
                     </div>
 
                     {/* Validity & Origin */}
@@ -592,7 +589,7 @@ export default function QuoteDetailPage() {
                                     }`}
                             >
                                 <Package className="w-4 h-4" />
-                                Rader ({quote.line_items?.length || 0})
+                                Sammanfattning
                             </button>
                             <button
                                 onClick={() => setActiveTab('preview')}
@@ -627,9 +624,10 @@ export default function QuoteDetailPage() {
                         </div>
 
                         <div className="p-5">
-                            {/* Items Tab */}
+                            {/* Items / Sammanfattning Tab */}
                             {activeTab === 'items' && (
-                                <div>
+                                <div className="space-y-6">
+                                    {/* Line Items Table */}
                                     {quote.line_items && quote.line_items.length > 0 ? (
                                         <table className="w-full">
                                             <thead>
@@ -662,6 +660,46 @@ export default function QuoteDetailPage() {
                                             <p className="text-gray-500">Inga rader tillagda</p>
                                         </div>
                                     )}
+
+                                    {/* Financial Summary */}
+                                    <div className="border-t border-gray-200 pt-4 max-w-xs ml-auto space-y-2">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-gray-600">Delsumma</span>
+                                            <span className="font-medium">{formatCurrency(quote.subtotal || 0)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-gray-600">Moms</span>
+                                            <span className="font-medium">{formatCurrency(quote.vat_amount || 0)}</span>
+                                        </div>
+                                        <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
+                                            <span className="font-semibold text-gray-900">Totalt</span>
+                                            <span className="text-xl font-bold text-gray-900">{formatCurrency(quote.total_amount)}</span>
+                                        </div>
+                                        {quote.include_rot && (
+                                            <div className="bg-green-50 rounded-lg p-3 mt-2">
+                                                <div className="flex justify-between items-center text-green-700">
+                                                    <span className="text-sm font-medium">ROT-avdrag</span>
+                                                    <span className="font-semibold">-{formatCurrency(quote.rot_amount || 0)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center mt-1 text-green-800">
+                                                    <span className="text-sm">Att betala</span>
+                                                    <span className="font-bold">{formatCurrency((quote.total_amount || 0) - (quote.rot_amount || 0))}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {(quote as any).include_rut && (
+                                            <div className="bg-purple-50 rounded-lg p-3 mt-2">
+                                                <div className="flex justify-between items-center text-purple-700">
+                                                    <span className="text-sm font-medium">RUT-avdrag</span>
+                                                    <span className="font-semibold">-{formatCurrency((quote as any).rut_amount || 0)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center mt-1 text-purple-800">
+                                                    <span className="text-sm">Att betala</span>
+                                                    <span className="font-bold">{formatCurrency((quote.total_amount || 0) - ((quote as any).rut_amount || 0))}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 

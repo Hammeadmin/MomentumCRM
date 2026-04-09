@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { CalendarEvent, UserProfile, Lead, Job } from '../types/database';
+import type { CalendarEvent, UserProfile, Lead, Job, CalendarEventNote } from '../types/database';
 import type { TeamWithRelations } from './teams';
 import { createNotification, createTeamNotification, generateEventAssignmentNotification } from './notifications';
 
@@ -855,5 +855,64 @@ export const getVirtualCalendarEvents = async (
   } catch (error) {
     console.error('Error fetching virtual calendar events:', error);
     return { data: [], error: error as Error };
+  }
+};
+
+// ============================================================================
+// Calendar Event Notes
+// ============================================================================
+
+export const getEventNotes = async (
+  eventId: string
+): Promise<{ data: CalendarEventNote[] | null; error: Error | null }> => {
+  try {
+    const { data, error } = await supabase
+      .from('calendar_event_notes')
+      .select('id, event_id, user_id, content, created_at, user:user_profiles(id, full_name, avatar_url)')
+      .eq('event_id', eventId)
+      .order('created_at', { ascending: true });
+
+    if (error) return { data: null, error: new Error(error.message) };
+    return { data: (data as CalendarEventNote[]) || [], error: null };
+  } catch (err) {
+    console.error('Error fetching event notes:', err);
+    return { data: null, error: err as Error };
+  }
+};
+
+export const createEventNote = async (
+  eventId: string,
+  userId: string,
+  content: string
+): Promise<{ data: CalendarEventNote | null; error: Error | null }> => {
+  try {
+    const { data, error } = await supabase
+      .from('calendar_event_notes')
+      .insert([{ event_id: eventId, user_id: userId, content }])
+      .select('id, event_id, user_id, content, created_at, user:user_profiles(id, full_name, avatar_url)')
+      .single();
+
+    if (error) return { data: null, error: new Error(error.message) };
+    return { data: data as CalendarEventNote, error: null };
+  } catch (err) {
+    console.error('Error creating event note:', err);
+    return { data: null, error: err as Error };
+  }
+};
+
+export const deleteEventNote = async (
+  noteId: string
+): Promise<{ error: Error | null }> => {
+  try {
+    const { error } = await supabase
+      .from('calendar_event_notes')
+      .delete()
+      .eq('id', noteId);
+
+    if (error) return { error: new Error(error.message) };
+    return { error: null };
+  } catch (err) {
+    console.error('Error deleting event note:', err);
+    return { error: err as Error };
   }
 };

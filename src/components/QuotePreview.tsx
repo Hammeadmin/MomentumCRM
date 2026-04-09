@@ -31,6 +31,9 @@ const getBlockStyles = (settings?: BlockStyleSettings, fontFamily?: string): Rea
     fontWeight: settings.fontWeight ? fontWeightMap[settings.fontWeight] : undefined,
     color: settings.fontColor,
     textAlign: settings.textAlign,
+    lineHeight: settings.lineHeight,
+    letterSpacing: settings.letterSpacing ? `${settings.letterSpacing}px` : undefined,
+    maxWidth: settings.maxWidth ? `${settings.maxWidth}px` : undefined,
     paddingTop: settings.paddingTop ? `${settings.paddingTop}px` : undefined,
     paddingBottom: settings.paddingBottom ? `${settings.paddingBottom}px` : undefined,
     paddingLeft: settings.paddingLeft ? `${settings.paddingLeft}px` : undefined,
@@ -231,7 +234,8 @@ function QuotePreview({
   const vatAmount = quote.vat_amount || 0;
   const total = quote.total_amount || 0;
   const rotAmount = quote.rot_amount || 0;
-  const finalAmount = total - rotAmount;
+  const rutAmount = (quote as any).rut_amount || 0;
+  const finalAmount = total - rotAmount - rutAmount;
 
   const defaultCompany = {
     name: 'Företagsnamn',
@@ -396,18 +400,19 @@ function QuotePreview({
 
       case 'line_items_table':
         const lineItems = quote.line_items || quote.quote_line_items || block.content || [];
+        const lineItemStyles = getBlockStyles(block.settings, font_family);
         // Table is complex update, maybe just header for now in inline?
         // Actually, user likely wants to edit column headers?
         // keeping it simple for "content" loop, but allowing header edit
         const tableHeader = block.settings?.table_header !== undefined ? block.settings.table_header : (templateType === 'invoice' ? 'Fakturaspecifikation' : 'Offertspecifikation');
 
         innerContent = (
-          <div className="mb-6">
+          <div className="mb-6" style={lineItemStyles}>
             {tableHeader && (
               <EditableElement
                 tagName="h3"
                 className="text-lg font-semibold text-gray-800 mb-4"
-                style={{ color: primary_color, fontFamily: font_family }}
+                style={{ color: lineItemStyles.color || primary_color, fontFamily: font_family, fontSize: lineItemStyles.fontSize }}
                 initialContent={tableHeader}
                 isEditable={isEditable}
                 onSave={(val) => onBlockUpdate?.(block.id, block.content, { ...block.settings, table_header: val })}
@@ -417,26 +422,26 @@ function QuotePreview({
               {/* Desktop table — hidden on mobile */}
               <div className="hidden sm:block overflow-x-auto">
                 <table className="min-w-full">
-                  <thead className="border-b-2" style={{ borderColor: primary_color }}>
+                  <thead className="border-b-2" style={{ borderColor: lineItemStyles.color || primary_color }}>
                     <tr>
                       {show_product_images && (
-                        <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                        <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider" style={{ color: lineItemStyles.color || primary_color, fontFamily: font_family, fontSize: lineItemStyles.fontSize, fontWeight: lineItemStyles.fontWeight as any }}>
                           <Label id="table_image" defaultText="Bild" />
                         </th>
                       )}
-                      <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider" style={{ color: lineItemStyles.color || primary_color, fontFamily: font_family, fontSize: lineItemStyles.fontSize, fontWeight: lineItemStyles.fontWeight as any }}>
                         <Label id="table_desc" defaultText="Beskrivning" />
                       </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                      <th className="px-4 py-3 text-center font-semibold uppercase tracking-wider" style={{ color: lineItemStyles.color || primary_color, fontFamily: font_family, fontSize: lineItemStyles.fontSize, fontWeight: lineItemStyles.fontWeight as any }}>
                         <Label id="table_qty" defaultText="Antal" />
                       </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                      <th className="px-4 py-3 text-center font-semibold uppercase tracking-wider" style={{ color: lineItemStyles.color || primary_color, fontFamily: font_family, fontSize: lineItemStyles.fontSize, fontWeight: lineItemStyles.fontWeight as any }}>
                         <Label id="table_unit" defaultText="Enhet" />
                       </th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                      <th className="px-4 py-3 text-right font-semibold uppercase tracking-wider" style={{ color: lineItemStyles.color || primary_color, fontFamily: font_family, fontSize: lineItemStyles.fontSize, fontWeight: lineItemStyles.fontWeight as any }}>
                         <Label id="table_price" defaultText="À-pris" />
                       </th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider" style={{ color: primary_color, fontFamily: font_family }}>
+                      <th className="px-4 py-3 text-right font-semibold uppercase tracking-wider" style={{ color: lineItemStyles.color || primary_color, fontFamily: font_family, fontSize: lineItemStyles.fontSize, fontWeight: lineItemStyles.fontWeight as any }}>
                         <Label id="table_total" defaultText="Summa" />
                       </th>
                     </tr>
@@ -464,14 +469,14 @@ function QuotePreview({
                         )}
                         <td className="px-4 py-4">
                           <div>
-                            <p className="text-sm font-medium text-gray-900" style={{ fontFamily: font_family }}>{item.name || 'Produkt'}</p>
-                            {item.description && <p className="text-sm text-gray-600 mt-1" style={{ fontFamily: font_family }}>{item.description}</p>}
+                            <p className="font-medium" style={{ fontFamily: font_family, fontSize: lineItemStyles.fontSize, color: lineItemStyles.color || '#111827', fontWeight: lineItemStyles.fontWeight as any }}>{item.name || 'Produkt'}</p>
+                            {item.description && <p className="mt-1" style={{ fontFamily: font_family, fontSize: lineItemStyles.fontSize, color: lineItemStyles.color || '#4b5563' }}>{item.description}</p>}
                           </div>
                         </td>
-                        <td className="px-4 py-4 text-center text-sm text-gray-900" style={{ fontFamily: font_family }}>{item.quantity}</td>
-                        <td className="px-4 py-4 text-center text-sm text-gray-900" style={{ fontFamily: font_family }}>{UNIT_LABELS[item.unit as keyof typeof UNIT_LABELS] || item.unit}</td>
-                        <td className="px-4 py-4 text-right text-sm text-gray-900" style={{ fontFamily: font_family }}>{formatCurrency(item.unit_price)}</td>
-                        <td className="px-4 py-4 text-right text-sm font-medium text-gray-900" style={{ fontFamily: font_family }}>{formatCurrency(item.total || (item.quantity * item.unit_price))}</td>
+                        <td className="px-4 py-4 text-center" style={{ fontFamily: font_family, fontSize: lineItemStyles.fontSize, color: lineItemStyles.color || '#111827', fontWeight: lineItemStyles.fontWeight as any }}>{item.quantity}</td>
+                        <td className="px-4 py-4 text-center" style={{ fontFamily: font_family, fontSize: lineItemStyles.fontSize, color: lineItemStyles.color || '#111827', fontWeight: lineItemStyles.fontWeight as any }}>{UNIT_LABELS[item.unit as keyof typeof UNIT_LABELS] || item.unit}</td>
+                        <td className="px-4 py-4 text-right" style={{ fontFamily: font_family, fontSize: lineItemStyles.fontSize, color: lineItemStyles.color || '#111827', fontWeight: lineItemStyles.fontWeight as any }}>{formatCurrency(item.unit_price)}</td>
+                        <td className="px-4 py-4 text-right font-medium" style={{ fontFamily: font_family, fontSize: lineItemStyles.fontSize, color: lineItemStyles.color || '#111827', fontWeight: lineItemStyles.fontWeight as any }}>{formatCurrency(item.total || (item.quantity * item.unit_price))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -490,18 +495,18 @@ function QuotePreview({
                     {show_product_images && item.image_url && (
                       <img src={item.image_url} alt="Produkt" className="h-16 w-16 object-cover rounded border border-gray-200 mb-2" />
                     )}
-                    <p className="font-medium text-gray-900 text-sm" style={{ fontFamily: font_family }}>
+                    <p className="font-medium" style={{ fontFamily: font_family, fontSize: lineItemStyles.fontSize, color: lineItemStyles.color || '#111827' }}>
                       {item.description}
                     </p>
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <span>Antal: <span className="font-medium text-gray-900">{item.quantity}</span></span>
+                    <div className="flex justify-between" style={{ fontSize: lineItemStyles.fontSize, color: lineItemStyles.color || '#4b5563' }}>
+                      <span>Antal: <span className="font-medium">{item.quantity}</span></span>
                       {item.unit && (
-                        <span>Enhet: <span className="font-medium text-gray-900">{item.unit}</span></span>
+                        <span>Enhet: <span className="font-medium">{item.unit}</span></span>
                       )}
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">À-pris: <span className="font-medium text-gray-900">{formatCurrency(item.unit_price)}</span></span>
-                      <span className="font-semibold text-gray-900" style={{ color: primary_color }}>{formatCurrency(item.total)}</span>
+                    <div className="flex justify-between" style={{ fontSize: lineItemStyles.fontSize, color: lineItemStyles.color || '#4b5563' }}>
+                      <span>À-pris: <span className="font-medium">{formatCurrency(item.unit_price)}</span></span>
+                      <span className="font-semibold" style={{ color: lineItemStyles.color || primary_color }}>{formatCurrency(item.total)}</span>
                     </div>
                   </div>
                 ))}
@@ -512,12 +517,28 @@ function QuotePreview({
         break;
 
       case 'footer':
+        const footStyles = getBlockStyles(block.settings, font_family);
         innerContent = (
-          <div className="mt-8 pt-6 border-t border-gray-200">
+          <div
+            className="mt-8 pt-6 border-t border-gray-200"
+            style={{
+              textAlign: footStyles.textAlign || 'left',
+              backgroundColor: footStyles.backgroundColor,
+              marginTop: footStyles.marginTop,
+              marginBottom: footStyles.marginBottom,
+              paddingTop: footStyles.paddingTop,
+              paddingBottom: footStyles.paddingBottom,
+            }}
+          >
             <EditableElement
               tagName="p"
               className="text-gray-700 leading-relaxed whitespace-pre-wrap"
-              style={{ fontFamily: font_family }}
+              style={{
+                fontFamily: font_family,
+                fontSize: footStyles.fontSize,
+                fontWeight: footStyles.fontWeight as any,
+                color: footStyles.color,
+              }}
               initialContent={block.content}
               isEditable={isEditable}
               onSave={(val) => onBlockUpdate?.(block.id, val)}
@@ -615,6 +636,7 @@ function QuotePreview({
       case 'company_info':
         // Company information block - editable and applies block styles
         const companyStyles = getBlockStyles(block.settings, font_family);
+        const showCompanyLogo = block.settings?.showLogo !== false && block.content?.showLogo !== false;
         innerContent = (
           <div
             className="pb-6 border-b-2 break-words"
@@ -623,22 +645,21 @@ function QuotePreview({
               ...companyStyles
             }}
           >
-            {block.settings?.showLogo !== false && logoUrl && (
+            {showCompanyLogo && logoUrl && (
               <img src={logoUrl} alt="Logo" className="h-12 w-auto mb-4" />
             )}
-            <EditableElement
-              tagName="h2"
+            <h2
               className="text-xl font-bold"
-              style={{ color: companyStyles.color || primary_color, fontFamily: font_family }}
-              initialContent={company.name}
-              isEditable={isEditable}
-              onSave={(val) => onBlockUpdate?.(block.id, { ...block.content, companyName: val })}
-            />
-            <div className="text-sm mt-2 space-y-1" style={{ color: companyStyles.color || '#4b5563' }}>
+              style={{ color: companyStyles.color || primary_color, fontFamily: font_family, fontSize: companyStyles.fontSize, fontWeight: companyStyles.fontWeight as any }}
+            >
+              {company.name}
+            </h2>
+            <div className="text-sm mt-2 space-y-1" style={{ color: companyStyles.color || '#4b5563', fontSize: companyStyles.fontSize }}>
               {company.org_number && <p>Org.nr: {company.org_number}</p>}
               {company.address && <p>{company.address}, {company.postal_code} {company.city}</p>}
               {company.email && <p>{company.email}</p>}
               {company.phone && <p>{company.phone}</p>}
+              {company.vat_number && <p>Momsnr: {company.vat_number}</p>}
             </div>
           </div>
         );
@@ -736,28 +757,40 @@ function QuotePreview({
         // Determine alignment classes
         const totalsAlignClass = totalsAlign === 'left' ? 'mr-auto' : totalsAlign === 'center' ? 'mx-auto' : 'ml-auto';
         innerContent = (
-          <div className="py-6 border-t border-gray-200" style={totalsStyles}>
+          <div className="py-6 border-t border-gray-200" style={{
+            backgroundColor: totalsStyles.backgroundColor,
+            marginTop: totalsStyles.marginTop,
+            marginBottom: totalsStyles.marginBottom,
+            paddingTop: totalsStyles.paddingTop,
+            paddingBottom: totalsStyles.paddingBottom,
+          }}>
             <div className={`w-full sm:max-w-sm ${totalsAlignClass} space-y-3`}>
               {block.content?.showSubtotal !== false && (
-                <div className="flex justify-between text-sm" style={{ color: totalsStyles.color || '#4b5563' }}>
+                <div className="flex justify-between" style={{ color: totalsStyles.color || '#4b5563', fontSize: totalsStyles.fontSize || '0.875rem', fontWeight: totalsStyles.fontWeight as any }}>
                   <span>Subtotal</span>
                   <span>{formatCurrency(subtotal)}</span>
                 </div>
               )}
               {block.content?.showVat !== false && (
-                <div className="flex justify-between text-sm" style={{ color: totalsStyles.color || '#4b5563' }}>
+                <div className="flex justify-between" style={{ color: totalsStyles.color || '#4b5563', fontSize: totalsStyles.fontSize || '0.875rem', fontWeight: totalsStyles.fontWeight as any }}>
                   <span>Moms ({(vatRate * 100).toFixed(0)}%)</span>
                   <span>{formatCurrency(vatAmount)}</span>
                 </div>
               )}
               {block.content?.showRot !== false && rotAmount > 0 && (
-                <div className="flex justify-between text-sm text-green-600 font-medium">
+                <div className="flex justify-between text-green-600 font-medium" style={{ fontSize: totalsStyles.fontSize || '0.875rem' }}>
                   <span>ROT-avdrag</span>
                   <span>-{formatCurrency(rotAmount)}</span>
                 </div>
               )}
+              {rutAmount > 0 && (
+                <div className="flex justify-between text-purple-600 font-medium" style={{ fontSize: totalsStyles.fontSize || '0.875rem' }}>
+                  <span>RUT-avdrag</span>
+                  <span>-{formatCurrency(rutAmount)}</span>
+                </div>
+              )}
               {block.content?.showTotal !== false && (
-                <div className="flex justify-between text-xl font-bold pt-4 border-t-2 border-gray-100" style={{ color: totalsStyles.color || '#111827' }}>
+                <div className="flex justify-between font-bold pt-4 border-t-2 border-gray-100" style={{ color: totalsStyles.color || '#111827', fontSize: totalsStyles.fontSize ? `calc(${totalsStyles.fontSize} * 1.4)` : '1.25rem' }}>
                   <span>Totalt</span>
                   <span>{formatCurrency(finalAmount)}</span>
                 </div>
@@ -1337,6 +1370,162 @@ function QuotePreview({
         );
         break;
 
+      // ==================== ATOMIC BLOCK ALIASES ====================
+      // New atomic types that render identically to existing blocks
+      case 'company_logo':
+        // Alias for 'logo' — standalone company logo
+        innerContent = (
+          <div style={getBlockStyles(block.settings, font_family)}>
+            {logoUrl ? (
+              <img src={logoUrl} alt="Företagslogo" className="h-16 w-auto object-contain" style={{ maxHeight: block.settings?.maxHeight || 80 }} onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { e.currentTarget.style.display = 'none'; }} />
+            ) : (
+              <div className="w-16 h-16 rounded-lg flex items-center justify-center" style={{ backgroundColor: primary_color }}>
+                <Building className="w-8 h-8 text-white" />
+              </div>
+            )}
+          </div>
+        );
+        break;
+
+      case 'company_details':
+        // Company name / address / org-nr / vat without logo
+        const compDetStyles = getBlockStyles(block.settings, font_family);
+        innerContent = (
+          <div style={compDetStyles}>
+            <h2 className="text-xl font-bold" style={{ color: compDetStyles.color || primary_color, fontSize: compDetStyles.fontSize, fontWeight: compDetStyles.fontWeight as any }}>{company.name}</h2>
+            <div className="text-sm mt-2 space-y-1" style={{ color: compDetStyles.color || '#4b5563', fontSize: compDetStyles.fontSize }}>
+              {company.org_number && <p>Org.nr: {company.org_number}</p>}
+              {company.vat_number && <p>Momsnr: {company.vat_number}</p>}
+              {company.address && <p>{company.address}, {company.postal_code} {company.city}</p>}
+              {company.email && <p>{company.email}</p>}
+              {company.phone && <p>{company.phone}</p>}
+              {company.website && <p>{company.website}</p>}
+            </div>
+          </div>
+        );
+        break;
+
+      case 'document_title':
+        // Document title only (OFFERT / FAKTURA)
+        const docTitleStyles = getBlockStyles(block.settings, font_family);
+        innerContent = (
+          <div style={docTitleStyles}>
+            <EditableElement
+              tagName="h1"
+              className="text-3xl font-bold uppercase tracking-wide"
+              style={{ color: docTitleStyles.color || primary_color, fontSize: docTitleStyles.fontSize, fontWeight: docTitleStyles.fontWeight as any, textAlign: docTitleStyles.textAlign }}
+              initialContent={getContent(block.content?.title || (templateType === 'invoice' ? 'FAKTURA' : 'OFFERT'))}
+              isEditable={isEditable}
+              onSave={(val) => onBlockUpdate?.(block.id, { ...block.content, title: val })}
+            />
+          </div>
+        );
+        break;
+
+      case 'customer_details':
+        // Alias for customer_info
+        const custDetStyles = getBlockStyles(block.settings, font_family);
+        innerContent = (
+          <div className="mb-6" style={custDetStyles}>
+            <h3 className="text-xs font-bold uppercase tracking-widest mb-3 text-gray-400">
+              <EditableElement tagName="span" initialContent={block.content?.label || 'Till'} isEditable={isEditable} onSave={(val) => onBlockUpdate?.(block.id, { ...block.content, label: val })} />
+            </h3>
+            <div className="space-y-1 text-gray-900">
+              <p className="font-bold text-lg">{customer.name}</p>
+              {customer.address && <p>{customer.address}</p>}
+              {(customer.postal_code || customer.city) && <p>{customer.postal_code} {customer.city}</p>}
+              {customer.email && <p className="text-sm mt-2 text-gray-600">{customer.email}</p>}
+            </div>
+          </div>
+        );
+        break;
+
+      case 'custom_text_block':
+        // Same as text_block but with a different registry name
+        const ctbStyles = getBlockStyles(block.settings, font_family);
+        innerContent = (
+          <div className="mb-2" style={ctbStyles}>
+            <EditableElement
+              tagName="p"
+              className="text-gray-700 leading-relaxed whitespace-pre-line"
+              style={{ fontSize: ctbStyles.fontSize, fontWeight: ctbStyles.fontWeight as any, color: ctbStyles.color }}
+              initialContent={getContent(block.content)}
+              isEditable={isEditable}
+              onSave={(val) => onBlockUpdate?.(block.id, val)}
+            />
+          </div>
+        );
+        break;
+
+      case 'subtotal':
+        innerContent = (
+          <div className="flex justify-between text-sm text-gray-600 py-1" style={getBlockStyles(block.settings, font_family)}>
+            <span>Subtotal</span>
+            <span>{formatCurrency(subtotal)}</span>
+          </div>
+        );
+        break;
+
+      case 'vat_info':
+        innerContent = (
+          <div className="flex justify-between text-sm text-gray-600 py-1" style={getBlockStyles(block.settings, font_family)}>
+            <span>Moms (25%)</span>
+            <span>{formatCurrency(vatAmount)}</span>
+          </div>
+        );
+        break;
+
+      case 'total':
+        innerContent = (
+          <div className="flex justify-between text-xl font-bold pt-2 border-t-2 border-gray-100 text-gray-900" style={getBlockStyles(block.settings, font_family)}>
+            <span>Totalt</span>
+            <span>{formatCurrency(finalAmount)}</span>
+          </div>
+        );
+        break;
+
+      case 'rot_rut_info':
+        innerContent = (rotAmount > 0 || rutAmount > 0) ? (
+          <div style={getBlockStyles(block.settings, font_family)}>
+            {rotAmount > 0 && (
+              <div className="flex justify-between text-sm text-green-600 font-medium py-1">
+                <span>ROT-avdrag</span>
+                <span>-{formatCurrency(rotAmount)}</span>
+              </div>
+            )}
+            {rutAmount > 0 && (
+              <div className="flex justify-between text-sm text-purple-600 font-medium py-1">
+                <span>RUT-avdrag</span>
+                <span>-{formatCurrency(rutAmount)}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-xs text-gray-400 italic py-1" style={getBlockStyles(block.settings, font_family)}>
+            Inget ROT/RUT-avdrag
+          </div>
+        );
+        break;
+
+      case 'bank_details':
+        const bankStyles = getBlockStyles(block.settings, font_family);
+        innerContent = (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 my-2" style={bankStyles}>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2" style={{ fontSize: bankStyles.fontSize, color: bankStyles.color }}>Bankuppgifter</h4>
+            <div className="text-sm space-y-1 text-gray-700" style={{ fontSize: bankStyles.fontSize, color: bankStyles.color }}>
+              {company.bank_name && <p><span className="font-medium">Bank:</span> {company.bank_name}</p>}
+              {company.bank_account && <p><span className="font-medium">Kontonr:</span> {company.bank_account}</p>}
+              {company.iban && <p><span className="font-medium">IBAN:</span> <span className="font-mono">{company.iban}</span></p>}
+              {company.bic && <p><span className="font-medium">BIC/SWIFT:</span> <span className="font-mono">{company.bic}</span></p>}
+              {company.vat_number && <p><span className="font-medium">Momsnr:</span> {company.vat_number}</p>}
+              {!company.bank_account && !company.iban && !company.bic && (
+                <p className="text-gray-400 italic">Inga bankuppgifter angivna</p>
+              )}
+            </div>
+          </div>
+        );
+        break;
+
       default:
         return null;
     }
@@ -1515,6 +1704,12 @@ function QuotePreview({
                   <div className="flex justify-between text-sm text-green-600 font-medium">
                     <span>ROT-avdrag</span>
                     <span>-{formatCurrency(rotAmount)}</span>
+                  </div>
+                )}
+                {rutAmount > 0 && (
+                  <div className="flex justify-between text-sm text-purple-600 font-medium">
+                    <span>RUT-avdrag</span>
+                    <span>-{formatCurrency(rutAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-xl font-bold pt-4 border-t-2 border-gray-100 text-gray-900">

@@ -150,11 +150,9 @@ function QuoteAcceptance() {
       setError(null);
 
       let result;
+      const clientIp = await getClientIP();
 
-      // Use simple acceptance for non-ROT or quotes where ROT fields are empty
-      if (!quote.include_rot || (!rotData.identifier && !rotData.fastighetsbeteckning)) {
-        result = await acceptQuoteSimple(token, await getClientIP());
-      } else {
+      if (quote.include_rot && (rotData.identifier || rotData.fastighetsbeteckning)) {
         result = await acceptQuoteWithROT({
           token,
           rot_data: {
@@ -162,16 +160,20 @@ function QuoteAcceptance() {
             identifier: rotData.identifier,
             fastighetsbeteckning: rotData.fastighetsbeteckning
           },
-          client_ip: await getClientIP()
+          client_ip: clientIp
         });
-      }
-
-      // If RUT personnummer was provided, update the quote with it
-      if (quote.include_rut && rutPersonnummer) {
-        await supabase
-          .from('quotes')
-          .update({ rut_personnummer: rutPersonnummer })
-          .eq('acceptance_token', token);
+      } else if (quote.include_rut && rutPersonnummer) {
+        result = await acceptQuoteWithROT({
+          token,
+          rot_data: {
+            type: 'rut',
+            identifier: rutPersonnummer,
+            fastighetsbeteckning: ''
+          },
+          client_ip: clientIp
+        });
+      } else {
+        result = await acceptQuoteSimple(token, clientIp);
       }
 
       if (result.error) {
@@ -769,7 +771,9 @@ function QuoteAcceptance() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={handleAcceptQuote}
-                disabled={accepting || declining || (quote?.include_rot && rotData.identifier && (!validateSwedishPersonnummer(rotData.identifier) || !rotData.fastighetsbeteckning.trim()))}
+                disabled={accepting || declining ||
+                  (quote?.include_rot && rotData.identifier && (!validateSwedishPersonnummer(rotData.identifier) || !rotData.fastighetsbeteckning.trim())) ||
+                  (quote?.include_rut && rutPersonnummer && !validateRUTPersonnummer(rutPersonnummer))}
                 className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:scale-105"
               >
                 {accepting ? (

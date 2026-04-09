@@ -78,12 +78,20 @@ export function NewChatModal({ isOpen, onClose, onChatCreated }: NewChatModalPro
         setError(null);
 
         try {
+            let channelName: string | undefined;
+            if (chatType === 'direct') {
+                const selectedUser = teamMembers.find(m => m.id === selectedMembers[0]);
+                channelName = selectedUser ? `Chatt med ${selectedUser.full_name}` : undefined;
+            } else {
+                channelName = groupName.trim() || `Gruppchatt (${selectedMembers.length + 1} personer)`;
+            }
+
             const { data, error } = await createChatChannel(
                 organisationId,
                 user.id,
                 selectedMembers,
                 chatType,
-                chatType === 'team' ? groupName || undefined : undefined
+                channelName
             );
 
             if (error) throw error;

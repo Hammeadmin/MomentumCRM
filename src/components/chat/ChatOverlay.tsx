@@ -63,6 +63,7 @@ export function ChatOverlay({ isOpen, onClose }: ChatOverlayProps) {
     const [sendingMessage, setSendingMessage] = useState(false);
     const [showNewChatModal, setShowNewChatModal] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const pendingChannelIdRef = useRef<string | null>(null);
 
     // Cache for user profiles to prevent re-fetching on every message
     const userProfileCacheRef = useRef<Map<string, { id: string; full_name: string; avatar_url?: string }>>(new Map());
@@ -94,7 +95,14 @@ export function ChatOverlay({ isOpen, onClose }: ChatOverlayProps) {
         try {
             const { data, error } = await getChatChannels(organisationId, user.id);
             if (error) throw error;
-            setChannels(data || []);
+            const fetched = data || [];
+            setChannels(fetched);
+            // Auto-select a channel that was just created (avoids stale-closure issue)
+            if (pendingChannelIdRef.current) {
+                const target = fetched.find(c => c.id === pendingChannelIdRef.current);
+                if (target) setSelectedChannel(target);
+                pendingChannelIdRef.current = null;
+            }
         } catch (err) {
             console.error('Error fetching channels:', err);
         } finally {
@@ -217,6 +225,15 @@ export function ChatOverlay({ isOpen, onClose }: ChatOverlayProps) {
         return date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
     };
 
+    const getChannelDisplayName = (channel: ChatChannel): string => {
+        if (channel.name && channel.name !== 'Ny chatt') return channel.name;
+        switch (channel.type) {
+            case 'team': return 'Gruppchatt';
+            case 'order': return 'Orderchatt';
+            default: return 'Direktmeddelande';
+        }
+    };
+
     const getChannelIcon = (type: ChatChannel['type']) => {
         switch (type) {
             case 'team': return <Users className="w-4 h-4" />;
@@ -248,7 +265,7 @@ export function ChatOverlay({ isOpen, onClose }: ChatOverlayProps) {
                                 <ChevronLeft className="w-5 h-5 text-zinc-500" />
                             </button>
                             <div className="flex-1 ml-2">
-                                <h2 className="font-semibold text-zinc-900 dark:text-white text-sm">{selectedChannel.name}</h2>
+                                <h2 className="font-semibold text-zinc-900 dark:text-white text-sm">{getChannelDisplayName(selectedChannel)}</h2>
                                 <p className="text-xs text-zinc-500">
                                     {selectedChannel.type === 'team' ? 'Gruppchatt' :
                                         selectedChannel.type === 'order' ? 'Orderchatt' : 'Direktmeddelande'}
@@ -404,7 +421,7 @@ export function ChatOverlay({ isOpen, onClose }: ChatOverlayProps) {
                                         {/* Content */}
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center justify-between">
-                                                <p className="font-medium text-sm text-zinc-900 dark:text-white truncate">{channel.name}</p>
+                                                <p className="font-medium text-sm text-zinc-900 dark:text-white truncate">{getChannelDisplayName(channel)}</p>
                                                 {channel.lastMessageTime && (
                                                     <span className="text-xs text-zinc-400 flex-shrink-0 ml-2">
                                                         {formatTime(channel.lastMessageTime.toISOString())}
@@ -433,14 +450,9 @@ export function ChatOverlay({ isOpen, onClose }: ChatOverlayProps) {
                 isOpen={showNewChatModal}
                 onClose={() => setShowNewChatModal(false)}
                 onChatCreated={(channelId) => {
-                    // Refresh channels and select the new one
-                    fetchChannels().then(() => {
-                        // Find and select the newly created channel
-                        const newChannel = channels.find(c => c.id === channelId);
-                        if (newChannel) {
-                            setSelectedChannel(newChannel);
-                        }
-                    });
+                    setShowNewChatModal(false);
+                    pendingChannelIdRef.current = channelId;
+                    fetchChannels(); // fetchChannels will auto-select via pendingChannelIdRef
                 }}
             />
         </>

@@ -61,7 +61,10 @@ import {
   canUserCreateEventFor,
   getCalendarPermissionMessage,
   syncEventToGoogle,
-  checkGoogleCalendarEnabled
+  checkGoogleCalendarEnabled,
+  getEventNotes,
+  createEventNote,
+  deleteEventNote
 } from '../lib/calendar';
 import { getTeamMembers, getLeads, getCustomerCities, getUserProfiles } from '../lib/database';
 import { getOrders } from '../lib/orders';
@@ -69,12 +72,13 @@ import { updateOrder } from '../lib/orders';
 import { updateLead } from '../lib/leads';
 import { getTeams, getUserTeams, type TeamWithRelations } from '../lib/teams';
 import { sendEmail } from '../lib/email';
-import type { UserProfile, Lead, Order, EventType } from '../types/database';
+import type { UserProfile, Lead, Order, EventType, CalendarEventNote } from '../types/database';
 import CalendarFilters from './CalendarFilters';
 import CalendarLegend from './CalendarLegend';
 import CalendarQuickActions from './CalendarQuickActions';
 import TimeTrackingWidget from './TimeTrackingWidget';
 import CalendarEventCard from './CalendarEventCard';
+import OrderDetailModal from './OrderDetailModal';
 import { RegionTabs, type Region } from './calendar/RegionTabs';
 import { Button } from './ui';
 import EmptyState from './EmptyState';
@@ -106,15 +110,13 @@ interface EventFormData {
   assigned_to_team_id: string;
   related_order_id: string;
   related_lead_id: string;
-  assigned_to_team_id: string;
-  related_order_id: string;
-  related_lead_id: string;
   location: string;
-  meeting_link: string; // Added meeting_link
+  meeting_link: string;
   is_recurring: boolean;
   recurrence_type: 'daily' | 'weekly' | 'monthly';
   recurrence_interval: number;
   recurrence_end_date: string;
+  pendingNotes?: string[];
 }
 
 const getUserInitials = (name: string) => {
@@ -136,7 +138,7 @@ const getRoleColor = (role?: string) => {
   return colors[role as keyof typeof colors] || 'bg-gray-500';
 };
 
-function CalendarView() {
+function CalendarView({ newEventTrigger = 0 }: { newEventTrigger?: number }) {
   const { user, session } = useAuth();
   const location = useLocation();
   const { success, error: showToastError, warning } = useToast();
@@ -163,6 +165,16 @@ function CalendarView() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEventWithRelations | null>(null);
   const [editingEvent, setEditingEvent] = useState<CalendarEventWithRelations | null>(null);
+
+  // Order detail modal state (for clicking unscheduled orders or event-linked orders)
+  const [showOrderDetailModal, setShowOrderDetailModal] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+
+  // Event notes state
+  const [eventNotes, setEventNotes] = useState<CalendarEventNote[]>([]);
+  const [newNote, setNewNote] = useState('');
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const [isAddingNote, setIsAddingNote] = useState(false);
 
   // Drag and drop states
   const [draggedData, setDraggedData] = useState<DragData | null>(null);
@@ -392,7 +404,39 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
     await loadEvents();
   };
 
+  // Open the OrderDetailModal from sidebar or from a linked calendar event
+  const handleOpenOrderDetail = (orderId: string) => {
+    setSelectedOrderId(orderId);
+    setShowOrderDetailModal(true);
+  };
 
+  // Called after an order was updated/deleted inside OrderDetailModal so that
+  // the sidebar list and any events tied to the order reflect the change.
+  const handleOrderDetailUpdated = async () => {
+    if (!currentUserProfile?.organisation_id) return;
+    try {
+      const ordersResult = await getOrders(currentUserProfile.organisation_id);
+      if (!ordersResult.error) {
+        setOrders(ordersResult.data || []);
+      }
+    } catch (err) {
+      console.error('Error refreshing orders after order update:', err);
+    }
+    await loadEvents();
+  };
+
+
+
+  const handleAddNote = async () => {
+    if (!newNote.trim() || !selectedEvent || !currentUserProfile) return;
+    setIsAddingNote(true);
+    const { data, error } = await createEventNote(selectedEvent.id, currentUserProfile.id, newNote.trim());
+    if (!error && data) {
+      setEventNotes(prev => [...prev, data]);
+      setNewNote('');
+    }
+    setIsAddingNote(false);
+  };
 
   // Filter state
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
@@ -488,11 +532,36 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
     }
   }, [location.state, currentUserProfile]);
 
+  // Fired when the parent Calendar page's "Ny händelse" button is clicked
+  useEffect(() => {
+    if (newEventTrigger > 0) handleCreateEvent();
+  }, [newEventTrigger]);
+
   useEffect(() => {
     if (currentUserProfile) {
       loadEvents();
     }
   }, [currentDate, viewMode, calendarMode, selectedUsers, selectedTeams, selectedCity, currentUserProfile]);
+
+  // Load notes whenever the detail modal opens for a different event
+  useEffect(() => {
+    if (!selectedEvent) {
+      setEventNotes([]);
+      setNewNote('');
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      setIsLoadingNotes(true);
+      const { data } = await getEventNotes(selectedEvent.id);
+      if (!cancelled) {
+        setEventNotes(data || []);
+        setIsLoadingNotes(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [selectedEvent?.id]);
 
   const initializeCalendar = async () => {
     if (!user) return;
@@ -702,6 +771,44 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
 
   const handleCreateEvent = () => {
     setSelectedEvent(null);
+    setEditingEvent(null);
+
+    // Build smart defaults anchored to the currently viewed date,
+    // but use real-world time (rounded up to next whole hour) for the time part.
+    const now = new Date();
+    const nextHour = new Date(now);
+    nextHour.setMinutes(0, 0, 0);
+    nextHour.setHours(nextHour.getHours() + 1);
+
+    // Apply the viewed date's year/month/day, keep the computed time.
+    const base = new Date(currentDate);
+    base.setHours(nextHour.getHours(), 0, 0, 0);
+    const end = new Date(base.getTime() + 60 * 60 * 1000);
+
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const toLocal = (d: Date) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+    const oneWeekOut = new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    setEventForm({
+      title: '',
+      type: 'meeting',
+      start_time: toLocal(base),
+      end_time: toLocal(end),
+      description: '',
+      assigned_to_user_id: user?.id || '',
+      assigned_to_team_id: '',
+      related_lead_id: '',
+      related_order_id: '',
+      location: '',
+      is_recurring: false,
+      recurrence_type: 'weekly',
+      recurrence_interval: 1,
+      recurrence_end_date: toLocal(oneWeekOut),
+      meeting_link: ''
+    });
+
     setShowEventModal(true);
   };
 
@@ -1035,6 +1142,15 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
                 success('Google Meet-länk skapad automatiskt');
               }
             }
+          }
+
+          // Save any notes that were queued during creation
+          if (formData.pendingNotes?.length && currentUserProfile?.id) {
+            await Promise.all(
+              formData.pendingNotes.map(content =>
+                createEventNote(newEvent.id, currentUserProfile.id, content)
+              )
+            );
           }
 
           // Now add the final, correct event object to the state
@@ -1873,9 +1989,11 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
                           key={order.id}
                           draggable
                           onDragStart={(e) => handleDragStart(e, { type: 'order', id: order.id, title: order.title, orderData: order })}
-                          className="select-none flex items-center p-2.5 bg-white rounded-lg border cursor-grab active:cursor-grabbing hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow-md"
+                          onClick={() => handleOpenOrderDetail(order.id)}
+                          className="select-none flex items-center p-2.5 bg-white rounded-lg border cursor-pointer hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow-md"
+                          title="Klicka för att visa/redigera order – dra för att schemalägga"
                         >
-                          <GripVertical className="w-4 h-4 mr-3 text-gray-400" />
+                          <GripVertical className="w-4 h-4 mr-3 text-gray-400 cursor-grab" />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold truncate">{order.title}</p>
                             <p className="text-xs text-gray-500">{order.customer?.name || 'Ingen kund'}</p>
@@ -2295,11 +2413,22 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
                   )}
 
                   {relatedOrder && ( // Use the new relatedOrder variable
-                    <div className="flex items-start">
+                    <div className="flex items-start md:col-span-2">
                       <Package className="w-5 h-5 mr-3 mt-1 text-gray-400 flex-shrink-0" />
-                      <div>
+                      <div className="flex-1">
                         <h4 className="font-medium text-gray-800">Kopplad Order</h4>
-                        <p className="text-gray-600">{relatedOrder.title}</p> {/* 2. Display the order title */}
+                        <p className="text-gray-600">{relatedOrder.title}</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowDetailModal(false);
+                            handleOpenOrderDetail(relatedOrder.id);
+                          }}
+                          className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm shadow-sm"
+                        >
+                          <Package className="w-4 h-4" />
+                          Visa / Redigera Order
+                        </button>
                       </div>
                     </div>
                   )}
@@ -2321,6 +2450,85 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
                     <p className="text-gray-600 whitespace-pre-wrap">{relatedOrder.description}</p>
                   </div>
                 )}
+
+                {/* Anteckningar (Notes) */}
+                <div className="mt-6 pt-6 border-t border-gray-100">
+                  <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-500" />
+                    Anteckningar
+                  </h4>
+
+                  {/* Notes list */}
+                  {isLoadingNotes ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Laddar anteckningar...
+                    </div>
+                  ) : eventNotes.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic mb-3">Inga anteckningar ännu.</p>
+                  ) : (
+                    <div className="space-y-2 mb-4 max-h-56 overflow-y-auto pr-1">
+                      {eventNotes.map(note => (
+                        <div key={note.id} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-gray-700">
+                              {note.user?.full_name ?? 'Okänd användare'}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">
+                                {new Intl.DateTimeFormat('sv-SE', {
+                                  day: 'numeric', month: 'short', year: 'numeric',
+                                  hour: '2-digit', minute: '2-digit',
+                                  timeZone: 'Europe/Stockholm'
+                                }).format(new Date(note.created_at))}
+                              </span>
+                              {(currentUserProfile?.role === 'admin' || currentUserProfile?.id === note.user_id) && (
+                                <button
+                                  onClick={async () => {
+                                    await deleteEventNote(note.id);
+                                    setEventNotes(prev => prev.filter(n => n.id !== note.id));
+                                  }}
+                                  className="text-gray-300 hover:text-red-500 transition-colors"
+                                  title="Ta bort anteckning"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add note input */}
+                  <div className="flex flex-col gap-2">
+                    <textarea
+                      rows={2}
+                      value={newNote}
+                      onChange={e => setNewNote(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAddNote();
+                      }}
+                      placeholder="Skriv en anteckning... (Ctrl+Enter för att skicka)"
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        onClick={handleAddNote}
+                        disabled={isAddingNote || !newNote.trim()}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isAddingNote ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" />Sparar...</>
+                        ) : (
+                          'Lägg till anteckning'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
 
@@ -2415,6 +2623,20 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
         />
       )}
 
+      {/* Order Detail Modal — opened from unscheduled sidebar list and
+          from the "Visa / Redigera Order" button in event details. */}
+      {showOrderDetailModal && selectedOrderId && (
+        <OrderDetailModal
+          isOpen={showOrderDetailModal}
+          orderId={selectedOrderId}
+          onClose={() => {
+            setShowOrderDetailModal(false);
+            setSelectedOrderId(null);
+          }}
+          onOrderUpdated={handleOrderDetailUpdated}
+        />
+      )}
+
     </div>
 
   );
@@ -2435,7 +2657,6 @@ interface EventModalProps {
 
 function EventModal({ event, eventFormData, currentUser, availableUsers, availableTeams, onClose, onSave }: EventModalProps) {
   const [assignmentType, setAssignmentType] = useState<'user' | 'team'>(
-    // Default to 'team' if a team is already assigned, otherwise 'user'
     event?.assigned_to_team_id ? 'team' : 'user'
   );
   const [formData, setFormData] = useState({
@@ -2447,14 +2668,59 @@ function EventModal({ event, eventFormData, currentUser, availableUsers, availab
     location: eventFormData.location || event?.location || '',
     meeting_link: eventFormData.meeting_link || event?.meeting_link || '',
     assigned_to_user_id: eventFormData.assigned_to_user_id || event?.assigned_to_user_id || currentUser?.id || '',
-    assigned_to_team_id: eventFormData.assigned_to_team_id || event?.assigned_to_team_id || '', // Add this line
+    assigned_to_team_id: eventFormData.assigned_to_team_id || event?.assigned_to_team_id || '',
     related_order_id: eventFormData.related_order_id || event?.related_order_id || '',
     related_lead_id: eventFormData.related_lead_id || event?.related_lead_id || ''
   });
 
+  // Notes state
+  const [existingNotes, setExistingNotes] = useState<CalendarEventNote[]>([]);
+  const [pendingNotes, setPendingNotes] = useState<string[]>([]);
+  const [newNoteText, setNewNoteText] = useState('');
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
+
+  // Load existing notes when editing an existing event
+  useEffect(() => {
+    if (!event?.id) return;
+    let cancelled = false;
+    setIsLoadingNotes(true);
+    getEventNotes(event.id).then(({ data }) => {
+      if (!cancelled) {
+        setExistingNotes(data || []);
+        setIsLoadingNotes(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [event?.id]);
+
+  const handleAddNote = async () => {
+    const text = newNoteText.trim();
+    if (!text) return;
+    if (event?.id && currentUser?.id) {
+      // Edit mode: persist immediately
+      const { data, error } = await createEventNote(event.id, currentUser.id, text);
+      if (!error && data) {
+        setExistingNotes(prev => [...prev, data]);
+        setNewNoteText('');
+      }
+    } else {
+      // Create mode: queue for after the event is saved
+      setPendingNotes(prev => [...prev, text]);
+      setNewNoteText('');
+    }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    setDeletingNoteId(noteId);
+    const { error } = await deleteEventNote(noteId);
+    if (!error) setExistingNotes(prev => prev.filter(n => n.id !== noteId));
+    setDeletingNoteId(null);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    onSave({ ...formData, pendingNotes });
   };
 
   const canAssignToUser = (userId: string) => {
@@ -2663,6 +2929,78 @@ function EventModal({ event, eventFormData, currentUser, availableUsers, availab
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               placeholder="Ytterligare information om händelsen"
             />
+          </div>
+
+          {/* Notes Section */}
+          <div className="border-t border-gray-200 pt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Anteckningar
+            </label>
+
+            {/* Note list */}
+            {isLoadingNotes ? (
+              <div className="flex justify-center py-3">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+              </div>
+            ) : (existingNotes.length > 0 || pendingNotes.length > 0) ? (
+              <div className="space-y-2 mb-3 max-h-40 overflow-y-auto pr-1">
+                {existingNotes.map(note => (
+                  <div key={note.id} className="flex items-start gap-2 bg-gray-50 rounded-lg p-2.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-400 mb-0.5">{note.user?.full_name || 'Okänd'}</p>
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.content}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteNote(note.id)}
+                      disabled={deletingNoteId === note.id}
+                      className="flex-shrink-0 text-gray-300 hover:text-red-500 transition-colors mt-0.5"
+                    >
+                      {deletingNoteId === note.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <X className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                ))}
+                {pendingNotes.map((note, i) => (
+                  <div key={i} className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-lg p-2.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-blue-400 mb-0.5">Sparas när händelsen skapas</p>
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{note}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPendingNotes(prev => prev.filter((_, idx) => idx !== i))}
+                      className="flex-shrink-0 text-gray-300 hover:text-red-500 transition-colors mt-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 mb-3">Inga anteckningar ännu.</p>
+            )}
+
+            {/* Add note input */}
+            <div className="flex gap-2 items-end">
+              <textarea
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && e.ctrlKey) handleAddNote(); }}
+                rows={2}
+                placeholder="Skriv en anteckning... (Ctrl+Enter för att lägga till)"
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none"
+              />
+              <button
+                type="button"
+                onClick={handleAddNote}
+                disabled={!newNoteText.trim()}
+                className="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+              >
+                Lägg till
+              </button>
+            </div>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4">

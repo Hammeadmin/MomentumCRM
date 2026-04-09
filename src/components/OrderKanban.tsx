@@ -24,8 +24,7 @@ import {
   Crown,
   Briefcase,
   Loader2,
-  Edit,
-  Send
+  Edit
 } from 'lucide-react';
 import { Button } from './ui';
 import { useAuth } from '../contexts/AuthContext';
@@ -77,8 +76,10 @@ import { useKanbanData } from '../hooks/useKanbanData';
 import { useMoveCard } from '../hooks/useMoveCard';
 
 import { SkeletonColumn } from './ui';
-import QuoteCreationModal from './QuoteCreationModal';
+import QuoteEditModal from './QuoteEditModal';
 import QuoteDetailModal from './QuoteDetailModal';
+import { supabase } from '../lib/supabase';
+import { getQuoteTemplates, type QuoteTemplate } from '../lib/quoteTemplates';
 
 
 
@@ -205,7 +206,7 @@ const LeadKanbanRow = ({
   onCreateQuote: () => void;
 }) => (
   <div
-    className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+    className="group flex flex-col gap-1.5 px-3 py-2.5 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
     style={{ borderLeft: `3px solid ${borderColor}` }}
     draggable
     onDragStart={onDragStart}
@@ -214,27 +215,25 @@ const LeadKanbanRow = ({
     {/* Row 1: Title + Value */}
     <div className="flex items-start justify-between gap-2">
       <p className="text-sm font-medium text-gray-900 truncate leading-tight">{lead.title}</p>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        {lead.estimated_value ? (
-          <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
-            {formatCurrency(lead.estimated_value)}
-          </span>
-        ) : null}
-        <button
-          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-blue-600 transition-all"
-          onClick={(e: React.MouseEvent) => { e.stopPropagation(); onCreateQuote(); }}
-          title="Skapa offert"
-        >
-          <Send className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      {lead.estimated_value ? (
+        <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded whitespace-nowrap flex-shrink-0">
+          {formatCurrency(lead.estimated_value)}
+        </span>
+      ) : null}
     </div>
-    {/* Row 2: Customer */}
+    {/* Row 2: Customer info */}
     {lead.customer && (
-      <p className="text-xs text-gray-500 truncate">{lead.customer.name}</p>
+      <div className="flex flex-col gap-0.5">
+        <p className="text-xs font-medium text-gray-700 truncate">{lead.customer.name}</p>
+        {(lead.customer.email || lead.customer.city) && (
+          <p className="text-xs text-gray-400 truncate">
+            {[lead.customer.email, lead.customer.city].filter(Boolean).join(' · ')}
+          </p>
+        )}
+      </div>
     )}
     {/* Row 3: Metadata chips */}
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-1.5 flex-wrap">
       {lead.source && (
         <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[100px]">
           <Activity className="w-3 h-3 flex-shrink-0" />
@@ -262,6 +261,16 @@ const LeadKanbanRow = ({
           {formatDate(lead.last_activity_at)}
         </span>
       )}
+    </div>
+    {/* Row 4: Create quote button */}
+    <div className="flex justify-end pt-0.5">
+      <button
+        className="opacity-0 group-hover:opacity-100 text-xs font-medium text-blue-600 border border-blue-300 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded transition-all"
+        onClick={(e: React.MouseEvent) => { e.stopPropagation(); onCreateQuote(); }}
+        title="Skapa offert från lead"
+      >
+        Skapa offert
+      </button>
     </div>
   </div>
 );
@@ -367,8 +376,10 @@ function OrderKanban() {
   const [selectedLead, setSelectedLead] = useState<LeadWithRelations | null>(null);
   const [showQuoteEditModal, setShowQuoteEditModal] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<QuoteWithRelations | null>(null);
-  const [showQuoteCreationModal, setShowQuoteCreationModal] = useState(false);
+  const [showQuoteCreateFromLead, setShowQuoteCreateFromLead] = useState(false);
   const [leadForQuote, setLeadForQuote] = useState<LeadWithRelations | null>(null);
+  const [quoteTemplates, setQuoteTemplates] = useState<QuoteTemplate[]>([]);
+  const [companyInfo, setCompanyInfo] = useState<any>(null);
 
   const fetchCommunications = async (orderId: string) => {
     setLoadingCommunications(true);
@@ -620,19 +631,33 @@ function OrderKanban() {
     }
   };
 
+  // Load quote templates + company info for QuoteEditModal
+  useEffect(() => {
+    if (!organisationId) return;
+    const loadExtras = async () => {
+      const [templatesRes, orgRes] = await Promise.all([
+        getQuoteTemplates(organisationId),
+        supabase.from('organisations').select('*').eq('id', organisationId).single()
+      ]);
+      if (templatesRes.data) setQuoteTemplates(templatesRes.data);
+      if (orgRes.data) setCompanyInfo(orgRes.data);
+    };
+    loadExtras();
+  }, [organisationId]);
+
   const handleCreateQuote = (lead: LeadWithRelations) => {
     if (!lead || !lead.customer_id) {
       showError(kanban.MESSAGES.ERROR_TITLE, kanban.MESSAGES.MISSING_CUSTOMER_QUOTE);
       return;
     }
 
-    // Open the quote creation modal instead of directly creating
+    // Open QuoteEditModal with pre-filled data from the lead
     setLeadForQuote(lead);
-    setShowQuoteCreationModal(true);
+    setShowQuoteCreateFromLead(true);
   };
 
   const handleQuoteCreated = async () => {
-    setShowQuoteCreationModal(false);
+    setShowQuoteCreateFromLead(false);
     setLeadForQuote(null);
     await loadData(); // Reload all data
   };
@@ -1595,10 +1620,167 @@ function OrderKanban() {
 
       {showLeadEditModal && selectedLead && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full p-6">
-            <h3 className="text-lg font-semibold">{forms.EDIT_LEAD} {selectedLead.title}</h3>
-            {/* Lead Edit Form would go here */}
-            <button onClick={() => setShowLeadEditModal(false)} className="mt-4 px-4 py-2 bg-gray-200 rounded-md">{actions.CLOSE}</button>
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{selectedLead.title}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${
+                    selectedLead.status === 'new' ? 'bg-blue-100 text-blue-700' :
+                    selectedLead.status === 'contacted' ? 'bg-amber-100 text-amber-700' :
+                    selectedLead.status === 'qualified' ? 'bg-green-100 text-green-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {selectedLead.status === 'new' ? 'Ny' :
+                     selectedLead.status === 'contacted' ? 'Kontaktad' :
+                     selectedLead.status === 'qualified' ? 'Kvalificerad' :
+                     selectedLead.status}
+                  </span>
+                  {typeof selectedLead.lead_score === 'number' && (
+                    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      selectedLead.lead_score >= 70 ? 'bg-green-100 text-green-700' :
+                      selectedLead.lead_score >= 40 ? 'bg-amber-100 text-amber-700' :
+                      'bg-gray-100 text-gray-500'
+                    }`}>
+                      <Star className="w-3 h-3" />
+                      Poäng: {selectedLead.lead_score}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => setShowLeadEditModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Estimated Value */}
+              {selectedLead.estimated_value && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-center justify-between">
+                  <span className="text-sm font-medium text-emerald-800">Uppskattat värde</span>
+                  <span className="text-lg font-bold text-emerald-700">{formatCurrency(selectedLead.estimated_value)}</span>
+                </div>
+              )}
+
+              {/* Description */}
+              {selectedLead.description && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-500 mb-1">Beskrivning</h4>
+                  <p className="text-sm text-gray-900 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{selectedLead.description}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Customer Details */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-gray-400" />
+                    Kundinformation
+                  </h4>
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-2.5">
+                    {selectedLead.customer ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                          <span className="text-sm font-medium text-gray-900">{selectedLead.customer.name}</span>
+                        </div>
+                        {selectedLead.customer.email && (
+                          <div className="flex items-center gap-2">
+                            <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            <a href={`mailto:${selectedLead.customer.email}`} className="text-sm text-blue-600 hover:underline">{selectedLead.customer.email}</a>
+                          </div>
+                        )}
+                        {selectedLead.customer.phone_number && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            <a href={`tel:${selectedLead.customer.phone_number}`} className="text-sm text-blue-600 hover:underline">{selectedLead.customer.phone_number}</a>
+                          </div>
+                        )}
+                        {selectedLead.customer.city && (
+                          <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-700">{selectedLead.customer.city}</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-400 italic">Ingen kund kopplad</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Lead metadata */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
+                    <Activity className="w-4 h-4 text-gray-400" />
+                    Leadinformation
+                  </h4>
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-2.5">
+                    {selectedLead.source && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-500">Källa</span>
+                        <p className="text-sm text-gray-900">{selectedLead.source}</p>
+                      </div>
+                    )}
+                    {selectedLead.city && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-500">Stad (lead)</span>
+                        <p className="text-sm text-gray-900">{selectedLead.city}</p>
+                      </div>
+                    )}
+                    {selectedLead.assigned_to && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-500">Tilldelad</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <User className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="text-sm text-gray-900">{selectedLead.assigned_to.full_name}</span>
+                        </div>
+                      </div>
+                    )}
+                    {selectedLead.last_activity_at && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-500">Senaste aktivitet</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <Clock className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="text-sm text-gray-900">{formatDate(selectedLead.last_activity_at)}</span>
+                        </div>
+                      </div>
+                    )}
+                    {selectedLead.created_at && (
+                      <div>
+                        <span className="text-xs font-medium text-gray-500">Skapad</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="text-sm text-gray-900">{formatDate(selectedLead.created_at)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                <button
+                  onClick={() => setShowLeadEditModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  {actions.CLOSE}
+                </button>
+                {selectedLead.customer_id && (
+                  <button
+                    onClick={() => {
+                      setShowLeadEditModal(false);
+                      handleCreateQuote(selectedLead);
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Skapa offert från lead
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2076,16 +2258,27 @@ function OrderKanban() {
         />
       )}
 
-      {/* Quote Creation Modal */}
-      {showQuoteCreationModal && leadForQuote && (
-        <QuoteCreationModal
-          isOpen={showQuoteCreationModal}
+      {/* Quote Create from Lead Modal (using QuoteEditModal) */}
+      {showQuoteCreateFromLead && leadForQuote && (
+        <QuoteEditModal
+          isOpen={showQuoteCreateFromLead}
           onClose={() => {
-            setShowQuoteCreationModal(false);
+            setShowQuoteCreateFromLead(false);
             setLeadForQuote(null);
           }}
-          onQuoteCreated={handleQuoteCreated}
-          lead={leadForQuote}
+          quote={null}
+          customers={customers}
+          leads={leads as any}
+          templates={quoteTemplates}
+          companyInfo={companyInfo}
+          organisationId={organisationId!}
+          onSave={handleQuoteCreated}
+          initialData={{
+            customer_id: leadForQuote.customer_id || '',
+            lead_id: leadForQuote.id,
+            title: leadForQuote.title,
+            description: leadForQuote.description || '',
+          }}
         />
       )}
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Package, Plus, Users, Edit, Trash2, X, User, Calendar, DollarSign,
-  FileText, Search, List, Archive, RefreshCw, Loader2
+  FileText, Search, List, Archive, RefreshCw, Loader2, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getOrders, updateOrder, createOrder, createOrderWithQuote, updateOrderAndQuote, deleteOrder, type OrderWithRelations } from '../lib/orders';
@@ -421,6 +422,7 @@ function OrderListView({ orders, onOpenDetail, onOpenEdit }: {
   onOpenDetail: (order: OrderWithRelations) => void;
   onOpenEdit: (order: OrderWithRelations) => void;
 }) {
+  const navigate = useNavigate();
   const formatCurrency = (value: number | null | undefined) => {
     if (value == null) return 'N/A';
     return `${value.toLocaleString('sv-SE')} SEK`;
@@ -467,6 +469,13 @@ function OrderListView({ orders, onOpenDetail, onOpenEdit }: {
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">{formatCurrency(order.value)}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{new Date(order.created_at).toLocaleDateString('sv-SE')}</td>
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button
+                  onClick={(e) => { e.stopPropagation(); navigate(`/app/order/${order.id}`); }}
+                  className="text-gray-400 hover:text-indigo-600 p-2 rounded-md hover:bg-indigo-50 mr-1"
+                  title="Öppna fullständig ordersida"
+                >
+                  <ExternalLink className="h-5 w-5" />
+                </button>
                 <button onClick={(e) => { e.stopPropagation(); onOpenEdit(order); }} className="text-blue-600 hover:text-blue-900 p-2 rounded-md hover:bg-gray-100">
                   <Edit className="h-5 w-5" />
                 </button>
@@ -485,6 +494,7 @@ function OrderDetailModal({ order, onClose, onOpenEdit, onOpenDelete }: {
   onOpenEdit: (order: OrderWithRelations) => void;
   onOpenDelete: (order: OrderWithRelations) => void;
 }) {
+  const navigate = useNavigate();
   const formatCurrency = (value: number | null | undefined) => {
     if (value == null) return 'N/A';
     return `${value.toLocaleString('sv-SE')} SEK`;
@@ -572,9 +582,18 @@ function OrderDetailModal({ order, onClose, onOpenEdit, onOpenDelete }: {
           </div>
         </div>
 
-        <div className="flex justify-end space-x-3 p-6 border-t bg-gray-50 mt-auto">
-          <button onClick={() => onOpenEdit(order)} className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"><Edit className="w-4 h-4 mr-2" />Redigera</button>
-          <button onClick={() => onOpenDelete(order)} className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"><Trash2 className="w-4 h-4 mr-2" />Ta bort</button>
+        <div className="flex items-center justify-between p-6 border-t bg-gray-50 mt-auto">
+          <button
+            onClick={() => navigate(`/app/order/${order.id}`)}
+            className="inline-flex items-center px-4 py-2 border border-indigo-300 rounded-md text-sm font-medium text-indigo-700 bg-white hover:bg-indigo-50 transition-colors"
+          >
+            <ExternalLink className="w-4 h-4 mr-2" />
+            Gå till ordersida
+          </button>
+          <div className="flex items-center space-x-3">
+            <button onClick={() => onOpenEdit(order)} className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"><Edit className="w-4 h-4 mr-2" />Redigera</button>
+            <button onClick={() => onOpenDelete(order)} className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"><Trash2 className="w-4 h-4 mr-2" />Ta bort</button>
+          </div>
         </div>
       </div>
     </div>

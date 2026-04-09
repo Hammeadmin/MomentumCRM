@@ -3,6 +3,8 @@ import type { Quote, Customer, Lead, QuoteLineItem, QuoteStatus, Order } from '.
 import { createOrder } from './orders'; // Import createOrder
 import { getSavedLineItemById } from './database';
 import { evaluate } from 'mathjs';
+import { getROTEmailText } from './rot';
+import { getRUTEmailText } from './rut';
 
 export interface QuoteWithRelations extends Quote {
   customer?: Customer;
@@ -401,13 +403,11 @@ export const generateQuoteEmailTemplate = (
 - Offertnummer: ${quoteNumber}
 - Totalt belopp: ${formatMoney(amount)}`;
 
-  if (quote.include_rot && rotAmount > 0) {
-    body += `
-- ROT-avdrag: ${formatMoney(rotAmount)}
-- Att betala efter ROT: ${formatMoney(netAmount)}
-
-ROT-information:
-Denna offert är berättigad till ROT-avdrag. Som privatperson kan du få skatteavdrag för 50% av arbetskostnaden, upp till 50 000 kr per person och år. ROT-avdraget dras av direkt från fakturan.`;
+  if (quote.include_rot) {
+    body += `\n\n${getROTEmailText()}`;
+  }
+  if (quote.include_rut) {
+    body += `\n\n${getRUTEmailText()}`;
   }
 
   if (includeAcceptanceLink) {

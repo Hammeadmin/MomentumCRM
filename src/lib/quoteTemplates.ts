@@ -43,6 +43,8 @@ export interface BlockStyleSettings {
   fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
   fontColor?: string; // hex color
   textAlign?: 'left' | 'center' | 'right';
+  lineHeight?: number; // e.g. 1.5
+  letterSpacing?: number; // px
 
   // Spacing (in pixels)
   paddingTop?: number;
@@ -52,6 +54,9 @@ export interface BlockStyleSettings {
   marginTop?: number;
   marginBottom?: number;
 
+  // Dimensions
+  maxWidth?: number; // px
+
   // Background
   backgroundColor?: string; // hex color or 'transparent'
 
@@ -59,6 +64,9 @@ export interface BlockStyleSettings {
   borderWidth?: number;
   borderColor?: string;
   borderRadius?: number;
+
+  // Visibility (toggle block on/off without removing)
+  visible?: boolean;
 
   // Image display settings
   imageSize?: 'small' | 'medium' | 'large' | 'full';
@@ -103,7 +111,18 @@ export type ContentBlockType =
   | 'page_break'       // Force a new page in print/PDF
   | 'cover_page'       // Full-page cover with background image, title, subtitle
   | 'split_content'    // Side-by-side image + text (About Us, etc.)
-  | 'testimonials';    // Grid of customer review cards
+  | 'testimonials'     // Grid of customer review cards
+  // New atomic blocks
+  | 'company_logo'       // Standalone company logo (renders same as 'logo')
+  | 'company_details'    // Company name/address/org-nr without logo
+  | 'document_title'     // Document title only (OFFERT/FAKTURA)
+  | 'customer_details'   // Customer info (alias for customer_info)
+  | 'subtotal'           // Subtotal row only
+  | 'vat_info'           // VAT/Moms row only
+  | 'total'              // Grand total row only
+  | 'rot_rut_info'       // ROT/RUT deduction info
+  | 'bank_details'       // Bank account / IBAN / BIC
+  | 'custom_text_block';  // Free-form text with rich settings
 
 export interface ContentBlock {
   id: string;
@@ -932,4 +951,101 @@ export const UNIT_DESCRIPTIONS = {
   kg: 'Kilogram',
   liter: 'Liter',
   meter: 'Meter'
+};
+
+// ============================================================================
+// BLOCK REGISTRY — single source of truth for all block metadata
+// ============================================================================
+
+export interface BlockRegistryEntry {
+  type: ContentBlockType;
+  label: string;           // Swedish UI label
+  category: 'innehåll' | 'kund' | 'företag' | 'ekonomi' | 'layout' | 'premium';
+  docType: 'both' | 'quote' | 'invoice';
+  icon: string;            // Lucide icon name (resolved in React components)
+  defaultContent: any;
+  defaultSettings: Partial<BlockStyleSettings & Record<string, any>>;
+}
+
+export const BLOCK_REGISTRY: BlockRegistryEntry[] = [
+  // ── Innehåll ──
+  { type: 'header',           label: 'Rubrik',             category: 'innehåll', docType: 'both',    icon: 'Type',           defaultContent: 'Ny Rubrik',                                          defaultSettings: { fontSize: '2xl', fontWeight: 'bold', textAlign: 'center' } },
+  { type: 'text_block',       label: 'Textblock',          category: 'innehåll', docType: 'both',    icon: 'MessageSquare',  defaultContent: 'Ny text...',                                         defaultSettings: { fontSize: 'base', textAlign: 'left' } },
+  { type: 'custom_text_block',label: 'Fritext',            category: 'innehåll', docType: 'both',    icon: 'FileText',       defaultContent: 'Valfri text med formatering...',                     defaultSettings: { fontSize: 'base', textAlign: 'left' } },
+  { type: 'line_items_table', label: 'Artiklar',           category: 'innehåll', docType: 'both',    icon: 'Package',        defaultContent: [],                                                   defaultSettings: { table_header: 'Specifikation' } },
+  { type: 'image',            label: 'Bild',               category: 'innehåll', docType: 'both',    icon: 'Image',          defaultContent: '',                                                   defaultSettings: { alignment: 'center', imageSize: 'large', imageOpacity: 100, objectFit: 'contain', imageEffect: 'none' } },
+  { type: 'footer',           label: 'Sidfot (text)',      category: 'innehåll', docType: 'both',    icon: 'FileText',       defaultContent: 'Tack för att ni valde oss!',                         defaultSettings: { fontSize: 'sm', textAlign: 'center' } },
+
+  // ── Företag ──
+  { type: 'company_logo',     label: 'Logga',              category: 'företag',  docType: 'both',    icon: 'Image',          defaultContent: null,                                                 defaultSettings: { alignment: 'left' } },
+  { type: 'logo',             label: 'Logotyp',            category: 'företag',  docType: 'both',    icon: 'Image',          defaultContent: null,                                                 defaultSettings: { alignment: 'left', maxHeight: 80 } },
+  { type: 'company_info',     label: 'Företagsinfo',       category: 'företag',  docType: 'both',    icon: 'Building',       defaultContent: { showLogo: true },                                   defaultSettings: { logoPosition: 'left', showBorder: true, fontSize: 'base' } },
+  { type: 'company_details',  label: 'Företagsuppgifter',  category: 'företag',  docType: 'both',    icon: 'Building',       defaultContent: null,                                                 defaultSettings: { fontSize: 'base' } },
+  { type: 'header_row',       label: 'Sidhuvud (2-kolumn)',category: 'företag',  docType: 'both',    icon: 'Columns',        defaultContent: { showLogo: true },                                   defaultSettings: { logoPosition: 'left' } },
+  { type: 'f_skatt_text',     label: 'F-skatt text',       category: 'företag',  docType: 'invoice', icon: 'FileText',       defaultContent: 'Godkänd för F-skatt. Innehar F-skattsedel.',         defaultSettings: { fontSize: 'xs', textAlign: 'center' } },
+  { type: 'page_footer',      label: 'Sidfot (företag)',   category: 'företag',  docType: 'both',    icon: 'FileText',       defaultContent: { showCompanyInfo: true },                            defaultSettings: { fontSize: 'xs', textAlign: 'center' } },
+
+  // ── Kund ──
+  { type: 'customer_info',    label: 'Kundinfo',           category: 'kund',     docType: 'both',    icon: 'User',           defaultContent: { label: 'Till' },                                    defaultSettings: { showBorder: false, fontSize: 'base' } },
+  { type: 'customer_details', label: 'Kunduppgifter',      category: 'kund',     docType: 'both',    icon: 'User',           defaultContent: { label: 'Till' },                                    defaultSettings: { showBorder: false, fontSize: 'base' } },
+
+  // ── Ekonomi ──
+  { type: 'document_header',  label: 'Dokumentrubrik',     category: 'ekonomi',  docType: 'both',    icon: 'Receipt',        defaultContent: { title: 'OFFERT' },                                  defaultSettings: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'right' } },
+  { type: 'document_title',   label: 'Dokumenttitel',      category: 'ekonomi',  docType: 'both',    icon: 'Receipt',        defaultContent: { title: 'OFFERT' },                                  defaultSettings: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'center' } },
+  { type: 'quote_metadata',   label: 'Offertinfo',         category: 'ekonomi',  docType: 'quote',   icon: 'Info',           defaultContent: { showPaymentTerms: true, showVat: true },            defaultSettings: { fontSize: 'sm' } },
+  { type: 'totals',           label: 'Summering',          category: 'ekonomi',  docType: 'both',    icon: 'Calculator',     defaultContent: { showSubtotal: true, showVat: true, showTotal: true, showRot: true }, defaultSettings: { textAlign: 'right', fontSize: 'base' } },
+  { type: 'subtotal',         label: 'Delsumma',           category: 'ekonomi',  docType: 'both',    icon: 'Calculator',     defaultContent: null,                                                 defaultSettings: { textAlign: 'right', fontSize: 'base' } },
+  { type: 'vat_info',         label: 'Momsinfo',           category: 'ekonomi',  docType: 'both',    icon: 'Calculator',     defaultContent: null,                                                 defaultSettings: { textAlign: 'right', fontSize: 'base' } },
+  { type: 'total',            label: 'Totalbelopp',        category: 'ekonomi',  docType: 'both',    icon: 'Calculator',     defaultContent: null,                                                 defaultSettings: { textAlign: 'right', fontSize: 'lg', fontWeight: 'bold' } },
+  { type: 'rot_rut_info',     label: 'ROT/RUT-avdrag',     category: 'ekonomi',  docType: 'both',    icon: 'Calculator',     defaultContent: null,                                                 defaultSettings: { fontSize: 'sm' } },
+  { type: 'bank_details',     label: 'Bankdetaljer',       category: 'ekonomi',  docType: 'invoice', icon: 'Calculator',     defaultContent: null,                                                 defaultSettings: { fontSize: 'sm' } },
+  { type: 'payment_info',     label: 'Betalningsinfo',     category: 'ekonomi',  docType: 'invoice', icon: 'Calculator',     defaultContent: { showBankAccount: true, showOCR: true, showDueDate: true }, defaultSettings: { fontSize: 'sm' } },
+  { type: 'invoice_header',   label: 'Fakturahuvud',       category: 'ekonomi',  docType: 'invoice', icon: 'Receipt',        defaultContent: { title: 'FAKTURA' },                                 defaultSettings: { fontSize: '3xl', fontWeight: 'bold', textAlign: 'right' } },
+  { type: 'terms',            label: 'Villkor',            category: 'ekonomi',  docType: 'both',    icon: 'FileText',       defaultContent: 'Betalning ska ske inom 30 dagar från fakturadatum.\nOfferten är giltig i 30 dagar.', defaultSettings: { fontSize: 'sm' } },
+  { type: 'quote_validity',   label: 'Giltighetstid',      category: 'ekonomi',  docType: 'quote',   icon: 'Info',           defaultContent: { days: 30 },                                        defaultSettings: { fontSize: 'sm' } },
+  { type: 'signature_area',   label: 'Signatur',           category: 'ekonomi',  docType: 'quote',   icon: 'FileSignature',  defaultContent: { leftLabel: 'Leverantör', rightLabel: 'Kund' },      defaultSettings: { columns: 2 } },
+  { type: 'acceptance_section',label: 'Acceptera offert',   category: 'ekonomi',  docType: 'quote',   icon: 'FileSignature',  defaultContent: { headerText: 'Acceptera offert', showDigitalSignature: true }, defaultSettings: { fontSize: 'base' } },
+
+  // ── Layout ──
+  { type: 'divider',          label: 'Avdelare',           category: 'layout',   docType: 'both',    icon: 'Minus',          defaultContent: null,                                                 defaultSettings: { marginTop: 16, marginBottom: 16 } },
+  { type: 'spacer',           label: 'Mellanrum',          category: 'layout',   docType: 'both',    icon: 'LayoutGrid',     defaultContent: null,                                                 defaultSettings: { spacerHeight: 32 } },
+  { type: 'page_break',       label: 'Ny Sida',            category: 'layout',   docType: 'quote',   icon: 'FileMinus',      defaultContent: null,                                                 defaultSettings: {} },
+
+  // ── Premium ──
+  { type: 'cover_page',       label: 'Framsida',           category: 'premium',  docType: 'quote',   icon: 'LayoutTemplate', defaultContent: { backgroundImage: '', title: 'Offertens Titel', subtitle: 'Undertitel', showLogo: true }, defaultSettings: { overlayOpacity: 55, backgroundPosition: 'center', imageSize: 'full', objectFit: 'cover', imageEffect: 'none' } },
+  { type: 'split_content',    label: 'Delat Innehåll',     category: 'premium',  docType: 'both',    icon: 'Columns',        defaultContent: { imageUrl: '', headline: 'Rubrik', paragraph: 'Beskriv ert innehåll här...', imagePosition: 'left' }, defaultSettings: {} },
+  { type: 'testimonials',     label: 'Omdömen',            category: 'premium',  docType: 'quote',   icon: 'Star',           defaultContent: [],                                                   defaultSettings: {} },
+];
+
+// Helper to look up a registry entry by block type
+export const getBlockRegistryEntry = (type: ContentBlockType): BlockRegistryEntry | undefined =>
+  BLOCK_REGISTRY.find(entry => entry.type === type);
+
+// Helper to get default content and settings for a block type
+export const getBlockDefaults = (type: ContentBlockType): { content: any; settings: Record<string, any> } => {
+  const entry = getBlockRegistryEntry(type);
+  return {
+    content: entry ? JSON.parse(JSON.stringify(entry.defaultContent)) : '',
+    settings: entry ? { ...entry.defaultSettings } : {}
+  };
+};
+
+// Category labels in Swedish
+export const BLOCK_CATEGORY_LABELS: Record<string, string> = {
+  'innehåll': 'Innehåll',
+  'kund': 'Kund',
+  'företag': 'Företag',
+  'ekonomi': 'Ekonomi',
+  'layout': 'Layout',
+  'premium': 'Premium / Flersidig',
+};
+
+// Category colors for UI
+export const BLOCK_CATEGORY_COLORS: Record<string, { hover: string; border: string; bg: string; text: string }> = {
+  'innehåll': { hover: 'hover:border-blue-500 hover:bg-blue-50', border: 'border-blue-300', bg: 'bg-blue-50', text: 'text-blue-700' },
+  'kund':     { hover: 'hover:border-teal-500 hover:bg-teal-50', border: 'border-teal-300', bg: 'bg-teal-50', text: 'text-teal-700' },
+  'företag':  { hover: 'hover:border-green-500 hover:bg-green-50', border: 'border-green-300', bg: 'bg-green-50', text: 'text-green-700' },
+  'ekonomi':  { hover: 'hover:border-indigo-500 hover:bg-indigo-50', border: 'border-indigo-300', bg: 'bg-indigo-50', text: 'text-indigo-700' },
+  'layout':   { hover: 'hover:border-purple-500 hover:bg-purple-50', border: 'border-purple-300', bg: 'bg-purple-50', text: 'text-purple-700' },
+  'premium':  { hover: 'hover:border-amber-500 hover:bg-amber-50', border: 'border-amber-300', bg: 'bg-amber-50', text: 'text-amber-700' },
 };

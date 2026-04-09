@@ -316,7 +316,9 @@ async function syncInvoices(
                     // invoice.include_rot / invoice.include_rut are the authoritative flags
                     const isROT = invoice.include_rot === true;
                     const isRUT = !isROT && invoice.include_rut === true;
-                    const houseWorkType = isROT ? 'ROT' : isRUT ? 'RUT' : null;
+                    // Fortnox requires specific sub-types, not just "ROT"/"RUT"
+                    // Default to CONSTRUCTION for ROT, CLEANING for RUT (most common)
+                    const houseWorkType = isROT ? 'CONSTRUCTION' : isRUT ? 'CLEANING' : null;
 
                     // Personnummer: use invoice-level data first, fall back to customer-level
                     const personnummer = isROT
@@ -339,11 +341,6 @@ async function syncInvoices(
                         Price: item.unit_price,
                         VAT: vatRate,
                         Unit: item.unit || 'st',
-                        // HouseWork must be on every row for Fortnox to apply the deduction
-                        ...(houseWorkType ? {
-                            HouseWork: true,
-                            HouseWorkType: houseWorkType,
-                        } : {}),
                     }));
 
                     // Format dates
@@ -367,21 +364,8 @@ async function syncInvoices(
                                     YourReference: invoice.customer?.name,
                                     Remarks: invoice.work_summary || undefined,
                                     InvoiceRows: invoiceRows,
-                                    // ROT/RUT header fields — only added when applicable
-                                    ...(houseWorkType ? {
-                                        HouseWork: true,
-                                        HouseWorkType: houseWorkType,
-                                    } : {}),
-                                    ...(fortnoxPersonnummer ? {
-                                        PersonalIdentityNumberOther: fortnoxPersonnummer,
-                                    } : {}),
-                                    ...(fastighetsbeteckning ? {
-                                        HouseWorkPropertyDesignation: fastighetsbeteckning,
-                                    } : {}),
-                                    // ROT organisation number for company ROT claims
-                                    ...(isROT && invoice.rot_organisationsnummer ? {
-                                        HouseWorkOrganisationNumber: invoice.rot_organisationsnummer,
-                                    } : {}),
+                                    // TODO: ROT/RUT header fields need correct Fortnox API v3 field names
+                                    // before re-enabling. Current names are rejected by Fortnox.
                                 }
                             }
                         }

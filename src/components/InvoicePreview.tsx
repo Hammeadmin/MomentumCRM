@@ -28,7 +28,8 @@ function InvoicePreview({
   const vatAmount = invoice.vat_amount || subtotal * 0.25;
   const total = invoice.amount || 0;
   const rotAmount = invoice.rot_amount || 0;
-  const finalAmount = total - rotAmount;
+  const rutAmount = (invoice as any).rut_amount || 0;
+  const finalAmount = total - rotAmount - rutAmount;
 
   // Extract settings and design options with defaults
   const paymentTerms = template?.settings?.default_payment_terms || 30; // Or from systemSettings?
@@ -363,16 +364,22 @@ function InvoicePreview({
                 <span>{formatCurrency(invoice.amount)}</span>
               </div>
               {rotAmount > 0 && (
-                <>
-                  <div className="flex justify-between text-sm text-green-600">
-                    <span>ROT-avdrag (30%):</span>
-                    <span className="font-medium">-{formatCurrency(rotAmount)}</span>
-                  </div>
-                  <div className="flex justify-between text-xl font-bold text-green-700 pt-2 border-t border-green-300">
-                    <span>Att betala efter ROT:</span>
-                    <span>{formatCurrency(finalAmount)}</span>
-                  </div>
-                </>
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>ROT-avdrag (30%):</span>
+                  <span className="font-medium">-{formatCurrency(rotAmount)}</span>
+                </div>
+              )}
+              {rutAmount > 0 && (
+                <div className="flex justify-between text-sm text-purple-600">
+                  <span>RUT-avdrag:</span>
+                  <span className="font-medium">-{formatCurrency(rutAmount)}</span>
+                </div>
+              )}
+              {(rotAmount > 0 || rutAmount > 0) && (
+                <div className="flex justify-between text-xl font-bold text-green-700 pt-2 border-t border-green-300">
+                  <span>Att betala efter avdrag:</span>
+                  <span>{formatCurrency(finalAmount)}</span>
+                </div>
               )}
             </div>
           </div>

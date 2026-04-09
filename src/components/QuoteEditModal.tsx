@@ -5,12 +5,19 @@ import {
     Minus,
     AlertCircle,
     Package,
-    Loader2
+    Loader2,
+    Mail,
+    Phone,
+    MapPin,
+    Building2,
+    Edit2,
+    Save
 } from 'lucide-react';
 import {
     createQuote,
     updateQuote,
     createCustomer,
+    updateCustomer,
     formatCurrency
 } from '../lib/database';
 import { useToast } from '../hooks/useToast';
@@ -61,6 +68,13 @@ interface QuoteEditModalProps {
     companyInfo: any;
     organisationId: string;
     onSave: () => Promise<void>;
+    /** Pre-fill data when creating from a lead */
+    initialData?: {
+        customer_id?: string;
+        lead_id?: string;
+        title?: string;
+        description?: string;
+    } | null;
 }
 
 export default function QuoteEditModal({
@@ -72,7 +86,8 @@ export default function QuoteEditModal({
     templates,
     companyInfo,
     organisationId,
-    onSave
+    onSave,
+    initialData
 }: QuoteEditModalProps) {
     const { error: showToastError, success } = useToast();
     const [loading, setLoading] = useState(false);
@@ -81,15 +96,24 @@ export default function QuoteEditModal({
     const [showProductLibrary, setShowProductLibrary] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<QuoteTemplate | null>(null);
 
+    const [isEditingExistingCustomer, setIsEditingExistingCustomer] = useState(false);
+    const [isSavingCustomer, setIsSavingCustomer] = useState(false);
+    const [existingCustomerForm, setExistingCustomerForm] = useState<Partial<Customer>>({});
+
     const [isManualCustomer, setIsManualCustomer] = useState(false);
     const [manualCustomerForm, setManualCustomerForm] = useState({
         name: '',
         email: '',
+        phone_number: '',
         org_number: '',
         customer_type: 'company' as 'company' | 'private',
         address: '',
         postal_code: '',
-        city: ''
+        city: '',
+        sales_area: '',
+        vat_handling: '25%',
+        e_invoice_address: '',
+        invoice_delivery_method: 'e-post',
     });
 
     const [quoteForm, setQuoteForm] = useState<QuoteFormData>({
@@ -122,7 +146,6 @@ export default function QuoteEditModal({
                         description: item.description,
                         quantity: item.quantity,
                         unit_price: item.unit_price,
-                        // Assuming these might exist on line items or needed for processing
                     }))
                     : [{ description: '', quantity: 1, unit_price: 0 }],
                 include_rot: quote.include_rot || false,
@@ -134,6 +157,25 @@ export default function QuoteEditModal({
                 rut_personnummer: (quote as any).rut_personnummer || null,
                 rut_amount: (quote as any).rut_amount || 0
             });
+        } else if (initialData) {
+            // Pre-fill from lead data
+            setQuoteForm({
+                customer_id: initialData.customer_id || '',
+                lead_id: initialData.lead_id || '',
+                title: initialData.title || '',
+                description: initialData.description || '',
+                valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                line_items: [{ description: '', quantity: 1, unit_price: 0 }],
+                include_rot: false,
+                rot_personnummer: null,
+                rot_organisationsnummer: null,
+                rot_fastighetsbeteckning: null,
+                rot_amount: 0,
+                include_rut: false,
+                rut_personnummer: null,
+                rut_amount: 0
+            });
+            setSelectedTemplate(null);
         } else {
             // Reset form for create mode
             setQuoteForm({
@@ -155,7 +197,45 @@ export default function QuoteEditModal({
             setSelectedTemplate(null);
         }
         setError(null);
-    }, [quote, isOpen]);
+        setIsManualCustomer(false);
+        setIsEditingExistingCustomer(false);
+        setExistingCustomerForm({});
+        setManualCustomerForm({
+            name: '', email: '', phone_number: '', org_number: '',
+            customer_type: 'company', address: '', postal_code: '', city: '',
+            sales_area: '', vat_handling: '25%', e_invoice_address: '', invoice_delivery_method: 'e-post',
+        });
+    }, [quote, isOpen, initialData]);
+
+    // Populate the inline customer form whenever the selected customer changes
+    useEffect(() => {
+        if (!quoteForm.customer_id) {
+            setIsEditingExistingCustomer(false);
+            setExistingCustomerForm({});
+            return;
+        }
+        const found = customers.find(c => c.id === quoteForm.customer_id);
+        if (found) setExistingCustomerForm({ ...found });
+    }, [quoteForm.customer_id, customers]);
+
+    const handleUpdateExistingCustomer = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!quoteForm.customer_id) return;
+        setIsSavingCustomer(true);
+        try {
+            const { error: updateError } = await updateCustomer(quoteForm.customer_id, existingCustomerForm);
+            if (updateError) {
+                setError(`Kunde inte uppdatera kund: ${updateError.message}`);
+            } else {
+                success('Kund uppdaterad', `${existingCustomerForm.name} har sparats.`);
+                setIsEditingExistingCustomer(false);
+            }
+        } catch (err: any) {
+            setError('Kunde inte uppdatera kund.');
+        } finally {
+            setIsSavingCustomer(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -397,54 +477,369 @@ export default function QuoteEditModal({
                                 </button>
                             </div>
                             {isManualCustomer ? (
-                                <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                    <input
-                                        type="text"
-                                        required
-                                        value={manualCustomerForm.name}
-                                        onChange={e => setManualCustomerForm(prev => ({ ...prev, name: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                        placeholder="Kundnamn *"
-                                    />
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <select
-                                            value={manualCustomerForm.customer_type}
-                                            onChange={e => setManualCustomerForm(prev => ({ ...prev, customer_type: e.target.value as 'company' | 'private' }))}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                        >
-                                            <option value="company">Företag</option>
-                                            <option value="private">Privatperson</option>
-                                        </select>
+                                <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                    {/* Row 1: Name (required) */}
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Kundnamn *</label>
                                         <input
                                             type="text"
-                                            value={manualCustomerForm.org_number}
-                                            onChange={e => setManualCustomerForm(prev => ({ ...prev, org_number: e.target.value }))}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                            placeholder={manualCustomerForm.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}
+                                            required
+                                            value={manualCustomerForm.name}
+                                            onChange={e => setManualCustomerForm(prev => ({ ...prev, name: e.target.value }))}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="Företagsnamn eller för- och efternamn"
                                         />
                                     </div>
-                                    <input
-                                        type="email"
-                                        value={manualCustomerForm.email}
-                                        onChange={e => setManualCustomerForm(prev => ({ ...prev, email: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                        placeholder="E-post"
-                                    />
+
+                                    {/* Row 2: Type + Org/Person nummer */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Kundtyp</label>
+                                            <select
+                                                value={manualCustomerForm.customer_type}
+                                                onChange={e => setManualCustomerForm(prev => ({ ...prev, customer_type: e.target.value as 'company' | 'private', org_number: '' }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="company">Företag</option>
+                                                <option value="private">Privatperson</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                {manualCustomerForm.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={manualCustomerForm.org_number}
+                                                onChange={e => setManualCustomerForm(prev => ({ ...prev, org_number: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                                placeholder={manualCustomerForm.customer_type === 'company' ? '556xxx-xxxx' : 'YYYYMMDD-XXXX'}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Row 3: Email + Phone */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">E-post</label>
+                                            <input
+                                                type="email"
+                                                value={manualCustomerForm.email}
+                                                onChange={e => setManualCustomerForm(prev => ({ ...prev, email: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                                placeholder="kund@exempel.se"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Telefonnummer</label>
+                                            <input
+                                                type="tel"
+                                                value={manualCustomerForm.phone_number}
+                                                onChange={e => setManualCustomerForm(prev => ({ ...prev, phone_number: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                                placeholder="070-123 45 67"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Row 4: Address */}
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Adress</label>
+                                        <input
+                                            type="text"
+                                            value={manualCustomerForm.address}
+                                            onChange={e => setManualCustomerForm(prev => ({ ...prev, address: e.target.value }))}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="Gatuadress"
+                                        />
+                                    </div>
+
+                                    {/* Row 5: Postal code + City */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Postnummer</label>
+                                            <input
+                                                type="text"
+                                                value={manualCustomerForm.postal_code}
+                                                onChange={e => setManualCustomerForm(prev => ({ ...prev, postal_code: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                                placeholder="123 45"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Stad</label>
+                                            <input
+                                                type="text"
+                                                value={manualCustomerForm.city}
+                                                onChange={e => setManualCustomerForm(prev => ({ ...prev, city: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                                placeholder="Stockholm"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Row 6: Sales area + VAT handling */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Försäljningsområde</label>
+                                            <input
+                                                type="text"
+                                                value={manualCustomerForm.sales_area}
+                                                onChange={e => setManualCustomerForm(prev => ({ ...prev, sales_area: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                                placeholder="t.ex. Stockholm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Momshantering</label>
+                                            <select
+                                                value={manualCustomerForm.vat_handling}
+                                                onChange={e => setManualCustomerForm(prev => ({ ...prev, vat_handling: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="25%">25% moms</option>
+                                                <option value="12%">12% moms</option>
+                                                <option value="6%">6% moms</option>
+                                                <option value="0%">Momsfri (0%)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Row 7: Invoice delivery + E-invoice address */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Fakturaleverans</label>
+                                            <select
+                                                value={manualCustomerForm.invoice_delivery_method}
+                                                onChange={e => setManualCustomerForm(prev => ({ ...prev, invoice_delivery_method: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="e-post">E-post</option>
+                                                <option value="e-faktura">E-faktura</option>
+                                                <option value="post">Post</option>
+                                            </select>
+                                        </div>
+                                        {manualCustomerForm.invoice_delivery_method === 'e-faktura' && (
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">E-fakturaadress</label>
+                                                <input
+                                                    type="text"
+                                                    value={manualCustomerForm.e_invoice_address}
+                                                    onChange={e => setManualCustomerForm(prev => ({ ...prev, e_invoice_address: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                                    placeholder="GLN / PEPPOL-ID"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             ) : (
-                                <select
-                                    required={!isManualCustomer}
-                                    value={quoteForm.customer_id}
-                                    onChange={(e) => setQuoteForm(prev => ({ ...prev, customer_id: e.target.value }))}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                >
-                                    <option value="">Välj kund</option>
-                                    {customers.map((customer) => (
-                                        <option key={customer.id} value={customer.id}>
-                                            {customer.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                <>
+                                    <select
+                                        required={!isManualCustomer}
+                                        value={quoteForm.customer_id}
+                                        onChange={(e) => {
+                                            setQuoteForm(prev => ({ ...prev, customer_id: e.target.value }));
+                                            setIsEditingExistingCustomer(false);
+                                        }}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        <option value="">Välj kund</option>
+                                        {customers.map((customer) => (
+                                            <option key={customer.id} value={customer.id}>
+                                                {customer.name}
+                                            </option>
+                                        ))}
+                                    </select>
+
+                                    {/* Customer info panel */}
+                                    {quoteForm.customer_id && (
+                                        <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
+                                            {!isEditingExistingCustomer ? (
+                                                /* ── Read-only view ── */
+                                                <div className="p-4">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                                            Kundinformation
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setIsEditingExistingCustomer(true)}
+                                                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-md hover:bg-slate-100 hover:border-slate-300 transition-colors"
+                                                        >
+                                                            <Edit2 className="w-3 h-3" />
+                                                            Redigera
+                                                        </button>
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        {existingCustomerForm.org_number && (
+                                                            <div className="flex items-center gap-2 text-sm text-slate-700">
+                                                                <Building2 className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                                                <span className="text-slate-500 text-xs">Org.nr:</span>
+                                                                <span>{existingCustomerForm.org_number}</span>
+                                                            </div>
+                                                        )}
+                                                        {existingCustomerForm.email && (
+                                                            <div className="flex items-center gap-2 text-sm text-slate-700">
+                                                                <Mail className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                                                <a href={`mailto:${existingCustomerForm.email}`} className="hover:text-blue-600 transition-colors truncate">
+                                                                    {existingCustomerForm.email}
+                                                                </a>
+                                                            </div>
+                                                        )}
+                                                        {existingCustomerForm.phone_number && (
+                                                            <div className="flex items-center gap-2 text-sm text-slate-700">
+                                                                <Phone className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                                                <a href={`tel:${existingCustomerForm.phone_number}`} className="hover:text-blue-600 transition-colors">
+                                                                    {existingCustomerForm.phone_number}
+                                                                </a>
+                                                            </div>
+                                                        )}
+                                                        {(existingCustomerForm.address || existingCustomerForm.city) && (
+                                                            <div className="flex items-start gap-2 text-sm text-slate-700">
+                                                                <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
+                                                                <span>
+                                                                    {existingCustomerForm.address}
+                                                                    {existingCustomerForm.address && existingCustomerForm.city && ', '}
+                                                                    {existingCustomerForm.postal_code && `${existingCustomerForm.postal_code} `}
+                                                                    {existingCustomerForm.city}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {!existingCustomerForm.org_number && !existingCustomerForm.email && !existingCustomerForm.phone_number && !existingCustomerForm.address && (
+                                                            <p className="text-xs text-slate-400 italic">Ingen ytterligare information registrerad.</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                /* ── Edit view ── */
+                                                <form onSubmit={handleUpdateExistingCustomer}>
+                                                    <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-200">
+                                                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                                            Redigera kund
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const original = customers.find(c => c.id === quoteForm.customer_id);
+                                                                if (original) setExistingCustomerForm({ ...original });
+                                                                setIsEditingExistingCustomer(false);
+                                                            }}
+                                                            className="text-slate-400 hover:text-slate-600 transition-colors"
+                                                            title="Avbryt"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                    <div className="p-4 space-y-3">
+                                                        {/* Name */}
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-slate-600 mb-1">Kundnamn</label>
+                                                            <input
+                                                                type="text"
+                                                                value={existingCustomerForm.name || ''}
+                                                                onChange={e => setExistingCustomerForm(prev => ({ ...prev, name: e.target.value }))}
+                                                                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                            />
+                                                        </div>
+                                                        {/* Org number */}
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-slate-600 mb-1">Org.nummer</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={existingCustomerForm.org_number || ''}
+                                                                    onChange={e => setExistingCustomerForm(prev => ({ ...prev, org_number: e.target.value }))}
+                                                                    placeholder="556xxx-xxxx"
+                                                                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+                                                                <input
+                                                                    type="tel"
+                                                                    value={existingCustomerForm.phone_number || ''}
+                                                                    onChange={e => setExistingCustomerForm(prev => ({ ...prev, phone_number: e.target.value }))}
+                                                                    placeholder="070-123 45 67"
+                                                                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        {/* Email */}
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-slate-600 mb-1">E-post</label>
+                                                            <input
+                                                                type="email"
+                                                                value={existingCustomerForm.email || ''}
+                                                                onChange={e => setExistingCustomerForm(prev => ({ ...prev, email: e.target.value }))}
+                                                                placeholder="kund@exempel.se"
+                                                                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                            />
+                                                        </div>
+                                                        {/* Address */}
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-slate-600 mb-1">Adress</label>
+                                                            <input
+                                                                type="text"
+                                                                value={existingCustomerForm.address || ''}
+                                                                onChange={e => setExistingCustomerForm(prev => ({ ...prev, address: e.target.value }))}
+                                                                placeholder="Gatuadress"
+                                                                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                            />
+                                                        </div>
+                                                        {/* Postal + City */}
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-slate-600 mb-1">Postnummer</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={existingCustomerForm.postal_code || ''}
+                                                                    onChange={e => setExistingCustomerForm(prev => ({ ...prev, postal_code: e.target.value }))}
+                                                                    placeholder="123 45"
+                                                                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-slate-600 mb-1">Stad</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={existingCustomerForm.city || ''}
+                                                                    onChange={e => setExistingCustomerForm(prev => ({ ...prev, city: e.target.value }))}
+                                                                    placeholder="Stockholm"
+                                                                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        {/* Footer buttons */}
+                                                        <div className="flex justify-end gap-2 pt-1">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const original = customers.find(c => c.id === quoteForm.customer_id);
+                                                                    if (original) setExistingCustomerForm({ ...original });
+                                                                    setIsEditingExistingCustomer(false);
+                                                                }}
+                                                                className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors"
+                                                            >
+                                                                Avbryt
+                                                            </button>
+                                                            <button
+                                                                type="submit"
+                                                                disabled={isSavingCustomer}
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                                                            >
+                                                                {isSavingCustomer
+                                                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    : <Save className="w-3 h-3" />}
+                                                                Spara
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </form>
+                                            )}
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
 

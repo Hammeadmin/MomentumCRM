@@ -284,6 +284,7 @@ function CalendarEventCard({
             )}
           </div>
 
+
           {/* Assigned User (if not showing avatar) */}
           {!showUserAvatar && event.assigned_to && (
             <div className="flex items-center text-xs text-gray-500 mt-2">

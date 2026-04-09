@@ -22,6 +22,7 @@ function Calendar() {
     const saved = localStorage.getItem('calendarViewMode');
     return (saved as ViewMode) || 'calendar';
   });
+  const [newEventTrigger, setNewEventTrigger] = useState(0);
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [workers, setWorkers] = useState<UserProfile[]>([]);
@@ -136,6 +137,7 @@ function Calendar() {
             <RefreshCw className="w-5 h-5" />
           </button>
           <button
+            onClick={() => setNewEventTrigger(t => t + 1)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-cyan-500 hover:bg-cyan-600 rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -146,7 +148,7 @@ function Calendar() {
 
       {/* View Content */}
       {viewMode === 'calendar' ? (
-        <CalendarView />
+        <CalendarView newEventTrigger={newEventTrigger} />
       ) : (
         <ScheduleSwimlanes
           events={filteredEvents}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
     Plus, X, Rss, Zap, Briefcase, Filter, User, Phone, Mail, MapPin, Edit, Trash2, Calendar,
     MessageSquare, DollarSign, ChevronDown, CheckSquare, Square, RefreshCw, AlertTriangle, Target, Loader2,
@@ -497,6 +497,7 @@ const LeadFormModal = ({ isOpen, onClose, onSave, leadToEdit, organisationId }: 
 const LeadManagement: React.FC = () => {
     const { user, organisationId } = useAuth();
     const location = useLocation();
+    const navigate = useNavigate();
     const { success, error: showError } = useToast();
     const { leads: leadsTranslations } = useTranslation();
     const [filters, setFilters] = useState<LeadFilters>({});
@@ -514,7 +515,7 @@ const LeadManagement: React.FC = () => {
     const [loading, setLoading] = useState({ tasks: true, rss: true, ai: false, analytics: true });
     const [aiSuggestions, setAiSuggestions] = useState<AILeadSuggestion[]>([]);
     const [analytics, setAnalytics] = useState<LeadAnalytics | null>(null);
-    const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
+    const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
 
     // Reminder State
     const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
@@ -1107,10 +1108,36 @@ const LeadManagement: React.FC = () => {
                                     </div>
 
                                     {/* Quick Actions */}
-                                    <div className="flex gap-2 mb-4">
-                                        <Button variant="outline" size="sm" icon={<PhoneCall className="w-4 h-4" />}>Ring</Button>
-                                        <Button variant="outline" size="sm" icon={<Mail className="w-4 h-4" />}>E-post</Button>
-                                        <Button variant="outline" size="sm" icon={<Calendar className="w-4 h-4" />}>Boka möte</Button>
+                                    <div className="flex gap-2 mb-4 flex-wrap">
+                                        {selectedLead.customer?.phone_number ? (
+                                            <a
+                                                href={`tel:${selectedLead.customer.phone_number}`}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                                            >
+                                                <PhoneCall className="w-4 h-4" />
+                                                Ring
+                                            </a>
+                                        ) : (
+                                            <button disabled className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed">
+                                                <PhoneCall className="w-4 h-4" />
+                                                Ring
+                                            </button>
+                                        )}
+                                        {selectedLead.customer?.email ? (
+                                            <a
+                                                href={`mailto:${selectedLead.customer.email}`}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                                            >
+                                                <Mail className="w-4 h-4" />
+                                                E-post
+                                            </a>
+                                        ) : (
+                                            <button disabled className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed">
+                                                <Mail className="w-4 h-4" />
+                                                E-post
+                                            </button>
+                                        )}
+                                        <Button variant="outline" size="sm" icon={<Calendar className="w-4 h-4" />} onClick={() => navigate('/app/calendar')}>Boka möte</Button>
                                         <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => selectedLead && handleCreateQuote(selectedLead)}>{quotePreviewLoading ? 'Laddar...' : 'Skapa offert'}</Button>
                                     </div>
 

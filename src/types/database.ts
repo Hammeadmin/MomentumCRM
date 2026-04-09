@@ -614,6 +614,15 @@ export interface OrderActivity {
   user?: UserProfile;
 }
 
+export interface CalendarEventNote {
+  id: string;
+  event_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  user?: Pick<UserProfile, 'id' | 'full_name' | 'avatar_url'>;
+}
+
 export interface LeadNote {
   id: string;
   lead_id: string;
