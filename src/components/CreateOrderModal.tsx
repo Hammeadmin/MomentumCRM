@@ -7,14 +7,15 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-    X, Loader2, UserPlus
+    X, Loader2, UserPlus, Edit2, Save
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { createOrder } from '../lib/orders';
-import { getCustomers, getTeamMembers, createCustomer } from '../lib/database';
+import { getCustomers, getTeamMembers, createCustomer, updateCustomer } from '../lib/database';
 import { supabase } from '../lib/supabase';
 import ROTFields from './ROTFields';
+import RUTFields from './RUTFields';
 import type { Customer, UserProfile } from '../types/database';
 import {
     JOB_TYPE_LABELS,
@@ -63,6 +64,10 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
         rot_organisationsnummer: null as string | null,
         rot_fastighetsbeteckning: null as string | null,
         rot_amount: 0,
+        include_rut: false,
+        rut_personnummer: null as string | null,
+        rut_amount: 0,
+        region: '',
     });
 
     const [customers, setCustomers] = useState<Customer[]>([]);
@@ -110,6 +115,8 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             include_rot: false, rot_personnummer: null,
             rot_organisationsnummer: null, rot_fastighetsbeteckning: null,
             rot_amount: 0,
+            include_rut: false, rut_personnummer: null, rut_amount: 0,
+            region: '',
         });
         setIsNewCustomer(false);
         setNewCustomerForm({
@@ -207,6 +214,10 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                 rot_organisationsnummer: formData.rot_organisationsnummer,
                 rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
                 rot_amount: formData.rot_amount,
+                include_rut: formData.include_rut,
+                rut_personnummer: formData.rut_personnummer,
+                rut_amount: formData.rut_amount,
+                region: formData.region.trim() || null,
             };
 
             const result = await createOrder(orderData);
@@ -381,17 +392,39 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                                         <p className="text-xs text-blue-700">Kunden skapas automatiskt när du skapar ordern.</p>
                                     </div>
                                 ) : (
-                                    <select
-                                        required={!isNewCustomer}
-                                        value={formData.customer_id}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, customer_id: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-                                    >
-                                        <option value="">Välj kund...</option>
-                                        {customers.map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
-                                    </select>
+                                    <>
+                                        <select
+                                            required={!isNewCustomer}
+                                            value={formData.customer_id}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, customer_id: e.target.value }))}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                                        >
+                                            <option value="">Välj kund...</option>
+                                            {customers.map(c => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                        {formData.customer_id && (() => {
+                                            const sel = customers.find(c => c.id === formData.customer_id);
+                                            if (!sel) return null;
+                                            return (
+                                                <div className="mt-2 border border-gray-200 rounded-lg p-3 bg-gray-50 text-sm space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-medium text-gray-900">{sel.name}</span>
+                                                        <span className="text-xs text-gray-400">{(sel as any).customer_type === 'company' ? 'Företag' : 'Privatperson'}</span>
+                                                    </div>
+                                                    {(sel as any).email && <p className="text-gray-500">{(sel as any).email}</p>}
+                                                    {(sel as any).phone_number && <p className="text-gray-500">{(sel as any).phone_number}</p>}
+                                                    {[(sel as any).address, (sel as any).postal_code, (sel as any).city].filter(Boolean).length > 0 && (
+                                                        <p className="text-gray-500">{[(sel as any).address, (sel as any).postal_code, (sel as any).city].filter(Boolean).join(', ')}</p>
+                                                    )}
+                                                    {(sel as any).org_number && (
+                                                        <p className="text-gray-500">{(sel as any).customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}: {(sel as any).org_number}</p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </>
                                 )}
                             </div>
 
@@ -420,8 +453,8 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                                 />
                             </div>
 
-                            {/* ROT Fields */}
-                            <div className="border-t border-gray-200 pt-4">
+                            {/* ROT + RUT Fields */}
+                            <div className="border-t border-gray-200 pt-4 space-y-3">
                                 <ROTFields
                                     data={{
                                         include_rot: formData.include_rot,
@@ -430,9 +463,22 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                                         rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
                                         rot_amount: formData.rot_amount,
                                     }}
-                                    onChange={(rotData) =>
-                                        setFormData(prev => ({ ...prev, ...rotData }))
-                                    }
+                                    onChange={(rotData) => {
+                                        const reset = rotData.include_rot ? { include_rut: false, rut_personnummer: null, rut_amount: 0 } : {};
+                                        setFormData(prev => ({ ...prev, ...rotData, ...reset }));
+                                    }}
+                                    totalAmount={parseFloat(formData.value) || 0}
+                                />
+                                <RUTFields
+                                    data={{
+                                        include_rut: formData.include_rut,
+                                        rut_personnummer: formData.rut_personnummer,
+                                        rut_amount: formData.rut_amount,
+                                    }}
+                                    onChange={(rutData) => {
+                                        const reset = rutData.include_rut ? { include_rot: false, rot_personnummer: null, rot_organisationsnummer: null, rot_fastighetsbeteckning: null, rot_amount: 0 } : {};
+                                        setFormData(prev => ({ ...prev, ...rutData, ...reset }));
+                                    }}
                                     totalAmount={parseFloat(formData.value) || 0}
                                 />
                             </div>
@@ -504,6 +550,18 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                                         placeholder="T.ex. Hemsida, telefon, rekommendation..."
                                     />
                                 </div>
+                            </div>
+
+                            {/* Region / Säljområde */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Säljområde / Region</label>
+                                <input
+                                    type="text"
+                                    value={formData.region}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                                    placeholder="T.ex. Stockholm, Göteborg..."
+                                />
                             </div>
 
                             {/* Assignment Section */}

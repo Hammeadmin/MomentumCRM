@@ -24,6 +24,8 @@ import {
     Building,
     Clock,
     Edit,
+    Edit2,
+    Save,
     CheckCircle,
     AlertCircle,
     Send,
@@ -46,7 +48,7 @@ import {
     createOrderNote,
     type OrderWithRelations
 } from '../lib/orders';
-import { formatDate, formatDateTime } from '../lib/database';
+import { formatDate, formatDateTime, updateCustomer } from '../lib/database';
 import { ORDER_STATUS_LABELS, type OrderStatus, type OrderNote, type OrderActivity } from '../types/database';
 import { Button } from '../components/ui';
 import OrderDetailModal from '../components/OrderDetailModal';
@@ -190,6 +192,12 @@ export default function OrderDetailPage() {
     const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
     const [statusChangeLoading, setStatusChangeLoading] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [isEditingCustomer, setIsEditingCustomer] = useState(false);
+    const [customerEditForm, setCustomerEditForm] = useState({
+        name: '', email: '', phone_number: '', org_number: '',
+        address: '', postal_code: '', city: '',
+    });
+    const [savingCustomer, setSavingCustomer] = useState(false);
 
     useEffect(() => {
         if (id) {
@@ -218,6 +226,30 @@ export default function OrderDetailPage() {
             showError('Kunde inte ladda order', err.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleUpdateCustomer = async () => {
+        if (!order?.customer) return;
+        setSavingCustomer(true);
+        try {
+            const { error } = await updateCustomer(order.customer.id, {
+                name: customerEditForm.name || undefined,
+                email: customerEditForm.email || null,
+                phone_number: customerEditForm.phone_number || null,
+                org_number: customerEditForm.org_number || null,
+                address: customerEditForm.address || null,
+                postal_code: customerEditForm.postal_code || null,
+                city: customerEditForm.city || null,
+            } as any);
+            if (error) { showError('Fel', (error as any).message || 'Kunde inte spara.'); return; }
+            success('Sparat', 'Kunduppgifter uppdaterade.');
+            setIsEditingCustomer(false);
+            loadOrderData();
+        } catch {
+            showError('Fel', 'Kunde inte spara kunduppgifter.');
+        } finally {
+            setSavingCustomer(false);
         }
     };
 
@@ -360,48 +392,89 @@ export default function OrderDetailPage() {
                         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Kund</h3>
                         {order.customer ? (
                             <div className="space-y-3">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                                        <span className="text-white font-semibold text-sm">
-                                            {order.customer.name?.charAt(0).toUpperCase()}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <p className="font-semibold text-gray-900">{order.customer.name}</p>
-                                        <p className="text-sm text-gray-500">{order.customer.customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2 pt-3 border-t border-gray-100">
-                                    {order.customer.email && (
-                                        <a href={`mailto:${order.customer.email}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600">
-                                            <Mail className="w-4 h-4" />
-                                            {order.customer.email}
-                                        </a>
-                                    )}
-                                    {order.customer.phone_number && (
-                                        <a href={`tel:${order.customer.phone_number}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600">
-                                            <Phone className="w-4 h-4" />
-                                            {order.customer.phone_number}
-                                        </a>
-                                    )}
-                                    {order.customer.address && (
-                                        <div className="flex items-start gap-2 text-sm text-gray-600">
-                                            <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                                            <span>
-                                                {order.customer.address}
-                                                {order.customer.postal_code && `, ${order.customer.postal_code}`}
-                                                {order.customer.city && ` ${order.customer.city}`}
-                                            </span>
+                                {!isEditingCustomer ? (
+                                    <>
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex items-start gap-3">
+                                                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-white font-semibold text-sm">
+                                                        {order.customer.name?.charAt(0).toUpperCase()}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-gray-900">{order.customer.name}</p>
+                                                    <p className="text-sm text-gray-500">{order.customer.customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                className="text-xs text-blue-600 hover:underline flex items-center gap-1 flex-shrink-0"
+                                                onClick={() => {
+                                                    setCustomerEditForm({
+                                                        name: order.customer!.name || '',
+                                                        email: order.customer!.email || '',
+                                                        phone_number: order.customer!.phone_number || '',
+                                                        org_number: order.customer!.org_number || '',
+                                                        address: order.customer!.address || '',
+                                                        postal_code: order.customer!.postal_code || '',
+                                                        city: order.customer!.city || '',
+                                                    });
+                                                    setIsEditingCustomer(true);
+                                                }}
+                                            >
+                                                <Edit2 className="w-3 h-3" /> Redigera
+                                            </button>
                                         </div>
-                                    )}
-                                    {order.customer.org_number && (
-                                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                                            <Building className="w-4 h-4" />
-                                            Org.nr: {order.customer.org_number}
+                                        <div className="space-y-2 pt-3 border-t border-gray-100">
+                                            {order.customer.email && (
+                                                <a href={`mailto:${order.customer.email}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600">
+                                                    <Mail className="w-4 h-4" />
+                                                    {order.customer.email}
+                                                </a>
+                                            )}
+                                            {order.customer.phone_number && (
+                                                <a href={`tel:${order.customer.phone_number}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600">
+                                                    <Phone className="w-4 h-4" />
+                                                    {order.customer.phone_number}
+                                                </a>
+                                            )}
+                                            {(order.customer.address || order.customer.postal_code || order.customer.city) && (
+                                                <div className="flex items-start gap-2 text-sm text-gray-600">
+                                                    <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                                    <span>{[order.customer.address, order.customer.postal_code, order.customer.city].filter(Boolean).join(', ')}</span>
+                                                </div>
+                                            )}
+                                            {order.customer.org_number && (
+                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                    <Building className="w-4 h-4" />
+                                                    {order.customer.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}: {order.customer.org_number}
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
+                                    </>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Namn *" value={customerEditForm.name} onChange={e => setCustomerEditForm(p => ({ ...p, name: e.target.value }))} />
+                                        <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="E-post" value={customerEditForm.email} onChange={e => setCustomerEditForm(p => ({ ...p, email: e.target.value }))} />
+                                        <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Telefon" value={customerEditForm.phone_number} onChange={e => setCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))} />
+                                        <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder={order.customer.customer_type === 'company' ? 'Org.nummer (556xxx-xxxx)' : 'Personnummer (ÅÅMMDD-XXXX)'} value={customerEditForm.org_number} onChange={e => setCustomerEditForm(p => ({ ...p, org_number: e.target.value }))} />
+                                        <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Adress" value={customerEditForm.address} onChange={e => setCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
+                                        <div className="flex gap-2">
+                                            <input className="w-24 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Postnr" value={customerEditForm.postal_code} onChange={e => setCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
+                                            <input className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Stad" value={customerEditForm.city} onChange={e => setCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                                        </div>
+                                        <div className="flex gap-2 justify-end pt-1">
+                                            <button className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200" onClick={() => setIsEditingCustomer(false)}>Avbryt</button>
+                                            <button
+                                                className="text-sm font-medium bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50"
+                                                onClick={handleUpdateCustomer}
+                                                disabled={savingCustomer}
+                                            >
+                                                {savingCustomer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                                Spara
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <p className="text-gray-500 text-sm">Ingen kund kopplad</p>
