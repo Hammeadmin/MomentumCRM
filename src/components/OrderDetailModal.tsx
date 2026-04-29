@@ -16,12 +16,14 @@ import {
   Save,
   Trash2,
   Edit,
+  Edit2,
   User,
   Users,
   Users2,
   Mail,
   Phone,
   MapPin,
+  Building2,
   Star,
   Crown,
   MessageSquare,
@@ -37,7 +39,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { useTranslation } from '../locales/sv';
-import { formatCurrency, formatDate, getTeamMembers, getCustomers } from '../lib/database';
+import { formatCurrency, formatDate, getTeamMembers, getCustomers, updateCustomer } from '../lib/database';
 import { getTeams } from '../lib/teams';
 import {
   getOrder,
@@ -68,7 +70,9 @@ import {
 import type { TeamWithRelations } from '../lib/teams';
 
 import ROTFields from './ROTFields';
+import RUTFields from './RUTFields';
 import ROTInformation from './ROTInformation';
+import RUTInformation from './RUTInformation';
 import OrderStatusBadge from './OrderStatusBadge';
 import OrderStatusDropdown from './OrderStatusDropdown';
 import StatusChangeHistory from './StatusChangeHistory';
@@ -115,6 +119,9 @@ interface EditFormState {
   rot_organisationsnummer: string | null;
   rot_fastighetsbeteckning: string | null;
   rot_amount: number;
+  include_rut: boolean;
+  rut_personnummer: string | null;
+  rut_amount: number;
 }
 
 const buildEditForm = (o: OrderWithRelations | null): EditFormState => ({
@@ -136,6 +143,9 @@ const buildEditForm = (o: OrderWithRelations | null): EditFormState => ({
   rot_organisationsnummer: o?.rot_organisationsnummer || null,
   rot_fastighetsbeteckning: o?.rot_fastighetsbeteckning || null,
   rot_amount: o?.rot_amount || 0,
+  include_rut: o?.include_rut || false,
+  rut_personnummer: o?.rut_personnummer || null,
+  rut_amount: o?.rut_amount || 0,
 });
 
 // ============================================================================
@@ -179,6 +189,11 @@ function OrderDetailModal({
 
   // Attachments
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+
+  // Inline customer edit
+  const [isEditingCustomer, setIsEditingCustomer] = useState(false);
+  const [customerEditForm, setCustomerEditForm] = useState<Partial<Customer>>({});
+  const [savingCustomer, setSavingCustomer] = useState(false);
 
   // Modals
   const [showCommissionModal, setShowCommissionModal] = useState(false);
@@ -239,6 +254,7 @@ function OrderDetailModal({
     // Reset UI state when (re)opening
     setActiveTab('details');
     setIsEditing(false);
+    setIsEditingCustomer(false);
     setNewNote('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, orderId, orderProp?.id]);
@@ -275,6 +291,13 @@ function OrderDetailModal({
       cancelled = true;
     };
   }, [isOpen, organisationId]);
+
+  // Sync customerEditForm whenever selected customer changes
+  useEffect(() => {
+    const selected = customers.find(c => c.id === editFormData.customer_id);
+    if (selected) setCustomerEditForm({ ...selected });
+    setIsEditingCustomer(false);
+  }, [editFormData.customer_id, customers]);
 
   // ---------------------------------------------------------------
   // Mutations
@@ -317,6 +340,9 @@ function OrderDetailModal({
         rot_organisationsnummer: editFormData.rot_organisationsnummer,
         rot_fastighetsbeteckning: editFormData.rot_fastighetsbeteckning,
         rot_amount: editFormData.rot_amount,
+        include_rut: editFormData.include_rut,
+        rut_personnummer: editFormData.rut_personnummer,
+        rut_amount: editFormData.rut_amount,
       };
 
       const result = await updateOrder(order.id, updates);
@@ -335,6 +361,31 @@ function OrderDetailModal({
       showError(kanban.MESSAGES.ERROR_TITLE, kanban.MESSAGES.ERROR_UPDATE);
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const handleUpdateExistingCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerEditForm.id) return;
+    setSavingCustomer(true);
+    try {
+      const { error } = await updateCustomer(customerEditForm.id, {
+        name: customerEditForm.name,
+        email: customerEditForm.email,
+        phone_number: customerEditForm.phone_number,
+        org_number: customerEditForm.org_number,
+        address: customerEditForm.address,
+        postal_code: customerEditForm.postal_code,
+        city: customerEditForm.city,
+      });
+      if (error) { showError('Fel', error.message); return; }
+      success('Klart', 'Kunduppgifter sparade.');
+      setIsEditingCustomer(false);
+      await loadOrder();
+    } catch (err: any) {
+      showError('Fel', 'Kunde inte spara kunduppgifter.');
+    } finally {
+      setSavingCustomer(false);
     }
   };
 
@@ -539,34 +590,145 @@ function OrderDetailModal({
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Kund</label>
-                  <select
-                    value={editFormData.customer_id}
-                    onChange={(e) =>
-                      setEditFormData((prev) => ({ ...prev, customer_id: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  >
-                    <option value="">— Välj kund —</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+              {/* Customer Section */}
+              <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">Kund</label>
+                  {editFormData.customer_id && !isEditingCustomer && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingCustomer(true)}
+                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      Redigera kunduppgifter
+                    </button>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Område</label>
-                  <input
-                    type="text"
-                    placeholder="t.ex. Stockholm, Göteborg"
-                    value={editFormData.region}
-                    onChange={(e) =>
-                      setEditFormData((prev) => ({ ...prev, region: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  />
-                </div>
+                <select
+                  value={editFormData.customer_id}
+                  onChange={(e) =>
+                    setEditFormData((prev) => ({ ...prev, customer_id: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                >
+                  <option value="">— Välj kund —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+
+                {/* Inline customer edit */}
+                {editFormData.customer_id && isEditingCustomer && (
+                  <form onSubmit={handleUpdateExistingCustomer} className="space-y-3 pt-2 border-t border-gray-100">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Redigera kund</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Namn</label>
+                        <input
+                          type="text"
+                          value={customerEditForm.name || ''}
+                          onChange={e => setCustomerEditForm(p => ({ ...p, name: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">E-post</label>
+                        <input
+                          type="email"
+                          value={customerEditForm.email || ''}
+                          onChange={e => setCustomerEditForm(p => ({ ...p, email: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Telefon</label>
+                        <input
+                          type="text"
+                          value={customerEditForm.phone_number || ''}
+                          onChange={e => setCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          {customerEditForm.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}
+                        </label>
+                        <input
+                          type="text"
+                          value={customerEditForm.org_number || ''}
+                          onChange={e => setCustomerEditForm(p => ({ ...p, org_number: e.target.value }))}
+                          placeholder={customerEditForm.customer_type === 'company' ? '556xxx-xxxx' : 'ÅÅMMDD-XXXX'}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Adress</label>
+                        <input
+                          type="text"
+                          value={customerEditForm.address || ''}
+                          onChange={e => setCustomerEditForm(p => ({ ...p, address: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Postnr</label>
+                          <input
+                            type="text"
+                            value={customerEditForm.postal_code || ''}
+                            onChange={e => setCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Stad</label>
+                          <input
+                            type="text"
+                            value={customerEditForm.city || ''}
+                            onChange={e => setCustomerEditForm(p => ({ ...p, city: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const original = customers.find(c => c.id === editFormData.customer_id);
+                          if (original) setCustomerEditForm({ ...original });
+                          setIsEditingCustomer(false);
+                        }}
+                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-md"
+                      >
+                        Avbryt
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={savingCustomer}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {savingCustomer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                        Spara kund
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              {/* Region */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Område</label>
+                <input
+                  type="text"
+                  placeholder="t.ex. Stockholm, Göteborg"
+                  value={editFormData.region}
+                  onChange={(e) =>
+                    setEditFormData((prev) => ({ ...prev, region: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                />
               </div>
 
               <div>
@@ -682,8 +844,8 @@ function OrderDetailModal({
                 </div>
               </div>
 
-              {/* ROT Fields */}
-              <div className="border-t border-gray-200 pt-4">
+              {/* ROT / RUT Fields */}
+              <div className="border-t border-gray-200 pt-4 space-y-4">
                 <ROTFields
                   data={{
                     include_rot: editFormData.include_rot,
@@ -693,7 +855,30 @@ function OrderDetailModal({
                     rot_amount: editFormData.rot_amount,
                   }}
                   onChange={(rotData) =>
-                    setEditFormData((prev) => ({ ...prev, ...rotData }))
+                    setEditFormData((prev) => ({
+                      ...prev,
+                      ...rotData,
+                      rot_amount: rotData.rot_amount || 0,
+                      // Mutual exclusion: disable RUT when ROT is enabled
+                      ...(rotData.include_rot ? { include_rut: false, rut_personnummer: null, rut_amount: 0 } : {}),
+                    }))
+                  }
+                  totalAmount={parseFloat(editFormData.value) || 0}
+                />
+                <RUTFields
+                  data={{
+                    include_rut: editFormData.include_rut,
+                    rut_personnummer: editFormData.rut_personnummer,
+                    rut_amount: editFormData.rut_amount,
+                  }}
+                  onChange={(rutData) =>
+                    setEditFormData((prev) => ({
+                      ...prev,
+                      ...rutData,
+                      rut_amount: rutData.rut_amount || 0,
+                      // Mutual exclusion: disable ROT when RUT is enabled
+                      ...(rutData.include_rut ? { include_rot: false, rot_personnummer: null, rot_organisationsnummer: null, rot_fastighetsbeteckning: null, rot_amount: 0 } : {}),
+                    }))
                   }
                   totalAmount={parseFloat(editFormData.value) || 0}
                 />
@@ -870,6 +1055,21 @@ function OrderDetailModal({
                                   totalAmount={order.value || 0}
                                 />
                               </div>
+                            </div>
+                          )}
+
+                          {/* RUT */}
+                          {order.include_rut && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-2">RUT-information</h4>
+                              <RUTInformation
+                                data={{
+                                  include_rut: order.include_rut || false,
+                                  rut_personnummer: order.rut_personnummer || null,
+                                  rut_amount: order.rut_amount || 0,
+                                }}
+                                totalAmount={order.value || 0}
+                              />
                             </div>
                           )}
 
