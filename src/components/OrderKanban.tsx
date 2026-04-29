@@ -40,8 +40,8 @@ import {
   type OrderWithRelations,
   type OrderFilters
 } from '../lib/orders';
-import { type LeadWithRelations } from '../lib/leads';
-import { createQuote, type QuoteWithRelations } from '../lib/quotes';
+import { updateLead, type LeadWithRelations } from '../lib/leads';
+import { createQuote, updateQuote, type QuoteWithRelations } from '../lib/quotes';
 // Teams now fetched by useKanbanData hook
 import { formatCurrency, formatDate, formatDateTime } from '../lib/database';
 import {
@@ -54,7 +54,8 @@ import {
   type OrderStatus,
   type JobType,
   type AssignmentType,
-  type QuoteStatus
+  type QuoteStatus,
+  type UserProfile,
 } from '../types/database';
 import EmptyState from './EmptyState';
 import ConfirmDialog from './ConfirmDialog';
@@ -129,7 +130,7 @@ const getInitialEditFormData = (order: OrderWithRelations | null) => {
 // ====== COMPACT KANBAN ROW COMPONENTS ====== //
 
 const OrderKanbanRow = ({
-  order, borderColor, onDragStart, onClick, onEdit, onDelete,
+  order, borderColor, onDragStart, onClick, onEdit, onDelete, teamMembers, onQuickAssign,
 }: {
   order: OrderWithRelations;
   borderColor: string;
@@ -137,156 +138,283 @@ const OrderKanbanRow = ({
   onClick: () => void;
   onEdit: () => void;
   onDelete: () => void;
-}) => (
-  <div
-    className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
-    style={{ borderLeft: `3px solid ${borderColor}` }}
-    draggable
-    onDragStart={onDragStart}
-    onClick={onClick}
-  >
-    {/* Row 1: Title + Value */}
-    <div className="flex items-start justify-between gap-2">
-      <p className="text-sm font-medium text-gray-900 truncate leading-tight">{order.title}</p>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        {order.value ? (
-          <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
-            {formatCurrency(order.value)}
-          </span>
-        ) : null}
-        <button
-          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-blue-600 transition-all"
-          onClick={(e: React.MouseEvent) => { e.stopPropagation(); onEdit(); }}
-          title="Redigera"
-        >
-          <Edit className="w-3.5 h-3.5" />
-        </button>
+  teamMembers: UserProfile[];
+  onQuickAssign: (updates: { region?: string; assigned_to_user_id?: string }) => void;
+}) => {
+  const [showPopover, setShowPopover] = React.useState(false);
+  const [assignUser, setAssignUser] = React.useState(order.assigned_to_user_id || '');
+  const [assignRegion, setAssignRegion] = React.useState(order.region || '');
+
+  const handleAssign = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onQuickAssign({ region: assignRegion || undefined, assigned_to_user_id: assignUser || undefined });
+    setShowPopover(false);
+  };
+
+  return (
+    <div className="relative">
+      <div
+        className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+        style={{ borderLeft: `3px solid ${borderColor}` }}
+        draggable
+        onDragStart={onDragStart}
+        onClick={onClick}
+      >
+        {/* Row 1: Title + Value */}
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium text-gray-900 truncate leading-tight">{order.title}</p>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {order.value ? (
+              <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+                {formatCurrency(order.value)}
+              </span>
+            ) : null}
+            <button
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-blue-600 transition-all"
+              onClick={(e: React.MouseEvent) => { e.stopPropagation(); onEdit(); }}
+              title="Redigera"
+            >
+              <Edit className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+        {/* Row 2: Customer */}
+        {order.customer && (
+          <p className="text-xs text-gray-500 truncate">{order.customer.name}</p>
+        )}
+        {/* Row 3: Metadata chips */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {order.job_type && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+              <Briefcase className="w-3 h-3" />
+              {JOB_TYPE_LABELS[order.job_type as keyof typeof JOB_TYPE_LABELS] ?? order.job_type}
+            </span>
+          )}
+          {order.assigned_to && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+              <User className="w-3 h-3" />
+              {order.assigned_to.full_name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || '?'}
+            </span>
+          )}
+          {order.assigned_team && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+              <Users2 className="w-3 h-3" />
+              {order.assigned_team.name}
+            </span>
+          )}
+          {order.region && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[80px]">
+              <MapPin className="w-3 h-3 flex-shrink-0" />
+              {order.region}
+            </span>
+          )}
+          {order.created_at && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto">
+              <Calendar className="w-3 h-3" />
+              {formatDate(order.created_at)}
+            </span>
+          )}
+        </div>
+        {/* Quick-assign button */}
+        <div className="flex justify-end pt-0.5">
+          <button
+            className="opacity-0 group-hover:opacity-100 text-xs font-medium text-indigo-600 border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded transition-all"
+            onClick={(e: React.MouseEvent) => { e.stopPropagation(); setShowPopover(v => !v); }}
+            title="Tilldela"
+          >
+            Tilldela
+          </button>
+        </div>
       </div>
+      {/* Quick-assign popover */}
+      {showPopover && (
+        <div
+          className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 flex flex-col gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-xs font-semibold text-gray-700">Snabbtilldela</p>
+          <select
+            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            value={assignUser}
+            onChange={(e) => setAssignUser(e.target.value)}
+          >
+            <option value="">-- Välj säljare --</option>
+            {teamMembers.map(m => (
+              <option key={m.id} value={m.id}>{m.full_name}</option>
+            ))}
+          </select>
+          <input
+            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            placeholder="Säljområde (region)"
+            value={assignRegion}
+            onChange={(e) => setAssignRegion(e.target.value)}
+          />
+          <div className="flex gap-2 justify-end">
+            <button
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+              onClick={(e) => { e.stopPropagation(); setShowPopover(false); }}
+            >
+              Avbryt
+            </button>
+            <button
+              className="text-xs font-medium bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700"
+              onClick={handleAssign}
+            >
+              Spara
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-    {/* Row 2: Customer */}
-    {order.customer && (
-      <p className="text-xs text-gray-500 truncate">{order.customer.name}</p>
-    )}
-    {/* Row 3: Metadata chips */}
-    <div className="flex items-center gap-2 flex-wrap">
-      {order.job_type && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
-          <Briefcase className="w-3 h-3" />
-          {JOB_TYPE_LABELS[order.job_type as keyof typeof JOB_TYPE_LABELS] ?? order.job_type}
-        </span>
-      )}
-      {order.assigned_to && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
-          <User className="w-3 h-3" />
-          {order.assigned_to.full_name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || '?'}
-        </span>
-      )}
-      {order.assigned_team && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
-          <Users2 className="w-3 h-3" />
-          {order.assigned_team.name}
-        </span>
-      )}
-      {order.region && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[80px]">
-          <MapPin className="w-3 h-3 flex-shrink-0" />
-          {order.region}
-        </span>
-      )}
-      {order.created_at && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto">
-          <Calendar className="w-3 h-3" />
-          {formatDate(order.created_at)}
-        </span>
-      )}
-    </div>
-  </div>
-);
+  );
+};
 
 const LeadKanbanRow = ({
-  lead, borderColor, onDragStart, onClick, onCreateQuote,
+  lead, borderColor, onDragStart, onClick, onCreateQuote, teamMembers, onQuickAssign,
 }: {
   lead: LeadWithRelations;
   borderColor: string;
   onDragStart: (e: React.DragEvent) => void;
   onClick: () => void;
   onCreateQuote: () => void;
-}) => (
-  <div
-    className="group flex flex-col gap-1.5 px-3 py-2.5 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
-    style={{ borderLeft: `3px solid ${borderColor}` }}
-    draggable
-    onDragStart={onDragStart}
-    onClick={onClick}
-  >
-    {/* Row 1: Title + Value */}
-    <div className="flex items-start justify-between gap-2">
-      <p className="text-sm font-medium text-gray-900 truncate leading-tight">{lead.title}</p>
-      {lead.estimated_value ? (
-        <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded whitespace-nowrap flex-shrink-0">
-          {formatCurrency(lead.estimated_value)}
-        </span>
-      ) : null}
-    </div>
-    {/* Row 2: Customer info */}
-    {lead.customer && (
-      <div className="flex flex-col gap-0.5">
-        <p className="text-xs font-medium text-gray-700 truncate">{lead.customer.name}</p>
-        {(lead.customer.email || lead.customer.city) && (
-          <p className="text-xs text-gray-400 truncate">
-            {[lead.customer.email, lead.customer.city].filter(Boolean).join(' · ')}
-          </p>
-        )}
-      </div>
-    )}
-    {/* Row 3: Metadata chips */}
-    <div className="flex items-center gap-1.5 flex-wrap">
-      {lead.source && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[100px]">
-          <Activity className="w-3 h-3 flex-shrink-0" />
-          {lead.source}
-        </span>
-      )}
-      {lead.city && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[80px]">
-          <MapPin className="w-3 h-3 flex-shrink-0" />
-          {lead.city}
-        </span>
-      )}
-      {lead.assigned_to && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
-          <User className="w-3 h-3" />
-          {lead.assigned_to.full_name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || '?'}
-        </span>
-      )}
-      {typeof lead.lead_score === 'number' && (
-        <span className={`inline-flex items-center gap-1 text-xs font-semibold rounded px-1.5 py-0.5 ${lead.lead_score >= 70 ? 'bg-green-100 text-green-700' :
-          lead.lead_score >= 40 ? 'bg-amber-100 text-amber-700' :
-            'bg-gray-100 text-gray-500'
-          }`}>
-          <Star className="w-3 h-3" />
-          {lead.lead_score}
-        </span>
-      )}
-      {lead.last_activity_at && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto">
-          <Clock className="w-3 h-3" />
-          {formatDate(lead.last_activity_at)}
-        </span>
-      )}
-    </div>
-    {/* Row 4: Create quote button */}
-    <div className="flex justify-end pt-0.5">
-      <button
-        className="opacity-0 group-hover:opacity-100 text-xs font-medium text-blue-600 border border-blue-300 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded transition-all"
-        onClick={(e: React.MouseEvent) => { e.stopPropagation(); onCreateQuote(); }}
-        title="Skapa offert från lead"
+  teamMembers: UserProfile[];
+  onQuickAssign: (updates: { city?: string; assigned_to_user_id?: string }) => void;
+}) => {
+  const [showPopover, setShowPopover] = React.useState(false);
+  const [assignUser, setAssignUser] = React.useState(lead.assigned_to_user_id || '');
+  const [assignCity, setAssignCity] = React.useState(lead.city || '');
+
+  const handleAssign = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onQuickAssign({ city: assignCity || undefined, assigned_to_user_id: assignUser || undefined });
+    setShowPopover(false);
+  };
+
+  return (
+    <div className="relative">
+      <div
+        className="group flex flex-col gap-1.5 px-3 py-2.5 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+        style={{ borderLeft: `3px solid ${borderColor}` }}
+        draggable
+        onDragStart={onDragStart}
+        onClick={onClick}
       >
-        Skapa offert
-      </button>
+        {/* Row 1: Title + Value */}
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium text-gray-900 truncate leading-tight">{lead.title}</p>
+          {lead.estimated_value ? (
+            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded whitespace-nowrap flex-shrink-0">
+              {formatCurrency(lead.estimated_value)}
+            </span>
+          ) : null}
+        </div>
+        {/* Row 2: Customer info */}
+        {lead.customer && (
+          <div className="flex flex-col gap-0.5">
+            <p className="text-xs font-medium text-gray-700 truncate">{lead.customer.name}</p>
+            {(lead.customer.email || lead.customer.city) && (
+              <p className="text-xs text-gray-400 truncate">
+                {[lead.customer.email, lead.customer.city].filter(Boolean).join(' · ')}
+              </p>
+            )}
+          </div>
+        )}
+        {/* Row 3: Metadata chips */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {lead.source && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[100px]">
+              <Activity className="w-3 h-3 flex-shrink-0" />
+              {lead.source}
+            </span>
+          )}
+          {lead.city && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[80px]">
+              <MapPin className="w-3 h-3 flex-shrink-0" />
+              {lead.city}
+            </span>
+          )}
+          {lead.assigned_to && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+              <User className="w-3 h-3" />
+              {lead.assigned_to.full_name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || '?'}
+            </span>
+          )}
+          {typeof lead.lead_score === 'number' && (
+            <span className={`inline-flex items-center gap-1 text-xs font-semibold rounded px-1.5 py-0.5 ${lead.lead_score >= 70 ? 'bg-green-100 text-green-700' :
+              lead.lead_score >= 40 ? 'bg-amber-100 text-amber-700' :
+                'bg-gray-100 text-gray-500'
+              }`}>
+              <Star className="w-3 h-3" />
+              {lead.lead_score}
+            </span>
+          )}
+          {lead.last_activity_at && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto">
+              <Clock className="w-3 h-3" />
+              {formatDate(lead.last_activity_at)}
+            </span>
+          )}
+        </div>
+        {/* Row 4: Action buttons */}
+        <div className="flex justify-between items-center pt-0.5">
+          <button
+            className="opacity-0 group-hover:opacity-100 text-xs font-medium text-emerald-600 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded transition-all"
+            onClick={(e: React.MouseEvent) => { e.stopPropagation(); setShowPopover(v => !v); }}
+            title="Tilldela"
+          >
+            Tilldela
+          </button>
+          <button
+            className="opacity-0 group-hover:opacity-100 text-xs font-medium text-blue-600 border border-blue-300 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded transition-all"
+            onClick={(e: React.MouseEvent) => { e.stopPropagation(); onCreateQuote(); }}
+            title="Skapa offert från lead"
+          >
+            Skapa offert
+          </button>
+        </div>
+      </div>
+      {/* Quick-assign popover */}
+      {showPopover && (
+        <div
+          className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 flex flex-col gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-xs font-semibold text-gray-700">Snabbtilldela</p>
+          <select
+            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            value={assignUser}
+            onChange={(e) => setAssignUser(e.target.value)}
+          >
+            <option value="">-- Välj säljare --</option>
+            {teamMembers.map(m => (
+              <option key={m.id} value={m.id}>{m.full_name}</option>
+            ))}
+          </select>
+          <input
+            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            placeholder="Säljområde (stad)"
+            value={assignCity}
+            onChange={(e) => setAssignCity(e.target.value)}
+          />
+          <div className="flex gap-2 justify-end">
+            <button
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+              onClick={(e) => { e.stopPropagation(); setShowPopover(false); }}
+            >
+              Avbryt
+            </button>
+            <button
+              className="text-xs font-medium bg-emerald-600 text-white px-3 py-1 rounded hover:bg-emerald-700"
+              onClick={handleAssign}
+            >
+              Spara
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const QuoteKanbanRow = ({
   quote, borderColor, onDragStart, onClick,
@@ -381,6 +509,8 @@ function OrderKanban() {
   const [selectedOrder, setSelectedOrder] = useState<OrderWithRelations | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<OrderWithRelations | null>(null);
+  const [showRevertToQuoteDialog, setShowRevertToQuoteDialog] = useState(false);
+  const [orderToRevert, setOrderToRevert] = useState<OrderWithRelations | null>(null);
   const [isEmailComposerOpen, setIsEmailComposerOpen] = useState(false);
   const [isSmsComposerOpen, setIsSmsComposerOpen] = useState(false);
   const [communications, setCommunications] = useState<any[]>([]);
@@ -748,6 +878,51 @@ function OrderKanban() {
     }
   };
 
+  const handleQuickAssignLead = async (lead: LeadWithRelations, updates: { city?: string; assigned_to_user_id?: string }) => {
+    try {
+      const patch: Record<string, any> = {};
+      if (updates.city !== undefined) patch.city = updates.city || null;
+      if (updates.assigned_to_user_id !== undefined) patch.assigned_to_user_id = updates.assigned_to_user_id || null;
+      await updateLead(lead.id, patch, user?.id);
+      loadData();
+    } catch (err) {
+      console.error('Error quick-assigning lead:', err);
+      showError('Fel', 'Kunde inte tilldela förfrågan.');
+    }
+  };
+
+  const handleRevertOrderToQuote = async () => {
+    if (!orderToRevert) return;
+    try {
+      // Find the linked quote (quotes have order_id pointing to this order)
+      const linkedQuote = quotes.find(q => (q as any).order_id === orderToRevert.id);
+      if (linkedQuote) {
+        await updateQuote(linkedQuote.id, { status: 'draft', order_id: null } as any);
+      }
+      await updateOrder(orderToRevert.id, { status: 'avbokad_kund' });
+      success('Återställd', 'Ordern har återställts till offert-status.');
+      setShowRevertToQuoteDialog(false);
+      setOrderToRevert(null);
+      loadData();
+    } catch (err) {
+      console.error('Error reverting order to quote:', err);
+      showError('Fel', 'Kunde inte återställa ordern.');
+    }
+  };
+
+  const handleQuickAssignOrder = async (order: OrderWithRelations, updates: { region?: string; assigned_to_user_id?: string }) => {
+    try {
+      const patch: Record<string, any> = {};
+      if (updates.region !== undefined) patch.region = updates.region || null;
+      if (updates.assigned_to_user_id !== undefined) patch.assigned_to_user_id = updates.assigned_to_user_id || null;
+      await updateOrder(order.id, patch);
+      loadData();
+    } catch (err) {
+      console.error('Error quick-assigning order:', err);
+      showError('Fel', 'Kunde inte tilldela ordern.');
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       title: '',
@@ -786,6 +961,16 @@ function OrderKanban() {
     e.preventDefault();
     const itemData = JSON.parse(e.dataTransfer.getData('application/json'));
     const { id, type, status: previousStatus } = itemData;
+
+    // Order dragged to quote column — revert to quote with confirmation
+    if (type === 'order' && targetType === 'quote' && targetStatus === 'offert_utkast') {
+      const order = orders.find(o => o.id === id);
+      if (order) {
+        setOrderToRevert(order);
+        setShowRevertToQuoteDialog(true);
+      }
+      return;
+    }
 
     // Order drag-and-drop with optimistic updates
     if (type === 'order' && targetType === 'order') {
@@ -1081,6 +1266,8 @@ function OrderKanban() {
                               setShowLeadEditModal(true);
                             }}
                             onCreateQuote={() => handleCreateQuote(lead)}
+                            teamMembers={teamMembers}
+                            onQuickAssign={(updates) => handleQuickAssignLead(lead, updates)}
                           />
                         ))}
 
@@ -1114,6 +1301,8 @@ function OrderKanban() {
                               setOrderToDelete(order);
                               setShowDeleteDialog(true);
                             }}
+                            teamMembers={teamMembers}
+                            onQuickAssign={(updates) => handleQuickAssignOrder(order, updates)}
                           />
                         ))}
 
@@ -2084,6 +2273,21 @@ function OrderKanban() {
         confirmText="Ta bort"
         cancelText="Avbryt"
         type="danger"
+      />
+
+      {/* Revert Order to Quote Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showRevertToQuoteDialog}
+        onClose={() => {
+          setShowRevertToQuoteDialog(false);
+          setOrderToRevert(null);
+        }}
+        onConfirm={handleRevertOrderToQuote}
+        title="Återställ till offert"
+        message={`Vill du återställa "${orderToRevert?.title}" till offert-status? Den kopplade offerten återöppnas som utkast och ordern markeras som avbokad.`}
+        confirmText="Återställ"
+        cancelText="Avbryt"
+        type="warning"
       />
 
       {/* Empty State */}
