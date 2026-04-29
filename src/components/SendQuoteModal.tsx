@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { X, Send, Mail, MessageSquare, Loader2, User, FileText, Calendar, DollarSign, Edit2 } from 'lucide-react';
 import { Button } from './ui';
 import { useToast } from '../hooks/useToast';
-import { sendQuoteEmail, generateQuoteEmailTemplate, saveQuoteTemplateSnapshot, type QuoteWithRelations } from '../lib/quotes';
+import { sendQuoteEmail, generateQuoteEmailTemplate, saveQuoteTemplateSnapshot, getAttachmentsForQuote, getQuoteAttachmentPublicUrl, type QuoteWithRelations } from '../lib/quotes';
 import { formatCurrency, formatDate } from '../lib/database';
 import type { QuoteTemplate } from '../lib/quoteTemplates';
 
@@ -103,10 +103,24 @@ export default function SendQuoteModal({ isOpen, onClose, quote, onSent, templat
             }
 
             if (method === 'email') {
+                // Append attachment download links to body if any exist
+                let bodyWithAttachments = message;
+                try {
+                    const { data: attachments } = await getAttachmentsForQuote(quote.id);
+                    if (attachments && attachments.length > 0) {
+                        const links = attachments
+                            .map(a => `- ${a.file_name}: ${getQuoteAttachmentPublicUrl(a.file_path)}`)
+                            .join('\n');
+                        bodyWithAttachments = `${message}\n\n📎 Bilagor:\n${links}`;
+                    }
+                } catch {
+                    // Non-fatal — send without attachment links
+                }
+
                 const result = await sendQuoteEmail(quote.id, {
                     recipient_email: finalRecipient,
                     subject,
-                    body: message,
+                    body: bodyWithAttachments,
                     include_acceptance_link: includeAcceptanceLink
                 });
 

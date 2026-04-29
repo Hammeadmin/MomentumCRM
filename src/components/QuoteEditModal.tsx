@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     X,
     Plus,
@@ -11,7 +11,11 @@ import {
     MapPin,
     Building2,
     Edit2,
-    Save
+    Save,
+    Paperclip,
+    Upload,
+    Download,
+    Trash2,
 } from 'lucide-react';
 import {
     createQuote,
@@ -20,7 +24,15 @@ import {
     updateCustomer,
     formatCurrency
 } from '../lib/database';
+import {
+    getAttachmentsForQuote,
+    addAttachmentToQuote,
+    deleteQuoteAttachment,
+    getQuoteAttachmentPublicUrl,
+    type QuoteAttachment,
+} from '../lib/quotes';
 import { useToast } from '../hooks/useToast';
+import { useAuth } from '../contexts/AuthContext';
 import QuoteTemplateSelector from './QuoteTemplateSelector';
 import ROTFields from '../components/ROTFields';
 import RUTFields from '../components/RUTFields';
@@ -90,11 +102,17 @@ export default function QuoteEditModal({
     initialData
 }: QuoteEditModalProps) {
     const { error: showToastError, success } = useToast();
+    const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showProductLibrary, setShowProductLibrary] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<QuoteTemplate | null>(null);
+
+    // Attachments (edit mode only — requires saved quote id)
+    const [attachments, setAttachments] = useState<QuoteAttachment[]>([]);
+    const [uploadingAttachment, setUploadingAttachment] = useState(false);
+    const attachmentInputRef = useRef<HTMLInputElement>(null);
 
     const [isEditingExistingCustomer, setIsEditingExistingCustomer] = useState(false);
     const [isSavingCustomer, setIsSavingCustomer] = useState(false);
@@ -217,6 +235,49 @@ export default function QuoteEditModal({
         const found = customers.find(c => c.id === quoteForm.customer_id);
         if (found) setExistingCustomerForm({ ...found });
     }, [quoteForm.customer_id, customers]);
+
+    // Load attachments whenever editing an existing quote
+    useEffect(() => {
+        if (quote?.id) {
+            getAttachmentsForQuote(quote.id).then(({ data }) => {
+                if (data) setAttachments(data);
+            });
+        } else {
+            setAttachments([]);
+        }
+    }, [quote?.id, isOpen]);
+
+    const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!quote?.id || !user) return;
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setUploadingAttachment(true);
+        try {
+            const { error } = await addAttachmentToQuote(quote.id, user.id, organisationId, file);
+            if (error) { showToastError('Fel', 'Kunde inte ladda upp bilaga.'); return; }
+            const { data } = await getAttachmentsForQuote(quote.id);
+            if (data) setAttachments(data);
+            success('Klart', 'Bilaga uppladdad.');
+        } catch {
+            showToastError('Fel', 'Kunde inte ladda upp bilaga.');
+        } finally {
+            setUploadingAttachment(false);
+            e.target.value = '';
+        }
+    };
+
+    const handleDeleteAttachment = async (attachment: QuoteAttachment) => {
+        if (!quote?.id) return;
+        if (!confirm(`Ta bort bilagan "${attachment.file_name}"?`)) return;
+        try {
+            const { error } = await deleteQuoteAttachment(attachment);
+            if (error) { showToastError('Fel', 'Kunde inte ta bort bilaga.'); return; }
+            const { data } = await getAttachmentsForQuote(quote.id);
+            if (data) setAttachments(data);
+        } catch {
+            showToastError('Fel', 'Kunde inte ta bort bilaga.');
+        }
+    };
 
     const handleUpdateExistingCustomer = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1052,6 +1113,74 @@ export default function QuoteEditModal({
                             </div>
                         </div>
                     </div>
+
+                    {/* Bilagor — only available when editing an existing quote */}
+                    {quote?.id && (
+                        <div className="border-t border-gray-200 pt-6">
+                            <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                                    <Paperclip className="w-4 h-4 text-gray-400" />
+                                    Bilagor
+                                    {attachments.length > 0 && (
+                                        <span className="ml-1 px-1.5 py-0.5 text-xs bg-gray-100 rounded-full">
+                                            {attachments.length}
+                                        </span>
+                                    )}
+                                </h4>
+                                <button
+                                    type="button"
+                                    onClick={() => attachmentInputRef.current?.click()}
+                                    disabled={uploadingAttachment}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    {uploadingAttachment
+                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        : <Upload className="w-3.5 h-3.5" />
+                                    }
+                                    Ladda upp
+                                </button>
+                                <input
+                                    ref={attachmentInputRef}
+                                    type="file"
+                                    className="hidden"
+                                    onChange={handleAttachmentUpload}
+                                />
+                            </div>
+                            {attachments.length === 0 ? (
+                                <p className="text-xs text-gray-400 italic">Inga bilagor uppladdade.</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {attachments.map(att => (
+                                        <div key={att.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <Paperclip className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                                <span className="text-sm text-gray-700 truncate">{att.file_name}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                                                <a
+                                                    href={getQuoteAttachmentPublicUrl(att.file_path)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                                                    title="Ladda ned"
+                                                >
+                                                    <Download className="w-3.5 h-3.5" />
+                                                </a>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteAttachment(att)}
+                                                    className="p-1 text-gray-400 hover:text-red-600 rounded"
+                                                    title="Ta bort"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {error && (
                         <div className="flex items-center space-x-2 text-red-600 bg-red-50 p-3 rounded-lg">
