@@ -2,8 +2,9 @@ import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
     X, Edit, Send, FileUp, MessageSquare, User, Users2, Paperclip,
-    CheckCircle, ExternalLink, Phone, MapPin,
+    CheckCircle, ExternalLink, Phone, MapPin, Mail,
 } from 'lucide-react';
+import ContactCustomerModal from '../../ContactCustomerModal';
 import InvoicePreview from '../../InvoicePreview';
 import ROTInformation from '../../ROTInformation';
 import InvoiceCreditHistory from '../../InvoiceCreditHistory';
@@ -76,6 +77,7 @@ export default function InvoiceDetailsModal({
         invoice.assigned_to_team_id || null
     );
     const [selectedTemplate, setSelectedTemplate] = useState<QuoteTemplate | null>(null);
+    const [showContactModal, setShowContactModal] = useState(false);
 
     if (!isOpen) return null;
 
@@ -85,6 +87,7 @@ export default function InvoiceDetailsModal({
     };
 
     return (
+        <>
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
             <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between p-6 border-b">
@@ -97,15 +100,27 @@ export default function InvoiceDetailsModal({
                             {INVOICE_STATUS_LABELS[invoice.status]}
                         </span>
                     </div>
-                    <button
-                        onClick={() => {
-                            onClose();
-                            setSelectedTemplate(null);
-                        }}
-                        className="text-gray-400 hover:text-gray-600"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {invoice.customer && (
+                            <button
+                                onClick={() => setShowContactModal(true)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-green-700 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
+                                title="Kontakta kund"
+                            >
+                                <Mail className="w-4 h-4" />
+                                Kontakta
+                            </button>
+                        )}
+                        <button
+                            onClick={() => {
+                                onClose();
+                                setSelectedTemplate(null);
+                            }}
+                            className="text-gray-400 hover:text-gray-600"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -466,5 +481,14 @@ export default function InvoiceDetailsModal({
                 </div>
             </div>
         </div>
+        {showContactModal && invoice.customer && (
+            <ContactCustomerModal
+                isOpen={showContactModal}
+                onClose={() => setShowContactModal(false)}
+                customer={invoice.customer}
+                onCommunicationSent={() => setShowContactModal(false)}
+            />
+        )}
+        </>
     );
 }
