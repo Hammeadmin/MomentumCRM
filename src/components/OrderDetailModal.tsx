@@ -377,6 +377,10 @@ function OrderDetailModal({
         address: customerEditForm.address,
         postal_code: customerEditForm.postal_code,
         city: customerEditForm.city,
+        sales_area: (customerEditForm as any).sales_area || null,
+        vat_handling: (customerEditForm as any).vat_handling as any,
+        invoice_delivery_method: (customerEditForm as any).invoice_delivery_method as any,
+        e_invoice_address: (customerEditForm as any).e_invoice_address || null,
       });
       if (error) { showError('Fel', error.message); return; }
       success('Klart', 'Kunduppgifter sparade.');
@@ -690,6 +694,53 @@ function OrderDetailModal({
                             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
                           />
                         </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Försäljningsområde</label>
+                          <input
+                            type="text"
+                            value={(customerEditForm as any).sales_area || ''}
+                            onChange={e => setCustomerEditForm(p => ({ ...p, sales_area: e.target.value }))}
+                            placeholder="t.ex. Stockholm"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Momshantering</label>
+                          <select
+                            value={(customerEditForm as any).vat_handling || '25%'}
+                            onChange={e => setCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                          >
+                            <option value="25%">25% moms</option>
+                            <option value="12%">12% moms</option>
+                            <option value="6%">6% moms</option>
+                            <option value="0%">Momsfri (0%)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Fakturaleverans</label>
+                          <select
+                            value={(customerEditForm as any).invoice_delivery_method || 'e-post'}
+                            onChange={e => setCustomerEditForm(p => ({ ...p, invoice_delivery_method: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                          >
+                            <option value="e-post">E-post</option>
+                            <option value="e-faktura">E-faktura</option>
+                            <option value="post">Post</option>
+                          </select>
+                        </div>
+                        {(customerEditForm as any).invoice_delivery_method === 'e-faktura' && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">E-fakturaadress</label>
+                            <input
+                              type="text"
+                              value={(customerEditForm as any).e_invoice_address || ''}
+                              onChange={e => setCustomerEditForm(p => ({ ...p, e_invoice_address: e.target.value }))}
+                              placeholder="GLN / PEPPOL-ID"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-2 justify-end">

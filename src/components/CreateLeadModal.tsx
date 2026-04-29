@@ -41,7 +41,7 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
     // Inline customer creation state
     const [isNewCustomer, setIsNewCustomer] = useState(false);
     const [isEditingExistingCustomer, setIsEditingExistingCustomer] = useState(false);
-    const [existingCustomerEditForm, setExistingCustomerEditForm] = useState({ name: '', email: '', phone_number: '', org_number: '', address: '', postal_code: '', city: '' });
+    const [existingCustomerEditForm, setExistingCustomerEditForm] = useState({ name: '', email: '', phone_number: '', org_number: '', address: '', postal_code: '', city: '', sales_area: '', vat_handling: '25%', invoice_delivery_method: 'e-post', e_invoice_address: '' });
     const [savingExistingCustomer, setSavingExistingCustomer] = useState(false);
     const [newCustomerForm, setNewCustomerForm] = useState({
         name: '',
@@ -52,6 +52,10 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
         address: '',
         postal_code: '',
         city: '',
+        sales_area: '',
+        vat_handling: '25%',
+        invoice_delivery_method: 'e-post',
+        e_invoice_address: '',
     });
 
     useEffect(() => {
@@ -70,6 +74,7 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
             setNewCustomerForm({
                 name: '', customer_type: 'company', org_number: '',
                 email: '', phone_number: '', address: '', postal_code: '', city: '',
+                sales_area: '', vat_handling: '25%', invoice_delivery_method: 'e-post', e_invoice_address: '',
             });
 
             const loadModalData = async () => {
@@ -119,6 +124,10 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                     address: newCustomerForm.address.trim() || null,
                     postal_code: newCustomerForm.postal_code.trim() || null,
                     city: newCustomerForm.city.trim() || null,
+                    sales_area: newCustomerForm.sales_area.trim() || null,
+                    vat_handling: newCustomerForm.vat_handling || '25%',
+                    invoice_delivery_method: newCustomerForm.invoice_delivery_method || 'e-post',
+                    e_invoice_address: newCustomerForm.e_invoice_address.trim() || null,
                 } as Omit<Customer, 'id' | 'created_at'>);
 
                 if (customerError || !createdCustomer) {
@@ -173,6 +182,10 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                 address: existingCustomerEditForm.address || null,
                 postal_code: existingCustomerEditForm.postal_code || null,
                 city: existingCustomerEditForm.city || null,
+                sales_area: existingCustomerEditForm.sales_area || null,
+                vat_handling: existingCustomerEditForm.vat_handling as any,
+                invoice_delivery_method: existingCustomerEditForm.invoice_delivery_method as any,
+                e_invoice_address: existingCustomerEditForm.e_invoice_address || null,
             } as any);
             // Refresh customers list
             if (organisationId) {
@@ -365,6 +378,59 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                                             />
                                         </div>
                                     </div>
+                                    {/* Sales area + VAT */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Försäljningsområde</label>
+                                            <input
+                                                type="text"
+                                                value={newCustomerForm.sales_area}
+                                                onChange={e => setNewCustomerForm(prev => ({ ...prev, sales_area: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                                placeholder="t.ex. Stockholm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Momshantering</label>
+                                            <select
+                                                value={newCustomerForm.vat_handling}
+                                                onChange={e => setNewCustomerForm(prev => ({ ...prev, vat_handling: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                            >
+                                                <option value="25%">25% moms</option>
+                                                <option value="12%">12% moms</option>
+                                                <option value="6%">6% moms</option>
+                                                <option value="0%">Momsfri (0%)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    {/* Invoice delivery */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Fakturaleverans</label>
+                                            <select
+                                                value={newCustomerForm.invoice_delivery_method}
+                                                onChange={e => setNewCustomerForm(prev => ({ ...prev, invoice_delivery_method: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                            >
+                                                <option value="e-post">E-post</option>
+                                                <option value="e-faktura">E-faktura</option>
+                                                <option value="post">Post</option>
+                                            </select>
+                                        </div>
+                                        {newCustomerForm.invoice_delivery_method === 'e-faktura' && (
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">E-fakturaadress</label>
+                                                <input
+                                                    type="text"
+                                                    value={newCustomerForm.e_invoice_address}
+                                                    onChange={e => setNewCustomerForm(prev => ({ ...prev, e_invoice_address: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                                    placeholder="GLN / PEPPOL-ID"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
                                     <p className="text-xs text-blue-700">Kunden skapas automatiskt när du sparar leaden.</p>
                                 </div>
                             ) : (
@@ -391,7 +457,7 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                                                         </div>
                                                         <button type="button" className="text-xs text-blue-600 hover:underline flex items-center gap-1"
                                                             onClick={() => {
-                                                                setExistingCustomerEditForm({ name: sel.name || '', email: (sel as any).email || '', phone_number: (sel as any).phone_number || '', org_number: (sel as any).org_number || '', address: (sel as any).address || '', postal_code: (sel as any).postal_code || '', city: (sel as any).city || '' });
+                                                                setExistingCustomerEditForm({ name: sel.name || '', email: (sel as any).email || '', phone_number: (sel as any).phone_number || '', org_number: (sel as any).org_number || '', address: (sel as any).address || '', postal_code: (sel as any).postal_code || '', city: (sel as any).city || '', sales_area: (sel as any).sales_area || '', vat_handling: (sel as any).vat_handling || '25%', invoice_delivery_method: (sel as any).invoice_delivery_method || 'e-post', e_invoice_address: (sel as any).e_invoice_address || '' });
                                                                 setIsEditingExistingCustomer(true);
                                                             }}>
                                                             <Edit2 className="w-3 h-3" /> Redigera
@@ -414,6 +480,23 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                                                     <div className="flex gap-1.5">
                                                         <input className="w-20 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Postnr" value={existingCustomerEditForm.postal_code} onChange={e => setExistingCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
                                                         <input className="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Stad" value={existingCustomerEditForm.city} onChange={e => setExistingCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                        <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Försäljningsområde" value={existingCustomerEditForm.sales_area} onChange={e => setExistingCustomerEditForm(p => ({ ...p, sales_area: e.target.value }))} />
+                                                        <select className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" value={existingCustomerEditForm.vat_handling} onChange={e => setExistingCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}>
+                                                            <option value="25%">25% moms</option>
+                                                            <option value="12%">12% moms</option>
+                                                            <option value="6%">6% moms</option>
+                                                            <option value="0%">Momsfri (0%)</option>
+                                                        </select>
+                                                        <select className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" value={existingCustomerEditForm.invoice_delivery_method} onChange={e => setExistingCustomerEditForm(p => ({ ...p, invoice_delivery_method: e.target.value }))}>
+                                                            <option value="e-post">E-post</option>
+                                                            <option value="e-faktura">E-faktura</option>
+                                                            <option value="post">Post</option>
+                                                        </select>
+                                                        {existingCustomerEditForm.invoice_delivery_method === 'e-faktura' && (
+                                                            <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="E-fakturaadress (GLN/PEPPOL)" value={existingCustomerEditForm.e_invoice_address} onChange={e => setExistingCustomerEditForm(p => ({ ...p, e_invoice_address: e.target.value }))} />
+                                                        )}
                                                     </div>
                                                     <div className="flex gap-2 justify-end">
                                                         <button type="button" className="text-xs text-gray-500 px-2 py-1" onClick={() => setIsEditingExistingCustomer(false)}>Avbryt</button>
