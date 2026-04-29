@@ -66,9 +66,8 @@ import {
   createEventNote,
   deleteEventNote
 } from '../lib/calendar';
-import { getTeamMembers, getLeads, getCustomerCities, getUserProfiles, createLeadActivity, createOrderActivity } from '../lib/database';
-import { getOrders } from '../lib/orders';
-import { updateOrder } from '../lib/orders';
+import { getTeamMembers, getLeads, getCustomerCities, getUserProfiles, createLeadActivity } from '../lib/database';
+import { getOrders, updateOrder, createOrderActivity } from '../lib/orders';
 import { updateLead } from '../lib/leads';
 import { getTeams, getUserTeams, type TeamWithRelations } from '../lib/teams';
 import { sendEmail } from '../lib/email';
