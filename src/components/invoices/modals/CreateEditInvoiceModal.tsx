@@ -134,7 +134,7 @@ export default function CreateEditInvoiceModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
             <form
                 noValidate
                 onSubmit={(e: React.FormEvent) => {
@@ -143,6 +143,7 @@ export default function CreateEditInvoiceModal({
                     onSubmit();
                 }}
                 className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto flex flex-col"
+                onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between p-6 border-b">
                     <h3 className="text-lg font-semibold text-gray-900">
@@ -209,6 +210,7 @@ export default function CreateEditInvoiceModal({
                                     </div>
 
                                     {!isManualCustomer ? (
+                                        <>
                                         <select
                                             required={!isManualCustomer}
                                             value={formData.customer_id}
@@ -221,6 +223,23 @@ export default function CreateEditInvoiceModal({
                                                 <option key={customer.id} value={customer.id}>{customer.name}</option>
                                             ))}
                                         </select>
+                                        {formData.customer_id && (() => {
+                                            const sel = customers.find(c => c.id === formData.customer_id);
+                                            if (!sel) return null;
+                                            return (
+                                                <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md space-y-1">
+                                                    <p className="text-sm font-medium text-gray-800">{sel.name}</p>
+                                                    <p className="text-xs text-gray-500">{(sel as any).customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
+                                                    {(sel as any).email && <p className="text-xs text-gray-500">{(sel as any).email}</p>}
+                                                    {(sel as any).phone_number && <p className="text-xs text-gray-500">{(sel as any).phone_number}</p>}
+                                                    {(sel as any).org_number && <p className="text-xs text-gray-500">{(sel as any).customer_type === 'company' ? 'Org.nr' : 'Personnr'}: {(sel as any).org_number}</p>}
+                                                    {((sel as any).address || (sel as any).city) && <p className="text-xs text-gray-500">{[(sel as any).address, (sel as any).postal_code, (sel as any).city].filter(Boolean).join(', ')}</p>}
+                                                    {(sel as any).vat_handling && <p className="text-xs text-gray-500">Moms: {(sel as any).vat_handling}</p>}
+                                                    {(sel as any).invoice_delivery_method && <p className="text-xs text-gray-500">Fakturaleverans: {(sel as any).invoice_delivery_method}</p>}
+                                                </div>
+                                            );
+                                        })()}
+                                        </>
                                     ) : (
                                         <div className="space-y-3 bg-gray-50 p-3 rounded-md border">
                                             <div className="flex space-x-2">
