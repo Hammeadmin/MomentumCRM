@@ -164,7 +164,15 @@ function InvoiceManagement() {
   // Helpers
   const toNumber = (v: unknown): number => typeof v === 'number' ? v : typeof v === 'string' ? (parseFloat(v) || 0) : 0;
   const calculateSubtotal = (items: any[]) => items.reduce((s, i) => s + toNumber(i.total), 0);
-  const calculateVAT = (sub: number) => toNumber(sub) * 0.25;
+  const getSelectedVatRate = () => {
+    const sel = customers.find((c: any) => c.id === formData.customer_id);
+    const vh = (sel as any)?.vat_handling;
+    if (vh === '12%') return 0.12;
+    if (vh === '6%') return 0.06;
+    if (vh === '0%' || vh === 'omvänd byggmoms') return 0;
+    return 0.25;
+  };
+  const calculateVAT = (sub: number) => toNumber(sub) * getSelectedVatRate();
   const calculateTotal = (items: any[]) => { const s = calculateSubtotal(items); return s + calculateVAT(s); };
 
   const addLineItem = () => setFormData((p: typeof formData) => ({ ...p, line_items: [...p.line_items, { description: '', quantity: 1, unit_price: 0, total: 0 }] }));

@@ -10,7 +10,7 @@
  * - Activity timeline
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft,
@@ -46,12 +46,14 @@ import {
     getAttachmentsForOrder,
     updateOrder,
     createOrderNote,
+    addAttachmentToOrder,
     type OrderWithRelations
 } from '../lib/orders';
 import { formatDate, formatDateTime, updateCustomer } from '../lib/database';
 import { ORDER_STATUS_LABELS, type OrderStatus, type OrderNote, type OrderActivity } from '../types/database';
 import { Button } from '../components/ui';
 import OrderDetailModal from '../components/OrderDetailModal';
+import CreateInvoiceModal from '../components/CreateInvoiceModal';
 
 // Status options matching Kanban columns - same as Säljtunnel/OrderKanban
 const ORDER_STATUS_OPTIONS: { status: OrderStatus; label: string; color: string }[] = [
@@ -192,6 +194,9 @@ export default function OrderDetailPage() {
     const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
     const [statusChangeLoading, setStatusChangeLoading] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
+    const [uploadingAttachment, setUploadingAttachment] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [isEditingCustomer, setIsEditingCustomer] = useState(false);
     const [customerEditForm, setCustomerEditForm] = useState({
         name: '', email: '', phone_number: '', org_number: '',
@@ -291,6 +296,23 @@ export default function OrderDetailPage() {
         setShowEditModal(true);
     };
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !id || !user) return;
+        setUploadingAttachment(true);
+        try {
+            const { error } = await addAttachmentToOrder(id, user.id, file);
+            if (error) throw error;
+            success('Bilaga uppladdad', file.name);
+            loadOrderData();
+        } catch (err: any) {
+            showError('Uppladdning misslyckades', err.message);
+        } finally {
+            setUploadingAttachment(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
     const handleAddNote = async () => {
         if (!newNote.trim() || !id || !user) return;
 
@@ -367,7 +389,7 @@ export default function OrderDetailPage() {
                     <Button variant="outline" size="sm" icon={<Edit className="w-4 h-4" />} onClick={handleEdit}>
                         Redigera
                     </Button>
-                    <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />}>
+                    <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => setShowCreateInvoiceModal(true)}>
                         Skicka faktura
                     </Button>
                 </div>
@@ -722,9 +744,21 @@ export default function OrderDetailPage() {
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between mb-3">
                                         <h4 className="text-sm font-semibold text-gray-700">Bilagor</h4>
-                                        <Button variant="outline" size="sm" icon={<Plus className="w-4 h-4" />}>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            icon={uploadingAttachment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={uploadingAttachment}
+                                        >
                                             Ladda upp
                                         </Button>
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            className="hidden"
+                                            onChange={handleFileUpload}
+                                        />
                                     </div>
                                     {attachments.length === 0 ? (
                                         <p className="text-sm text-gray-500 text-center py-8">
@@ -792,6 +826,20 @@ export default function OrderDetailPage() {
                         loadOrderData();
                         setShowEditModal(false);
                     }}
+                />
+            )}
+
+            {showCreateInvoiceModal && (
+                <CreateInvoiceModal
+                    isOpen={showCreateInvoiceModal}
+                    onClose={() => setShowCreateInvoiceModal(false)}
+                    onInvoiceCreated={() => {
+                        setShowCreateInvoiceModal(false);
+                        loadOrderData();
+                    }}
+                    defaultOrderId={id}
+                    defaultCustomerId={order?.customer_id ?? undefined}
+                    defaultWorkSummary={order?.job_description ?? undefined}
                 />
             )}
         </div>

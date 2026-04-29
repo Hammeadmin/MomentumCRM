@@ -37,12 +37,18 @@ interface CreateInvoiceModalProps {
     isOpen: boolean;
     onClose: () => void;
     onInvoiceCreated: () => void;
+    defaultOrderId?: string;
+    defaultCustomerId?: string;
+    defaultWorkSummary?: string;
 }
 
 const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
     isOpen,
     onClose,
     onInvoiceCreated,
+    defaultOrderId,
+    defaultCustomerId,
+    defaultWorkSummary,
 }) => {
     const { organisationId } = useAuth();
     const { success, error: showError } = useToast();
@@ -115,6 +121,18 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
             });
         }
     }, [isOpen, organisationId]);
+
+    // Apply pre-fill defaults when modal opens with them
+    useEffect(() => {
+        if (isOpen && (defaultOrderId || defaultCustomerId || defaultWorkSummary)) {
+            setFormData(prev => ({
+                ...prev,
+                order_id: defaultOrderId || prev.order_id,
+                customer_id: defaultCustomerId || prev.customer_id,
+                work_summary: defaultWorkSummary || prev.work_summary,
+            }));
+        }
+    }, [isOpen, defaultOrderId, defaultCustomerId, defaultWorkSummary]);
 
     const resetForm = () => {
         setFormData({
@@ -305,6 +323,8 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                 return;
             }
 
+            const subtotalAmount = calculateSubtotal();
+            const vatAmount = calculateVAT();
             const total = calculateTotal();
 
             // Pass lineItems as the SECOND argument — not embedded in invoice object
@@ -314,6 +334,8 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                     customer_id: customerId,
                     order_id: formData.order_id || null,
                     amount: total,
+                    subtotal: subtotalAmount,
+                    vat_amount: vatAmount,
                     due_date: formData.due_date,
                     job_description: formData.work_summary || null,
                     work_summary: formData.work_summary || null,

@@ -253,7 +253,7 @@ export default function QuoteEditModal({
         if (!file) return;
         setUploadingAttachment(true);
         try {
-            const { error } = await addAttachmentToQuote(quote.id, user.id, organisationId, file);
+            const { error } = await addAttachmentToQuote(quote.id, organisationId, user.id, file);
             if (error) { showToastError('Fel', 'Kunde inte ladda upp bilaga.'); return; }
             const { data } = await getAttachmentsForQuote(quote.id);
             if (data) setAttachments(data);
