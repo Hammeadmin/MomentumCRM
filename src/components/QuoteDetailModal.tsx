@@ -7,8 +7,9 @@
 import { useState, useEffect } from 'react';
 import {
     X, FileText, Trash2, Send, Check, Edit, User, Calendar,
-    Package, Clock, Mail, Building, Phone, MapPin, Loader2, Copy, ExternalLink
+    Package, Clock, Mail, Building, Phone, MapPin, Loader2, Copy, ExternalLink, MessageSquare
 } from 'lucide-react';
+import ContactCustomerModal from './ContactCustomerModal';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../hooks/useToast';
 import {
@@ -67,6 +68,7 @@ export function QuoteDetailModal({
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<TabType>('details');
     const [isEditing, setIsEditing] = useState(false);
+    const [showContactModal, setShowContactModal] = useState(false);
 
     // Edit form state
     const [editForm, setEditForm] = useState({
@@ -287,6 +289,16 @@ export function QuoteDetailModal({
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
+                            {!loading && quote?.customer && (
+                                <button
+                                    onClick={() => setShowContactModal(true)}
+                                    title="Kontakta kund"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-green-700 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
+                                >
+                                    <Mail className="w-4 h-4" />
+                                    Kontakta
+                                </button>
+                            )}
                             {!loading && quote?.status === 'draft' && (
                                 <button
                                     onClick={() => setIsEditing(!isEditing)}
@@ -699,6 +711,14 @@ export function QuoteDetailModal({
                     </div>
                 </div>
             )}
+        {showContactModal && quote?.customer && (
+            <ContactCustomerModal
+                isOpen={showContactModal}
+                onClose={() => setShowContactModal(false)}
+                customer={quote.customer}
+                onCommunicationSent={() => setShowContactModal(false)}
+            />
+        )}
         </>
     );
 }

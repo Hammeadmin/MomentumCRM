@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { updateSalesTask, getTaskNotes, createTaskNote } from '../lib/leads';
-import type { SalesTask, UserProfile, TaskNote, TaskStatus } from '../types/database';
-import { X, CheckSquare, ThumbsDown, Calendar, AlignLeft, Send, Briefcase } from 'lucide-react';
+import type { SalesTask, UserProfile, TaskNote, TaskStatus, Customer } from '../types/database';
+import { X, CheckSquare, ThumbsDown, Calendar, AlignLeft, Send, Briefcase, Mail } from 'lucide-react';
+import ContactCustomerModal from './ContactCustomerModal';
 import { formatDate } from '../lib/database';
 
 const TaskDetailModal = ({ task, members, onClose, onUpdate }: { task: SalesTask | null, members: UserProfile[], onClose: () => void, onUpdate: () => void }) => {
@@ -15,6 +16,7 @@ const TaskDetailModal = ({ task, members, onClose, onUpdate }: { task: SalesTask
     const [newNote, setNewNote] = useState('');
     const [denialReason, setDenialReason] = useState('');
     const [showDenyInput, setShowDenyInput] = useState(false);
+    const [showContactModal, setShowContactModal] = useState(false);
 
     useEffect(() => {
         if (task) {
@@ -58,7 +60,10 @@ const TaskDetailModal = ({ task, members, onClose, onUpdate }: { task: SalesTask
 
     const assignedUser = members.find(m => m.id === task.user_id);
 
+    const taskCustomer: Customer | undefined = (task as any).order?.customer;
+
     return (
+        <>
         <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full">
                 <div className="p-6">
@@ -67,7 +72,18 @@ const TaskDetailModal = ({ task, members, onClose, onUpdate }: { task: SalesTask
                             <h3 className="text-xl font-bold">{task.title}</h3>
                             <p className="text-sm text-gray-500">Tilldelad till: {assignedUser?.full_name || 'Okänd'}</p>
                         </div>
-                        <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+                        <div className="flex items-center gap-2">
+                            {(task as any).order?.customer && (
+                                <button
+                                    onClick={() => setShowContactModal(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-green-700 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
+                                >
+                                    <Mail className="w-4 h-4" />
+                                    Kontakta
+                                </button>
+                            )}
+                            <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+                        </div>
                     </div>
                     
                     {task.description && <p className="text-gray-700 mb-4 flex items-start"><AlignLeft className="w-4 h-4 inline mr-2 mt-1 flex-shrink-0"/><span>{task.description}</span></p>}
@@ -118,6 +134,14 @@ const TaskDetailModal = ({ task, members, onClose, onUpdate }: { task: SalesTask
                 </div>
             </div>
         </div>
+        {taskCustomer && (
+            <ContactCustomerModal
+                isOpen={showContactModal}
+                onClose={() => setShowContactModal(false)}
+                customer={taskCustomer}
+            />
+        )}
+        </>
     );
 };
 

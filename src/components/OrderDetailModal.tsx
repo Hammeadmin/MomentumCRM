@@ -71,6 +71,7 @@ import type { TeamWithRelations } from '../lib/teams';
 
 import ROTFields from './ROTFields';
 import RUTFields from './RUTFields';
+import ContactCustomerModal from './ContactCustomerModal';
 import ROTInformation from './ROTInformation';
 import RUTInformation from './RUTInformation';
 import OrderStatusBadge from './OrderStatusBadge';
@@ -200,6 +201,7 @@ function OrderDetailModal({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isEmailComposerOpen, setIsEmailComposerOpen] = useState(false);
   const [isSmsComposerOpen, setIsSmsComposerOpen] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
 
   // ---------------------------------------------------------------
   // Data loading
@@ -554,6 +556,16 @@ function OrderDetailModal({
               <OrderStatusBadge status={order.status} size="md" className="mt-2" />
             </div>
             <div className="flex items-center space-x-2">
+              {order.customer && (
+                <button
+                  onClick={() => setShowContactModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-green-700 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
+                  title="Kontakta kund"
+                >
+                  <Mail className="w-4 h-4" />
+                  Kontakta
+                </button>
+              )}
               {!isEditing && (
                 <button
                   onClick={() => setIsEditing(true)}
@@ -1628,6 +1640,15 @@ function OrderDetailModal({
         cancelText="Avbryt"
         type="danger"
       />
+
+      {showContactModal && order.customer && (
+        <ContactCustomerModal
+          isOpen={showContactModal}
+          onClose={() => setShowContactModal(false)}
+          customer={order.customer}
+          onCommunicationSent={() => setShowContactModal(false)}
+        />
+      )}
     </>
   );
 }

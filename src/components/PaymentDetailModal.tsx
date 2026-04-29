@@ -24,10 +24,11 @@ import {
 } from 'lucide-react';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { Invoice, InvoiceStatus, INVOICE_STATUS_LABELS } from '../types/database';
+import { Invoice, InvoiceStatus, INVOICE_STATUS_LABELS, Customer } from '../types/database';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../hooks/useToast';
 import { StatusBadge } from './ui';
+import ContactCustomerModal from './ContactCustomerModal';
 
 interface InvoiceHistory {
   id: string;
@@ -99,6 +100,7 @@ export function PaymentDetailModal({
   const [history, setHistory] = useState<InvoiceHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
+  const [showContactModal, setShowContactModal] = useState(false);
 
   useEffect(() => {
     if (isOpen && invoice) {
@@ -230,6 +232,7 @@ export function PaymentDetailModal({
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
@@ -259,12 +262,23 @@ export function PaymentDetailModal({
                 </div>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            >
-              <X className="w-5 h-5 text-zinc-500" />
-            </button>
+            <div className="flex items-center gap-2">
+              {invoice.customer && (
+                <button
+                  onClick={() => setShowContactModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-green-700 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
+                >
+                  <Mail className="w-4 h-4" />
+                  Kontakta
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <X className="w-5 h-5 text-zinc-500" />
+              </button>
+            </div>
           </div>
 
           {/* Tabs */}
@@ -530,6 +544,14 @@ export function PaymentDetailModal({
         </div>
       </div>
     </div>
+    {invoice.customer && (
+      <ContactCustomerModal
+        isOpen={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        customer={invoice.customer as Customer}
+      />
+    )}
+    </>
   );
 }
 

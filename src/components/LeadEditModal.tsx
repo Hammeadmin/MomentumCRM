@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
+import ContactCustomerModal from './ContactCustomerModal';
 import { updateLead, type LeadWithRelations } from '../lib/leads';
 import { getLeadNotes, createLeadNote, formatDate, formatDateTime, formatCurrency, updateCustomer } from '../lib/database';
 import { LEAD_STATUS_LABELS, type LeadStatus, type UserProfile, type LeadNote } from '../types/database';
@@ -74,6 +75,7 @@ export default function LeadEditModal({
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<EditFormState>(buildForm(lead));
   const [saving, setSaving] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
 
   const [notes, setNotes] = useState<(LeadNote & { user?: UserProfile })[]>([]);
   const [newNote, setNewNote] = useState('');
@@ -196,6 +198,7 @@ export default function LeadEditModal({
   };
 
   return (
+    <>
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
 
@@ -224,6 +227,16 @@ export default function LeadEditModal({
             )}
           </div>
           <div className="flex items-center gap-2">
+            {!isEditing && lead.customer && (
+              <button
+                onClick={() => setShowContactModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-green-700 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
+                title="Kontakta kund"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                Kontakta
+              </button>
+            )}
             {!isEditing && (
               <button
                 onClick={() => setIsEditing(true)}
@@ -609,5 +622,14 @@ export default function LeadEditModal({
         </div>
       </div>
     </div>
+    {showContactModal && lead.customer && (
+      <ContactCustomerModal
+        isOpen={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        customer={lead.customer}
+        onCommunicationSent={() => setShowContactModal(false)}
+      />
+    )}
+    </>
   );
 }

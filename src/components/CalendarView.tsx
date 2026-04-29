@@ -28,7 +28,11 @@ import {
   Package,
   CheckCircle,
   Mail,
-  Link2 as LinkIcon
+  Link2 as LinkIcon,
+  Phone,
+  Edit2,
+  Save,
+  Building
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -66,7 +70,7 @@ import {
   createEventNote,
   deleteEventNote
 } from '../lib/calendar';
-import { getTeamMembers, getLeads, getCustomerCities, getUserProfiles, createLeadActivity } from '../lib/database';
+import { getTeamMembers, getLeads, getCustomerCities, getUserProfiles, createLeadActivity, updateCustomer } from '../lib/database';
 import { getOrders, updateOrder, createOrderActivity } from '../lib/orders';
 import { updateLead } from '../lib/leads';
 import { getTeams, getUserTeams, type TeamWithRelations } from '../lib/teams';
@@ -83,6 +87,7 @@ import { Button } from './ui';
 import EmptyState from './EmptyState';
 import { Loader2 } from 'lucide-react';
 import InvitationPreviewModal from './InvitationPreviewModal';
+import ContactCustomerModal from './ContactCustomerModal';
 import QuoteCreationModal from './QuoteCreationModal';
 import { Video } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
@@ -235,6 +240,10 @@ function CalendarView({ newEventTrigger = 0 }: { newEventTrigger?: number }) {
   // Add state for time selection modal
   const [isSendingInvite, setIsSendingInvite] = useState(false);
   const [showInvitationPreview, setShowInvitationPreview] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [isEditingEventCustomer, setIsEditingEventCustomer] = useState(false);
+  const [eventCustomerEditForm, setEventCustomerEditForm] = useState<any>({});
+  const [savingEventCustomer, setSavingEventCustomer] = useState(false);
   const [invitationData, setInvitationData] = useState<{
     event: CalendarEventWithRelations | null;
     order?: Order;
@@ -2474,6 +2483,120 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
                   )}
                 </div>
 
+                {/* Customer Details Card */}
+                {(() => {
+                  const customer = (relatedOrder as any)?.customer || (relatedLead as any)?.customer;
+                  if (!customer) return null;
+                  return (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium text-gray-800 flex items-center gap-2">
+                          <Building className="w-4 h-4 text-gray-500" />
+                          Kunduppgifter
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          {!isEditingEventCustomer ? (
+                            <button
+                              onClick={() => { setEventCustomerEditForm({ ...customer }); setIsEditingEventCustomer(true); }}
+                              className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                            >
+                              <Edit2 className="w-3 h-3" /> Redigera
+                            </button>
+                          ) : (
+                            <button onClick={() => setIsEditingEventCustomer(false)} className="text-xs text-gray-500 hover:underline">
+                              Avbryt
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {!isEditingEventCustomer ? (
+                        <div className="space-y-1.5 bg-gray-50 rounded-lg p-3 border border-gray-100">
+                          <p className="text-sm font-medium text-gray-800">{customer.name}</p>
+                          {customer.email && <p className="text-xs text-gray-500 flex items-center gap-1.5"><Mail className="w-3 h-3 flex-shrink-0" />{customer.email}</p>}
+                          {customer.phone_number && <p className="text-xs text-gray-500 flex items-center gap-1.5"><Phone className="w-3 h-3 flex-shrink-0" />{customer.phone_number}</p>}
+                          {customer.org_number && <p className="text-xs text-gray-500">{(customer as any).customer_type === 'company' ? 'Org.nr' : 'Personnr'}: {customer.org_number}</p>}
+                          {(customer.address || customer.city) && <p className="text-xs text-gray-500 flex items-center gap-1.5"><MapPin className="w-3 h-3 flex-shrink-0" />{[customer.address, customer.postal_code, customer.city].filter(Boolean).join(', ')}</p>}
+                          {(customer as any).vat_handling && <p className="text-xs text-gray-500">Moms: {(customer as any).vat_handling}</p>}
+                        </div>
+                      ) : (
+                        <div className="space-y-2 bg-blue-50 rounded-lg p-3 border border-blue-100">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Namn</label>
+                              <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={eventCustomerEditForm.name || ''} onChange={e => setEventCustomerEditForm((p: any) => ({ ...p, name: e.target.value }))} />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">E-post</label>
+                              <input type="email" className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={eventCustomerEditForm.email || ''} onChange={e => setEventCustomerEditForm((p: any) => ({ ...p, email: e.target.value }))} />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Telefon</label>
+                              <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={eventCustomerEditForm.phone_number || ''} onChange={e => setEventCustomerEditForm((p: any) => ({ ...p, phone_number: e.target.value }))} />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Org.nr / Personnr</label>
+                              <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={eventCustomerEditForm.org_number || ''} onChange={e => setEventCustomerEditForm((p: any) => ({ ...p, org_number: e.target.value }))} />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Adress</label>
+                            <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={eventCustomerEditForm.address || ''} onChange={e => setEventCustomerEditForm((p: any) => ({ ...p, address: e.target.value }))} />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Postnummer</label>
+                              <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={eventCustomerEditForm.postal_code || ''} onChange={e => setEventCustomerEditForm((p: any) => ({ ...p, postal_code: e.target.value }))} />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Stad</label>
+                              <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={eventCustomerEditForm.city || ''} onChange={e => setEventCustomerEditForm((p: any) => ({ ...p, city: e.target.value }))} />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Momshantering</label>
+                            <select className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={eventCustomerEditForm.vat_handling || '25%'} onChange={e => setEventCustomerEditForm((p: any) => ({ ...p, vat_handling: e.target.value }))}>
+                              <option value="25%">25% moms</option>
+                              <option value="12%">12% moms</option>
+                              <option value="6%">6% moms</option>
+                              <option value="0%">Momsfri (0%)</option>
+                              <option value="omvänd byggmoms">Omvänd byggmoms</option>
+                            </select>
+                          </div>
+                          <div className="flex justify-end pt-1">
+                            <button
+                              onClick={async () => {
+                                setSavingEventCustomer(true);
+                                try {
+                                  await updateCustomer(customer.id, {
+                                    name: eventCustomerEditForm.name,
+                                    email: eventCustomerEditForm.email || null,
+                                    phone_number: eventCustomerEditForm.phone_number || null,
+                                    org_number: eventCustomerEditForm.org_number || null,
+                                    address: eventCustomerEditForm.address || null,
+                                    postal_code: eventCustomerEditForm.postal_code || null,
+                                    city: eventCustomerEditForm.city || null,
+                                    vat_handling: eventCustomerEditForm.vat_handling as any,
+                                  } as any);
+                                  await loadEvents();
+                                  setIsEditingEventCustomer(false);
+                                } catch { /* silent */ } finally {
+                                  setSavingEventCustomer(false);
+                                }
+                              }}
+                              disabled={savingEventCustomer}
+                              className="inline-flex items-center gap-1.5 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {savingEventCustomer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                              Spara
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* MODIFIED: Description Section */}
                 {/* Show the event's own description first */}
                 {selectedEvent.description && (
@@ -2595,6 +2718,15 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
                   )}
 
                   <div className="flex space-x-2">
+                    {((relatedOrder as any)?.customer || (relatedLead as any)?.customer) && (
+                      <button
+                        onClick={() => setShowContactModal(true)}
+                        className="inline-flex items-center px-4 py-2 border border-green-200 rounded-md shadow-sm text-sm font-medium text-green-700 bg-white hover:bg-green-50"
+                      >
+                        <Mail className="w-4 h-4 mr-2" />
+                        Kontakta kund
+                      </button>
+                    )}
                     <button
                       onClick={() => handleInitiateInvitation(selectedEvent, relatedOrder)}
                       disabled={isSendingInvite}
@@ -2650,6 +2782,21 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
         meetingLink={invitationData.meetingLink}
         isSending={isSendingInvite}
       />
+
+      {showContactModal && selectedEvent && (() => {
+        const customer = (orders.find(o => o.id === selectedEvent.related_order_id) as any)?.customer
+          || (leads.find(l => l.id === selectedEvent.related_lead_id) as any)?.customer
+          || (selectedEvent.related_lead as any)?.customer;
+        if (!customer) return null;
+        return (
+          <ContactCustomerModal
+            isOpen={showContactModal}
+            onClose={() => setShowContactModal(false)}
+            customer={customer}
+            onCommunicationSent={() => setShowContactModal(false)}
+          />
+        );
+      })()}
 
       {showQuoteCreationModal && leadForQuote && (
         <QuoteCreationModal

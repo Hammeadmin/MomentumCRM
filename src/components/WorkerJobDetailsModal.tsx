@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
-import { X, Edit, Eye, Trash2, Paperclip, Send, Camera, FileText } from 'lucide-react';
+import { X, Edit, Eye, Trash2, Paperclip, Send, Camera, FileText, Mail } from 'lucide-react';
+import ContactCustomerModal from './ContactCustomerModal';
+import type { Customer } from '../types/database';
 import {
   getOrderNotes,
   createOrderNote,
@@ -37,6 +39,7 @@ export const WorkerJobDetailsModal = ({ order, onClose }: WorkerJobDetailsModalP
   const [isLoading, setIsLoading] = useState(true);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState('');
+  const [showContactModal, setShowContactModal] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -160,11 +163,23 @@ export const WorkerJobDetailsModal = ({ order, onClose }: WorkerJobDetailsModalP
   };
 
   return (
+    <>
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="p-4 border-b flex justify-between items-center">
           <h2 className="text-xl font-bold text-gray-800">{order.title}</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-800"><X size={24} /></button>
+          <div className="flex items-center gap-2">
+            {order.customer && (
+              <button
+                onClick={() => setShowContactModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-green-700 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
+              >
+                <Mail className="w-4 h-4" />
+                Kontakta
+              </button>
+            )}
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-800"><X size={24} /></button>
+          </div>
         </div>
 
         <div className="p-6 overflow-y-auto space-y-6">
@@ -254,5 +269,13 @@ export const WorkerJobDetailsModal = ({ order, onClose }: WorkerJobDetailsModalP
         </div>
       </div>
     </div>
+    {order.customer && (
+      <ContactCustomerModal
+        isOpen={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        customer={order.customer as Customer}
+      />
+    )}
+    </>
   );
 };
