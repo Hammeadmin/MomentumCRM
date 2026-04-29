@@ -63,16 +63,16 @@ Deno.serve(async (req: Request) => {
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const requestBody = await req.json();
-    
+
     // Handle team notifications
     if (requestBody.team_id) {
       const teamRequest = requestBody as TeamNotificationRequest;
       const result = await createTeamNotifications(supabase, teamRequest);
-      
+
       return new Response(
         JSON.stringify(result),
         {
@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
 
   } catch (error) {
     console.error('Error in create-notification function:', error);
-    
+
     return new Response(
       JSON.stringify({
         success: false,
@@ -222,7 +222,7 @@ async function createTeamNotifications(supabase: any, request: TeamNotificationR
         };
 
         const result = await createNotification(supabase, notificationRequest);
-        
+
         if (result.success) {
           notifications.push(result.notification_id);
         } else {
@@ -260,25 +260,25 @@ function generateNotificationTemplate(
         title: 'Ny order tilldelad',
         message: `Du har tilldelats ordern "${metadata.order_title}"`
       };
-    
+
     case 'event_assignment':
       return {
         title: 'Ny händelse schemalagd',
         message: `Du har en ny händelse: "${metadata.event_title}"`
       };
-    
+
     case 'status_update':
       return {
         title: 'Status uppdaterad',
         message: `Status ändrad från "${metadata.old_status}" till "${metadata.new_status}"`
       };
-    
+
     case 'system':
       return {
         title: 'Systemmeddelande',
         message: metadata.message || 'Nytt systemmeddelande'
       };
-    
+
     default:
       return {
         title: 'Ny notifiering',
