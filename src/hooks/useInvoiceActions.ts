@@ -174,11 +174,15 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
             const invoiceNumber = `F${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`;
             const ocrNumber = invoiceNumber.replace(/\D/g, '');
 
+            const subtotalAmt = formData.line_items.reduce((s: number, i: LineItem) => s + i.total, 0);
+            const totalAmt = calculateTotal(formData.line_items);
             const invoiceData = {
                 organisation_id: organisationId,
                 invoice_number: invoiceNumber,
                 customer_id: finalCustomerId,
-                amount: calculateTotal(formData.line_items),
+                amount: totalAmt,
+                subtotal: subtotalAmt,
+                vat_amount: totalAmt - subtotalAmt,
                 due_date: formData.due_date || null,
                 order_id: formData.order_id || null,
                 status: 'draft' as InvoiceStatus,
@@ -186,6 +190,7 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 assigned_user_id: preInvoiceAssignmentType === 'individual' ? preInvoiceAssignedToUserId : null,
                 assigned_team_id: preInvoiceAssignmentType === 'team' ? preInvoiceAssignedToTeamId : null,
                 job_description: workSummary,
+                work_summary: workSummary,
                 include_rot: formData.include_rot,
                 rot_personnummer: formData.rot_personnummer,
                 rot_organisationsnummer: formData.rot_organisationsnummer,
@@ -358,11 +363,15 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
             const dueDate = new Date();
             dueDate.setDate(dueDate.getDate() + (systemSettings?.default_payment_terms || 30));
 
+            const subtotalFromOrder = lineItemsFromOrder.reduce((s: number, i: LineItem) => s + i.total, 0);
+            const totalFromOrder = calculateTotal(lineItemsFromOrder);
             const invoiceData = {
                 organisation_id: organisationId,
                 invoice_number: invoiceNumber,
                 customer_id: order.customer_id!,
-                amount: calculateTotal(lineItemsFromOrder),
+                amount: totalFromOrder,
+                subtotal: subtotalFromOrder,
+                vat_amount: totalFromOrder - subtotalFromOrder,
                 due_date: dueDate.toISOString().split('T')[0],
                 order_id: order.id,
                 status: 'draft' as InvoiceStatus,
@@ -371,6 +380,7 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 assigned_user_id: assignmentUpdates?.assigned_to_user_id || order.assigned_to_user_id,
                 assigned_team_id: assignmentUpdates?.assigned_to_team_id || order.assigned_to_team_id,
                 job_description: workSummaryArg || order.job_description || order.description,
+                work_summary: workSummaryArg || order.job_description || order.description,
                 include_rot: currentRotState ? (currentRotState.include_rot as boolean) : order.include_rot,
                 rot_personnummer: currentRotState ? (currentRotState.rot_personnummer as string | null) : order.rot_personnummer,
                 rot_organisationsnummer: currentRotState ? (currentRotState.rot_organisationsnummer as string | null) : order.rot_organisationsnummer,
@@ -439,11 +449,15 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
             const invoiceNumber = `F${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`;
             const ocrNumber = invoiceNumber.replace(/\D/g, '');
 
+            const subtotalPreInvoice = lineItems.reduce((s: number, i: LineItem) => s + i.total, 0);
+            const totalPreInvoice = calculateTotal(lineItems);
             const invoiceData = {
                 organisation_id: organisationId,
                 invoice_number: invoiceNumber,
                 customer_id: formData.customer_id || selectedOrder.customer_id,
-                amount: calculateTotal(lineItems),
+                amount: totalPreInvoice,
+                subtotal: subtotalPreInvoice,
+                vat_amount: totalPreInvoice - subtotalPreInvoice,
                 due_date: formData.due_date || new Date(Date.now() + (systemSettings?.default_payment_terms || 30) * 86400000).toISOString().split('T')[0],
                 order_id: selectedOrder.id,
                 status: 'draft' as InvoiceStatus,
@@ -452,6 +466,7 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 assigned_user_id: assignmentUpdates.assigned_to_user_id,
                 assigned_team_id: assignmentUpdates.assigned_to_team_id,
                 job_description: workSummary,
+                work_summary: workSummary,
                 include_rot: formData.include_rot,
                 rot_personnummer: formData.rot_personnummer,
                 rot_organisationsnummer: formData.rot_organisationsnummer,

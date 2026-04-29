@@ -89,6 +89,10 @@ export default function LeadEditModal({
     address: lead.customer?.address || '',
     postal_code: lead.customer?.postal_code || '',
     city: lead.customer?.city || '',
+    sales_area: (lead.customer as any)?.sales_area || '',
+    vat_handling: (lead.customer as any)?.vat_handling || '25%',
+    invoice_delivery_method: (lead.customer as any)?.invoice_delivery_method || 'e-post',
+    e_invoice_address: (lead.customer as any)?.e_invoice_address || '',
   });
   const [savingCustomer, setSavingCustomer] = useState(false);
 
@@ -163,7 +167,11 @@ export default function LeadEditModal({
         address: customerEditForm.address || null,
         postal_code: customerEditForm.postal_code || null,
         city: customerEditForm.city || null,
-      });
+        sales_area: customerEditForm.sales_area || null,
+        vat_handling: customerEditForm.vat_handling as any,
+        invoice_delivery_method: customerEditForm.invoice_delivery_method as any,
+        e_invoice_address: customerEditForm.e_invoice_address || null,
+      } as any);
       if (error) { showError('Fel', (error as any).message || 'Kunde inte spara.'); return; }
       success('Sparat', 'Kunduppgifter uppdaterade.');
       setIsEditingCustomer(false);
@@ -378,7 +386,7 @@ export default function LeadEditModal({
                               </div>
                               <button
                                 className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                                onClick={() => { setCustomerEditForm({ name: lead.customer!.name || '', email: lead.customer!.email || '', phone_number: lead.customer!.phone_number || '', org_number: lead.customer!.org_number || '', address: lead.customer!.address || '', postal_code: lead.customer!.postal_code || '', city: lead.customer!.city || '' }); setIsEditingCustomer(true); }}
+                                onClick={() => { setCustomerEditForm({ name: lead.customer!.name || '', email: lead.customer!.email || '', phone_number: lead.customer!.phone_number || '', org_number: lead.customer!.org_number || '', address: lead.customer!.address || '', postal_code: lead.customer!.postal_code || '', city: lead.customer!.city || '', sales_area: (lead.customer as any)?.sales_area || '', vat_handling: (lead.customer as any)?.vat_handling || '25%', invoice_delivery_method: (lead.customer as any)?.invoice_delivery_method || 'e-post', e_invoice_address: (lead.customer as any)?.e_invoice_address || '' }); setIsEditingCustomer(true); }}
                               >
                                 <Edit2 className="w-3 h-3" /> Redigera
                               </button>
@@ -423,6 +431,35 @@ export default function LeadEditModal({
                             <div className="flex gap-2">
                               <input className="w-24 text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Postnr" value={customerEditForm.postal_code} onChange={e => setCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
                               <input className="flex-1 text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Stad" value={customerEditForm.city} onChange={e => setCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Försäljningsområde</label>
+                                <input className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="t.ex. Stockholm" value={customerEditForm.sales_area} onChange={e => setCustomerEditForm(p => ({ ...p, sales_area: e.target.value }))} />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Momshantering</label>
+                                <select className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" value={customerEditForm.vat_handling} onChange={e => setCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}>
+                                  <option value="25%">25% moms</option>
+                                  <option value="12%">12% moms</option>
+                                  <option value="6%">6% moms</option>
+                                  <option value="0%">Momsfri (0%)</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Fakturaleverans</label>
+                                <select className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" value={customerEditForm.invoice_delivery_method} onChange={e => setCustomerEditForm(p => ({ ...p, invoice_delivery_method: e.target.value }))}>
+                                  <option value="e-post">E-post</option>
+                                  <option value="e-faktura">E-faktura</option>
+                                  <option value="post">Post</option>
+                                </select>
+                              </div>
+                              {customerEditForm.invoice_delivery_method === 'e-faktura' && (
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-500 mb-1">E-fakturaadress</label>
+                                  <input className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="GLN / PEPPOL-ID" value={customerEditForm.e_invoice_address} onChange={e => setCustomerEditForm(p => ({ ...p, e_invoice_address: e.target.value }))} />
+                                </div>
+                              )}
                             </div>
                             <div className="flex gap-2 justify-end pt-1">
                               <button className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1" onClick={() => setIsEditingCustomer(false)}>Avbryt</button>

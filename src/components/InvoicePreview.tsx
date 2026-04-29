@@ -24,9 +24,10 @@ function InvoicePreview({
 }: InvoicePreviewProps) {
   if (!invoice) return null;
 
-  const subtotal = invoice.subtotal || invoice.invoice_line_items?.reduce((sum, item) => sum + item.total, 0) || 0;
-  const vatAmount = invoice.vat_amount || subtotal * 0.25;
+  const subtotal = invoice.subtotal ?? invoice.invoice_line_items?.reduce((sum, item) => sum + item.total, 0) ?? 0;
   const total = invoice.amount || 0;
+  // Derive VAT from total - subtotal when not explicitly stored (avoids wrong 25% fallback for 0%/omvänd customers)
+  const vatAmount = invoice.vat_amount != null ? invoice.vat_amount : Math.max(0, total - subtotal);
   const rotAmount = invoice.rot_amount || 0;
   const rutAmount = (invoice as any).rut_amount || 0;
   const finalAmount = total - rotAmount - rutAmount;
@@ -356,7 +357,7 @@ function InvoicePreview({
                 <span className="font-medium">{formatCurrency(subtotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Moms ({(vatAmount / subtotal * 100 || 25).toFixed(0)}%):</span>
+                <span className="text-gray-600">Moms ({subtotal > 0 ? Math.round(vatAmount / subtotal * 100) : 0}%):</span>
                 <span className="font-medium">{formatCurrency(vatAmount)}</span>
               </div>
               <div className="flex justify-between text-xl font-bold text-gray-900 pt-2 border-t">

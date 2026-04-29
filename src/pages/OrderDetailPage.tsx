@@ -10,7 +10,7 @@
  * - Activity timeline
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft,
@@ -24,6 +24,8 @@ import {
     Building,
     Clock,
     Edit,
+    Edit2,
+    Save,
     CheckCircle,
     AlertCircle,
     Send,
@@ -44,12 +46,14 @@ import {
     getAttachmentsForOrder,
     updateOrder,
     createOrderNote,
+    addAttachmentToOrder,
     type OrderWithRelations
 } from '../lib/orders';
-import { formatDate, formatDateTime } from '../lib/database';
+import { formatDate, formatDateTime, updateCustomer } from '../lib/database';
 import { ORDER_STATUS_LABELS, type OrderStatus, type OrderNote, type OrderActivity } from '../types/database';
 import { Button } from '../components/ui';
 import OrderDetailModal from '../components/OrderDetailModal';
+import CreateInvoiceModal from '../components/CreateInvoiceModal';
 
 // Status options matching Kanban columns - same as Säljtunnel/OrderKanban
 const ORDER_STATUS_OPTIONS: { status: OrderStatus; label: string; color: string }[] = [
@@ -190,6 +194,16 @@ export default function OrderDetailPage() {
     const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
     const [statusChangeLoading, setStatusChangeLoading] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
+    const [uploadingAttachment, setUploadingAttachment] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isEditingCustomer, setIsEditingCustomer] = useState(false);
+    const [customerEditForm, setCustomerEditForm] = useState({
+        name: '', email: '', phone_number: '', org_number: '',
+        address: '', postal_code: '', city: '',
+        sales_area: '', vat_handling: '25%', invoice_delivery_method: 'e-post', e_invoice_address: '',
+    });
+    const [savingCustomer, setSavingCustomer] = useState(false);
 
     useEffect(() => {
         if (id) {
@@ -218,6 +232,34 @@ export default function OrderDetailPage() {
             showError('Kunde inte ladda order', err.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleUpdateCustomer = async () => {
+        if (!order?.customer) return;
+        setSavingCustomer(true);
+        try {
+            const { error } = await updateCustomer(order.customer.id, {
+                name: customerEditForm.name || undefined,
+                email: customerEditForm.email || null,
+                phone_number: customerEditForm.phone_number || null,
+                org_number: customerEditForm.org_number || null,
+                address: customerEditForm.address || null,
+                postal_code: customerEditForm.postal_code || null,
+                city: customerEditForm.city || null,
+                sales_area: customerEditForm.sales_area || null,
+                vat_handling: customerEditForm.vat_handling as any,
+                invoice_delivery_method: customerEditForm.invoice_delivery_method as any,
+                e_invoice_address: customerEditForm.e_invoice_address || null,
+            } as any);
+            if (error) { showError('Fel', (error as any).message || 'Kunde inte spara.'); return; }
+            success('Sparat', 'Kunduppgifter uppdaterade.');
+            setIsEditingCustomer(false);
+            loadOrderData();
+        } catch {
+            showError('Fel', 'Kunde inte spara kunduppgifter.');
+        } finally {
+            setSavingCustomer(false);
         }
     };
 
@@ -252,6 +294,23 @@ export default function OrderDetailPage() {
 
     const handleEdit = () => {
         setShowEditModal(true);
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !id || !user) return;
+        setUploadingAttachment(true);
+        try {
+            const { error } = await addAttachmentToOrder(id, user.id, file);
+            if (error) throw error;
+            success('Bilaga uppladdad', file.name);
+            loadOrderData();
+        } catch (err: any) {
+            showError('Uppladdning misslyckades', err.message);
+        } finally {
+            setUploadingAttachment(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
     };
 
     const handleAddNote = async () => {
@@ -330,7 +389,7 @@ export default function OrderDetailPage() {
                     <Button variant="outline" size="sm" icon={<Edit className="w-4 h-4" />} onClick={handleEdit}>
                         Redigera
                     </Button>
-                    <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />}>
+                    <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => setShowCreateInvoiceModal(true)}>
                         Skicka faktura
                     </Button>
                 </div>
@@ -360,48 +419,122 @@ export default function OrderDetailPage() {
                         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Kund</h3>
                         {order.customer ? (
                             <div className="space-y-3">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                                        <span className="text-white font-semibold text-sm">
-                                            {order.customer.name?.charAt(0).toUpperCase()}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <p className="font-semibold text-gray-900">{order.customer.name}</p>
-                                        <p className="text-sm text-gray-500">{order.customer.customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2 pt-3 border-t border-gray-100">
-                                    {order.customer.email && (
-                                        <a href={`mailto:${order.customer.email}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600">
-                                            <Mail className="w-4 h-4" />
-                                            {order.customer.email}
-                                        </a>
-                                    )}
-                                    {order.customer.phone_number && (
-                                        <a href={`tel:${order.customer.phone_number}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600">
-                                            <Phone className="w-4 h-4" />
-                                            {order.customer.phone_number}
-                                        </a>
-                                    )}
-                                    {order.customer.address && (
-                                        <div className="flex items-start gap-2 text-sm text-gray-600">
-                                            <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                                            <span>
-                                                {order.customer.address}
-                                                {order.customer.postal_code && `, ${order.customer.postal_code}`}
-                                                {order.customer.city && ` ${order.customer.city}`}
-                                            </span>
+                                {!isEditingCustomer ? (
+                                    <>
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex items-start gap-3">
+                                                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-white font-semibold text-sm">
+                                                        {order.customer.name?.charAt(0).toUpperCase()}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-gray-900">{order.customer.name}</p>
+                                                    <p className="text-sm text-gray-500">{order.customer.customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                className="text-xs text-blue-600 hover:underline flex items-center gap-1 flex-shrink-0"
+                                                onClick={() => {
+                                                    setCustomerEditForm({
+                                                        name: order.customer!.name || '',
+                                                        email: order.customer!.email || '',
+                                                        phone_number: order.customer!.phone_number || '',
+                                                        org_number: order.customer!.org_number || '',
+                                                        address: order.customer!.address || '',
+                                                        postal_code: order.customer!.postal_code || '',
+                                                        city: order.customer!.city || '',
+                                                        sales_area: (order.customer as any)?.sales_area || '',
+                                                        vat_handling: (order.customer as any)?.vat_handling || '25%',
+                                                        invoice_delivery_method: (order.customer as any)?.invoice_delivery_method || 'e-post',
+                                                        e_invoice_address: (order.customer as any)?.e_invoice_address || '',
+                                                    });
+                                                    setIsEditingCustomer(true);
+                                                }}
+                                            >
+                                                <Edit2 className="w-3 h-3" /> Redigera
+                                            </button>
                                         </div>
-                                    )}
-                                    {order.customer.org_number && (
-                                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                                            <Building className="w-4 h-4" />
-                                            Org.nr: {order.customer.org_number}
+                                        <div className="space-y-2 pt-3 border-t border-gray-100">
+                                            {order.customer.email && (
+                                                <a href={`mailto:${order.customer.email}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600">
+                                                    <Mail className="w-4 h-4" />
+                                                    {order.customer.email}
+                                                </a>
+                                            )}
+                                            {order.customer.phone_number && (
+                                                <a href={`tel:${order.customer.phone_number}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600">
+                                                    <Phone className="w-4 h-4" />
+                                                    {order.customer.phone_number}
+                                                </a>
+                                            )}
+                                            {(order.customer.address || order.customer.postal_code || order.customer.city) && (
+                                                <div className="flex items-start gap-2 text-sm text-gray-600">
+                                                    <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                                    <span>{[order.customer.address, order.customer.postal_code, order.customer.city].filter(Boolean).join(', ')}</span>
+                                                </div>
+                                            )}
+                                            {order.customer.org_number && (
+                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                    <Building className="w-4 h-4" />
+                                                    {order.customer.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}: {order.customer.org_number}
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
+                                    </>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Namn *" value={customerEditForm.name} onChange={e => setCustomerEditForm(p => ({ ...p, name: e.target.value }))} />
+                                        <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="E-post" value={customerEditForm.email} onChange={e => setCustomerEditForm(p => ({ ...p, email: e.target.value }))} />
+                                        <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Telefon" value={customerEditForm.phone_number} onChange={e => setCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))} />
+                                        <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder={order.customer.customer_type === 'company' ? 'Org.nummer (556xxx-xxxx)' : 'Personnummer (ÅÅMMDD-XXXX)'} value={customerEditForm.org_number} onChange={e => setCustomerEditForm(p => ({ ...p, org_number: e.target.value }))} />
+                                        <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Adress" value={customerEditForm.address} onChange={e => setCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
+                                        <div className="flex gap-2">
+                                            <input className="w-24 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Postnr" value={customerEditForm.postal_code} onChange={e => setCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
+                                            <input className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Stad" value={customerEditForm.city} onChange={e => setCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1">Försäljningsområde</label>
+                                                <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="t.ex. Stockholm" value={customerEditForm.sales_area} onChange={e => setCustomerEditForm(p => ({ ...p, sales_area: e.target.value }))} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1">Momshantering</label>
+                                                <select className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" value={customerEditForm.vat_handling} onChange={e => setCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}>
+                                                    <option value="25%">25% moms</option>
+                                                    <option value="12%">12% moms</option>
+                                                    <option value="6%">6% moms</option>
+                                                    <option value="0%">Momsfri (0%)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1">Fakturaleverans</label>
+                                                <select className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" value={customerEditForm.invoice_delivery_method} onChange={e => setCustomerEditForm(p => ({ ...p, invoice_delivery_method: e.target.value }))}>
+                                                    <option value="e-post">E-post</option>
+                                                    <option value="e-faktura">E-faktura</option>
+                                                    <option value="post">Post</option>
+                                                </select>
+                                            </div>
+                                            {customerEditForm.invoice_delivery_method === 'e-faktura' && (
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-500 mb-1">E-fakturaadress</label>
+                                                    <input className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="GLN / PEPPOL-ID" value={customerEditForm.e_invoice_address} onChange={e => setCustomerEditForm(p => ({ ...p, e_invoice_address: e.target.value }))} />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2 justify-end pt-1">
+                                            <button className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200" onClick={() => setIsEditingCustomer(false)}>Avbryt</button>
+                                            <button
+                                                className="text-sm font-medium bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50"
+                                                onClick={handleUpdateCustomer}
+                                                disabled={savingCustomer}
+                                            >
+                                                {savingCustomer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                                Spara
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <p className="text-gray-500 text-sm">Ingen kund kopplad</p>
@@ -611,9 +744,21 @@ export default function OrderDetailPage() {
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between mb-3">
                                         <h4 className="text-sm font-semibold text-gray-700">Bilagor</h4>
-                                        <Button variant="outline" size="sm" icon={<Plus className="w-4 h-4" />}>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            icon={uploadingAttachment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={uploadingAttachment}
+                                        >
                                             Ladda upp
                                         </Button>
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            className="hidden"
+                                            onChange={handleFileUpload}
+                                        />
                                     </div>
                                     {attachments.length === 0 ? (
                                         <p className="text-sm text-gray-500 text-center py-8">
@@ -681,6 +826,20 @@ export default function OrderDetailPage() {
                         loadOrderData();
                         setShowEditModal(false);
                     }}
+                />
+            )}
+
+            {showCreateInvoiceModal && (
+                <CreateInvoiceModal
+                    isOpen={showCreateInvoiceModal}
+                    onClose={() => setShowCreateInvoiceModal(false)}
+                    onInvoiceCreated={() => {
+                        setShowCreateInvoiceModal(false);
+                        loadOrderData();
+                    }}
+                    defaultOrderId={id}
+                    defaultCustomerId={order?.customer_id ?? undefined}
+                    defaultWorkSummary={order?.job_description ?? undefined}
                 />
             )}
         </div>

@@ -6,11 +6,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, UserPlus } from 'lucide-react';
+import { X, Loader2, UserPlus, Edit2, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { createLead } from '../lib/leads';
-import { getCustomers, getTeamMembers, createCustomer } from '../lib/database';
+import { getCustomers, getTeamMembers, createCustomer, updateCustomer } from '../lib/database';
 import type { Customer, UserProfile, LeadStatus } from '../types/database';
 
 interface CreateLeadModalProps {
@@ -40,6 +40,9 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
 
     // Inline customer creation state
     const [isNewCustomer, setIsNewCustomer] = useState(false);
+    const [isEditingExistingCustomer, setIsEditingExistingCustomer] = useState(false);
+    const [existingCustomerEditForm, setExistingCustomerEditForm] = useState({ name: '', email: '', phone_number: '', org_number: '', address: '', postal_code: '', city: '', sales_area: '', vat_handling: '25%', invoice_delivery_method: 'e-post', e_invoice_address: '' });
+    const [savingExistingCustomer, setSavingExistingCustomer] = useState(false);
     const [newCustomerForm, setNewCustomerForm] = useState({
         name: '',
         customer_type: 'company' as 'company' | 'private',
@@ -49,6 +52,10 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
         address: '',
         postal_code: '',
         city: '',
+        sales_area: '',
+        vat_handling: '25%',
+        invoice_delivery_method: 'e-post',
+        e_invoice_address: '',
     });
 
     useEffect(() => {
@@ -67,6 +74,7 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
             setNewCustomerForm({
                 name: '', customer_type: 'company', org_number: '',
                 email: '', phone_number: '', address: '', postal_code: '', city: '',
+                sales_area: '', vat_handling: '25%', invoice_delivery_method: 'e-post', e_invoice_address: '',
             });
 
             const loadModalData = async () => {
@@ -116,6 +124,10 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                     address: newCustomerForm.address.trim() || null,
                     postal_code: newCustomerForm.postal_code.trim() || null,
                     city: newCustomerForm.city.trim() || null,
+                    sales_area: newCustomerForm.sales_area.trim() || null,
+                    vat_handling: newCustomerForm.vat_handling || '25%',
+                    invoice_delivery_method: newCustomerForm.invoice_delivery_method || 'e-post',
+                    e_invoice_address: newCustomerForm.e_invoice_address.trim() || null,
                 } as Omit<Customer, 'id' | 'created_at'>);
 
                 if (customerError || !createdCustomer) {
@@ -154,6 +166,37 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
             showError('Fel', 'Kunde inte skapa lead');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleUpdateExistingCustomer = async () => {
+        const sel = customers.find(c => c.id === formData.customer_id);
+        if (!sel) return;
+        setSavingExistingCustomer(true);
+        try {
+            await updateCustomer(sel.id, {
+                name: existingCustomerEditForm.name || undefined,
+                email: existingCustomerEditForm.email || null,
+                phone_number: existingCustomerEditForm.phone_number || null,
+                org_number: existingCustomerEditForm.org_number || null,
+                address: existingCustomerEditForm.address || null,
+                postal_code: existingCustomerEditForm.postal_code || null,
+                city: existingCustomerEditForm.city || null,
+                sales_area: existingCustomerEditForm.sales_area || null,
+                vat_handling: existingCustomerEditForm.vat_handling as any,
+                invoice_delivery_method: existingCustomerEditForm.invoice_delivery_method as any,
+                e_invoice_address: existingCustomerEditForm.e_invoice_address || null,
+            } as any);
+            // Refresh customers list
+            if (organisationId) {
+                const res = await getCustomers(organisationId);
+                if (res.data) setCustomers(res.data);
+            }
+            setIsEditingExistingCustomer(false);
+        } catch {
+            // silent
+        } finally {
+            setSavingExistingCustomer(false);
         }
     };
 
@@ -335,17 +378,139 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                                             />
                                         </div>
                                     </div>
+                                    {/* Sales area + VAT */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Försäljningsområde</label>
+                                            <input
+                                                type="text"
+                                                value={newCustomerForm.sales_area}
+                                                onChange={e => setNewCustomerForm(prev => ({ ...prev, sales_area: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                                placeholder="t.ex. Stockholm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Momshantering</label>
+                                            <select
+                                                value={newCustomerForm.vat_handling}
+                                                onChange={e => setNewCustomerForm(prev => ({ ...prev, vat_handling: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                            >
+                                                <option value="25%">25% moms</option>
+                                                <option value="12%">12% moms</option>
+                                                <option value="6%">6% moms</option>
+                                                <option value="0%">Momsfri (0%)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    {/* Invoice delivery */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Fakturaleverans</label>
+                                            <select
+                                                value={newCustomerForm.invoice_delivery_method}
+                                                onChange={e => setNewCustomerForm(prev => ({ ...prev, invoice_delivery_method: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                            >
+                                                <option value="e-post">E-post</option>
+                                                <option value="e-faktura">E-faktura</option>
+                                                <option value="post">Post</option>
+                                            </select>
+                                        </div>
+                                        {newCustomerForm.invoice_delivery_method === 'e-faktura' && (
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">E-fakturaadress</label>
+                                                <input
+                                                    type="text"
+                                                    value={newCustomerForm.e_invoice_address}
+                                                    onChange={e => setNewCustomerForm(prev => ({ ...prev, e_invoice_address: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                                    placeholder="GLN / PEPPOL-ID"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
                                     <p className="text-xs text-blue-700">Kunden skapas automatiskt när du sparar leaden.</p>
                                 </div>
                             ) : (
+                                <div>
                                 <select
                                     value={formData.customer_id}
-                                    onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
+                                    onChange={(e) => { setFormData({ ...formData, customer_id: e.target.value }); setIsEditingExistingCustomer(false); }}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
                                 >
                                     <option value="">Välj kund (om befintlig)...</option>
                                     {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
+                                {formData.customer_id && !isNewCustomer && (() => {
+                                    const sel = customers.find(c => c.id === formData.customer_id);
+                                    if (!sel) return null;
+                                    return (
+                                        <div className="mt-2 border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2">
+                                            {!isEditingExistingCustomer ? (
+                                                <>
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-900">{sel.name}</p>
+                                                            <p className="text-xs text-gray-500">{(sel as any).customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
+                                                        </div>
+                                                        <button type="button" className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                                            onClick={() => {
+                                                                setExistingCustomerEditForm({ name: sel.name || '', email: (sel as any).email || '', phone_number: (sel as any).phone_number || '', org_number: (sel as any).org_number || '', address: (sel as any).address || '', postal_code: (sel as any).postal_code || '', city: (sel as any).city || '', sales_area: (sel as any).sales_area || '', vat_handling: (sel as any).vat_handling || '25%', invoice_delivery_method: (sel as any).invoice_delivery_method || 'e-post', e_invoice_address: (sel as any).e_invoice_address || '' });
+                                                                setIsEditingExistingCustomer(true);
+                                                            }}>
+                                                            <Edit2 className="w-3 h-3" /> Redigera
+                                                        </button>
+                                                    </div>
+                                                    {(sel as any).email && <p className="text-xs text-gray-500">{(sel as any).email}</p>}
+                                                    {(sel as any).phone_number && <p className="text-xs text-gray-500">{(sel as any).phone_number}</p>}
+                                                    {(sel as any).org_number && <p className="text-xs text-gray-500">{(sel as any).customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}: {(sel as any).org_number}</p>}
+                                                    {[(sel as any).address, (sel as any).postal_code, (sel as any).city].filter(Boolean).length > 0 && (
+                                                        <p className="text-xs text-gray-500">{[(sel as any).address, (sel as any).postal_code, (sel as any).city].filter(Boolean).join(', ')}</p>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <div className="space-y-1.5">
+                                                    <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Namn" value={existingCustomerEditForm.name} onChange={e => setExistingCustomerEditForm(p => ({ ...p, name: e.target.value }))} />
+                                                    <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="E-post" value={existingCustomerEditForm.email} onChange={e => setExistingCustomerEditForm(p => ({ ...p, email: e.target.value }))} />
+                                                    <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Telefon" value={existingCustomerEditForm.phone_number} onChange={e => setExistingCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))} />
+                                                    <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder={(sel as any).customer_type === 'company' ? 'Org.nummer' : 'Personnummer'} value={existingCustomerEditForm.org_number} onChange={e => setExistingCustomerEditForm(p => ({ ...p, org_number: e.target.value }))} />
+                                                    <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Adress" value={existingCustomerEditForm.address} onChange={e => setExistingCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
+                                                    <div className="flex gap-1.5">
+                                                        <input className="w-20 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Postnr" value={existingCustomerEditForm.postal_code} onChange={e => setExistingCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
+                                                        <input className="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Stad" value={existingCustomerEditForm.city} onChange={e => setExistingCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                        <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Försäljningsområde" value={existingCustomerEditForm.sales_area} onChange={e => setExistingCustomerEditForm(p => ({ ...p, sales_area: e.target.value }))} />
+                                                        <select className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" value={existingCustomerEditForm.vat_handling} onChange={e => setExistingCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}>
+                                                            <option value="25%">25% moms</option>
+                                                            <option value="12%">12% moms</option>
+                                                            <option value="6%">6% moms</option>
+                                                            <option value="0%">Momsfri (0%)</option>
+                                                        </select>
+                                                        <select className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" value={existingCustomerEditForm.invoice_delivery_method} onChange={e => setExistingCustomerEditForm(p => ({ ...p, invoice_delivery_method: e.target.value }))}>
+                                                            <option value="e-post">E-post</option>
+                                                            <option value="e-faktura">E-faktura</option>
+                                                            <option value="post">Post</option>
+                                                        </select>
+                                                        {existingCustomerEditForm.invoice_delivery_method === 'e-faktura' && (
+                                                            <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="E-fakturaadress (GLN/PEPPOL)" value={existingCustomerEditForm.e_invoice_address} onChange={e => setExistingCustomerEditForm(p => ({ ...p, e_invoice_address: e.target.value }))} />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-2 justify-end">
+                                                        <button type="button" className="text-xs text-gray-500 px-2 py-1" onClick={() => setIsEditingExistingCustomer(false)}>Avbryt</button>
+                                                        <button type="button" className="text-xs font-medium bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center gap-1 disabled:opacity-50"
+                                                            disabled={savingExistingCustomer} onClick={handleUpdateExistingCustomer}>
+                                                            {savingExistingCustomer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Spara
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                                </div>
                             )}
                         </div>
 
