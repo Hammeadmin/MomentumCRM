@@ -298,7 +298,7 @@ export function QuoteDetailModal({
                             <button
                                 onClick={() => {
                                     onClose();
-                                    navigate(`/offert/${quoteId}`);
+                                    navigate(`/app/offert/${quoteId}`);
                                 }}
                                 title="Visa fullständig sida"
                                 className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

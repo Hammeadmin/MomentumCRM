@@ -43,7 +43,7 @@ import {
 import { type LeadWithRelations } from '../lib/leads';
 import { createQuote, type QuoteWithRelations } from '../lib/quotes';
 // Teams now fetched by useKanbanData hook
-import { formatCurrency, formatDate } from '../lib/database';
+import { formatCurrency, formatDate, formatDateTime } from '../lib/database';
 import {
   ORDER_STATUS_LABELS,
   getOrderStatusColor,
@@ -78,6 +78,7 @@ import { useMoveCard } from '../hooks/useMoveCard';
 import { SkeletonColumn } from './ui';
 import QuoteEditModal from './QuoteEditModal';
 import QuoteDetailModal from './QuoteDetailModal';
+import LeadEditModal from './LeadEditModal';
 import { supabase } from '../lib/supabase';
 import { getQuoteTemplates, type QuoteTemplate } from '../lib/quoteTemplates';
 
@@ -1631,170 +1632,13 @@ function OrderKanban() {
       )}
 
       {showLeadEditModal && selectedLead && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{selectedLead.title}</h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${
-                    selectedLead.status === 'new' ? 'bg-blue-100 text-blue-700' :
-                    selectedLead.status === 'contacted' ? 'bg-amber-100 text-amber-700' :
-                    selectedLead.status === 'qualified' ? 'bg-green-100 text-green-700' :
-                    'bg-gray-100 text-gray-700'
-                  }`}>
-                    {selectedLead.status === 'new' ? 'Ny' :
-                     selectedLead.status === 'contacted' ? 'Kontaktad' :
-                     selectedLead.status === 'qualified' ? 'Kvalificerad' :
-                     selectedLead.status}
-                  </span>
-                  {typeof selectedLead.lead_score === 'number' && (
-                    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      selectedLead.lead_score >= 70 ? 'bg-green-100 text-green-700' :
-                      selectedLead.lead_score >= 40 ? 'bg-amber-100 text-amber-700' :
-                      'bg-gray-100 text-gray-500'
-                    }`}>
-                      <Star className="w-3 h-3" />
-                      Poäng: {selectedLead.lead_score}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <button onClick={() => setShowLeadEditModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Estimated Value */}
-              {selectedLead.estimated_value && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-center justify-between">
-                  <span className="text-sm font-medium text-emerald-800">Uppskattat värde</span>
-                  <span className="text-lg font-bold text-emerald-700">{formatCurrency(selectedLead.estimated_value)}</span>
-                </div>
-              )}
-
-              {/* Description */}
-              {selectedLead.description && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-500 mb-1">Beskrivning</h4>
-                  <p className="text-sm text-gray-900 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{selectedLead.description}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Customer Details */}
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
-                    <Users className="w-4 h-4 text-gray-400" />
-                    Kundinformation
-                  </h4>
-                  <div className="bg-gray-50 rounded-lg p-4 space-y-2.5">
-                    {selectedLead.customer ? (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <Users className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                          <span className="text-sm font-medium text-gray-900">{selectedLead.customer.name}</span>
-                        </div>
-                        {selectedLead.customer.email && (
-                          <div className="flex items-center gap-2">
-                            <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <a href={`mailto:${selectedLead.customer.email}`} className="text-sm text-blue-600 hover:underline">{selectedLead.customer.email}</a>
-                          </div>
-                        )}
-                        {selectedLead.customer.phone_number && (
-                          <div className="flex items-center gap-2">
-                            <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <a href={`tel:${selectedLead.customer.phone_number}`} className="text-sm text-blue-600 hover:underline">{selectedLead.customer.phone_number}</a>
-                          </div>
-                        )}
-                        {selectedLead.customer.city && (
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <span className="text-sm text-gray-700">{selectedLead.customer.city}</span>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <p className="text-sm text-gray-400 italic">Ingen kund kopplad</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Lead metadata */}
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
-                    <Activity className="w-4 h-4 text-gray-400" />
-                    Leadinformation
-                  </h4>
-                  <div className="bg-gray-50 rounded-lg p-4 space-y-2.5">
-                    {selectedLead.source && (
-                      <div>
-                        <span className="text-xs font-medium text-gray-500">Källa</span>
-                        <p className="text-sm text-gray-900">{selectedLead.source}</p>
-                      </div>
-                    )}
-                    {selectedLead.city && (
-                      <div>
-                        <span className="text-xs font-medium text-gray-500">Stad (lead)</span>
-                        <p className="text-sm text-gray-900">{selectedLead.city}</p>
-                      </div>
-                    )}
-                    {selectedLead.assigned_to && (
-                      <div>
-                        <span className="text-xs font-medium text-gray-500">Tilldelad</span>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <User className="w-3.5 h-3.5 text-gray-400" />
-                          <span className="text-sm text-gray-900">{selectedLead.assigned_to.full_name}</span>
-                        </div>
-                      </div>
-                    )}
-                    {selectedLead.last_activity_at && (
-                      <div>
-                        <span className="text-xs font-medium text-gray-500">Senaste aktivitet</span>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <Clock className="w-3.5 h-3.5 text-gray-400" />
-                          <span className="text-sm text-gray-900">{formatDate(selectedLead.last_activity_at)}</span>
-                        </div>
-                      </div>
-                    )}
-                    {selectedLead.created_at && (
-                      <div>
-                        <span className="text-xs font-medium text-gray-500">Skapad</span>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                          <span className="text-sm text-gray-900">{formatDate(selectedLead.created_at)}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                <button
-                  onClick={() => setShowLeadEditModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  {actions.CLOSE}
-                </button>
-                {selectedLead.customer_id && (
-                  <button
-                    onClick={() => {
-                      setShowLeadEditModal(false);
-                      handleCreateQuote(selectedLead);
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Skapa offert från lead
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <LeadEditModal
+          lead={selectedLead}
+          teamMembers={teamMembers}
+          onClose={() => { setShowLeadEditModal(false); setSelectedLead(null); }}
+          onUpdated={() => { loadData(); }}
+          onCreateQuote={(lead) => { handleCreateQuote(lead); }}
+        />
       )}
 
       {/* Quote Detail Modal */}
@@ -2156,7 +2000,7 @@ function OrderKanban() {
                               <div className="flex-1">
                                 <p className="text-gray-900">{activity.description}</p>
                                 <p className="text-xs text-gray-500">
-                                  {formatDate(activity.created_at)}
+                                  {formatDateTime(activity.created_at)}
                                   {activity.user && ` • ${activity.user.full_name}`}
                                 </p>
                               </div>

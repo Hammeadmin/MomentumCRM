@@ -675,7 +675,9 @@ export default function QuoteEditModal({
                                                         {existingCustomerForm.org_number && (
                                                             <div className="flex items-center gap-2 text-sm text-slate-700">
                                                                 <Building2 className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                                                                <span className="text-slate-500 text-xs">Org.nr:</span>
+                                                                <span className="text-slate-500 text-xs">
+                                                                    {existingCustomerForm.customer_type === 'company' ? 'Org.nummer:' : 'Personnummer:'}
+                                                                </span>
                                                                 <span>{existingCustomerForm.org_number}</span>
                                                             </div>
                                                         )}
@@ -745,12 +747,14 @@ export default function QuoteEditModal({
                                                         {/* Org number */}
                                                         <div className="grid grid-cols-2 gap-3">
                                                             <div>
-                                                                <label className="block text-xs font-medium text-slate-600 mb-1">Org.nummer</label>
+                                                                <label className="block text-xs font-medium text-slate-600 mb-1">
+                                                                    {existingCustomerForm.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}
+                                                                </label>
                                                                 <input
                                                                     type="text"
                                                                     value={existingCustomerForm.org_number || ''}
                                                                     onChange={e => setExistingCustomerForm(prev => ({ ...prev, org_number: e.target.value }))}
-                                                                    placeholder="556xxx-xxxx"
+                                                                    placeholder={existingCustomerForm.customer_type === 'company' ? '556xxx-xxxx' : 'ÅÅMMDD-XXXX'}
                                                                     className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                                                                 />
                                                             </div>

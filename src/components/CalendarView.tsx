@@ -66,7 +66,7 @@ import {
   createEventNote,
   deleteEventNote
 } from '../lib/calendar';
-import { getTeamMembers, getLeads, getCustomerCities, getUserProfiles } from '../lib/database';
+import { getTeamMembers, getLeads, getCustomerCities, getUserProfiles, createLeadActivity, createOrderActivity } from '../lib/database';
 import { getOrders } from '../lib/orders';
 import { updateOrder } from '../lib/orders';
 import { updateLead } from '../lib/leads';
@@ -1094,7 +1094,12 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
         if (result.data) {
           const updatedEvents = events.map(event => event.id === editingEvent.id ? result.data! : event);
           setEvents(updatedEvents);
-          setFilteredEvents(updatedEvents); // This ensures the UI updates instantly
+          setFilteredEvents(updatedEvents);
+          const desc = `Kalenderhändelse uppdaterad: ${eventData.title}`;
+          if (eventData.related_lead_id)
+            createLeadActivity(eventData.related_lead_id, user?.id ?? null, 'note', desc).catch(() => undefined);
+          if (eventData.related_order_id)
+            createOrderActivity(eventData.related_order_id, user?.id ?? null, 'note', desc).catch(() => undefined);
         }
       } else {
         // Create single event
@@ -1153,6 +1158,13 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
               )
             );
           }
+
+          // Log activity on linked lead/order (non-blocking)
+          const desc = `Kalenderhändelse skapad: ${newEvent.title}`;
+          if (newEvent.related_lead_id)
+            createLeadActivity(newEvent.related_lead_id, user?.id ?? null, 'note', desc).catch(() => undefined);
+          if (newEvent.related_order_id)
+            createOrderActivity(newEvent.related_order_id, user?.id ?? null, 'note', desc).catch(() => undefined);
 
           // Now add the final, correct event object to the state
           setEvents(prev => [...prev, newEvent]);

@@ -47,6 +47,7 @@ import {
     X as XIcon
 } from 'lucide-react';
 import QuoteEditModal from '../components/QuoteEditModal';
+import OrderDetailModal from '../components/OrderDetailModal';
 import QuotePreview from '../components/QuotePreview';
 import SendQuoteModal from '../components/SendQuoteModal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -88,6 +89,7 @@ export default function QuoteDetailPage() {
     const [showSendModal, setShowSendModal] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [deleteLoading, setDeleteLoading] = useState(false);
+    const [showLinkedOrderModal, setShowLinkedOrderModal] = useState(false);
 
     // Company info for preview
     const [companyInfo, setCompanyInfo] = useState<any>(null);
@@ -539,10 +541,13 @@ export default function QuoteDetailPage() {
                                 </div>
                             )}
                             {quote.order_id && (
-                                <div className="flex items-center gap-2 text-green-600">
+                                <button
+                                    onClick={() => setShowLinkedOrderModal(true)}
+                                    className="flex items-center gap-2 text-green-600 hover:text-green-700 hover:underline transition-colors"
+                                >
                                     <Briefcase className="w-4 h-4" />
                                     <span className="text-sm">Kopplad till order</span>
-                                </div>
+                                </button>
                             )}
                         </div>
 
@@ -810,10 +815,13 @@ export default function QuoteDetailPage() {
                                             </div>
                                         )}
                                         {quote.order_id && (
-                                            <div className="bg-gray-50 rounded-lg p-3">
+                                            <button
+                                                onClick={() => setShowLinkedOrderModal(true)}
+                                                className="bg-gray-50 rounded-lg p-3 text-left hover:bg-green-50 hover:border-green-200 border border-transparent transition-colors w-full"
+                                            >
                                                 <p className="text-xs text-gray-500 mb-1">Kopplad Order</p>
-                                                <p className="font-medium text-gray-900">#{quote.order_id.substring(0, 8)}</p>
-                                            </div>
+                                                <p className="font-medium text-green-700">#{quote.order_id.substring(0, 8)} →</p>
+                                            </button>
                                         )}
                                     </div>
 
@@ -936,13 +944,13 @@ export default function QuoteDetailPage() {
                                                     </div>
                                                     <div className="flex-1 pb-4">
                                                         <p className="text-sm font-medium text-gray-900">Order skapad</p>
-                                                        <a
-                                                            href={`/app/order/${quote.order_id}`}
+                                                        <button
+                                                            onClick={() => setShowLinkedOrderModal(true)}
                                                             className="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"
                                                         >
                                                             Visa order
                                                             <ExternalLink className="w-3 h-3" />
-                                                        </a>
+                                                        </button>
                                                     </div>
                                                 </div>
                                             )}
@@ -1054,6 +1062,15 @@ export default function QuoteDetailPage() {
                 confirmVariant="danger"
                 loading={deleteLoading}
             />
+
+            {showLinkedOrderModal && quote?.order_id && (
+                <OrderDetailModal
+                    isOpen={showLinkedOrderModal}
+                    onClose={() => setShowLinkedOrderModal(false)}
+                    orderId={quote.order_id}
+                    onOrderUpdated={() => loadQuoteData()}
+                />
+            )}
         </div>
     );
 }
