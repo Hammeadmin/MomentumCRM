@@ -2,17 +2,17 @@
  * Global Create Invoice Modal
  * Self-contained invoice creation with inline customer creation
  * Can be opened from anywhere in the app via GlobalActionContext
- * Provides a simpler interface than the full CreateEditInvoiceModal
  */
 
 import React, { useState, useEffect } from 'react';
 import {
-    X, Loader2, Plus, Trash2, UserPlus
+    X, Loader2, Plus, Trash2, UserPlus, Edit2, Save, Link
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
-import { createInvoice, type InvoiceWithRelations } from '../lib/invoices';
-import { getCustomers, createCustomer, formatCurrency, getSavedLineItems } from '../lib/database';
+import { createInvoice } from '../lib/invoices';
+import { getCustomers, createCustomer, updateCustomer, formatCurrency, getSavedLineItems } from '../lib/database';
+import { supabase } from '../lib/supabase';
 import ROTFields from './ROTFields';
 import RUTFields from './RUTFields';
 import type { Customer, SavedLineItem } from '../types/database';
@@ -22,6 +22,15 @@ interface LineItem {
     quantity: number;
     unit_price: number;
     total: number;
+}
+
+interface LinkedOrder {
+    id: string;
+    title: string;
+    customer_id: string | null;
+    customer?: { id: string; name: string } | null;
+    value?: number | null;
+    job_description?: string | null;
 }
 
 interface CreateInvoiceModalProps {
@@ -40,11 +49,13 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
 
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [savedLineItems, setSavedLineItems] = useState<SavedLineItem[]>([]);
+    const [readyOrders, setReadyOrders] = useState<LinkedOrder[]>([]);
     const [loading, setLoading] = useState(false);
     const [dataLoading, setDataLoading] = useState(false);
 
     const [formData, setFormData] = useState({
         customer_id: '',
+        order_id: '',
         due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
         line_items: [{ description: '', quantity: 1, unit_price: 0, total: 0 }] as LineItem[],
         work_summary: '',
@@ -58,17 +69,31 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
         rut_amount: 0,
     });
 
-    // Inline customer creation state
+    // Inline new customer state
     const [isNewCustomer, setIsNewCustomer] = useState(false);
     const [newCustomerForm, setNewCustomerForm] = useState({
         name: '',
         customer_type: 'company' as 'company' | 'private',
         org_number: '',
         email: '',
+        phone_number: '',
         address: '',
         postal_code: '',
         city: '',
+        sales_area: '',
+        vat_handling: '25%',
+        invoice_delivery_method: 'e-post',
+        e_invoice_address: '',
     });
+
+    // Inline existing customer edit state
+    const [isEditingExistingCustomer, setIsEditingExistingCustomer] = useState(false);
+    const [existingCustomerEditForm, setExistingCustomerEditForm] = useState({
+        name: '', email: '', phone_number: '', org_number: '',
+        address: '', postal_code: '', city: '',
+        sales_area: '', vat_handling: '25%', invoice_delivery_method: 'e-post', e_invoice_address: '',
+    });
+    const [savingExistingCustomer, setSavingExistingCustomer] = useState(false);
 
     useEffect(() => {
         if (isOpen && organisationId) {
@@ -76,9 +101,16 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
             Promise.all([
                 getCustomers(organisationId),
                 getSavedLineItems(organisationId),
-            ]).then(([customersResult, savedItemsResult]) => {
+                supabase
+                    .from('orders')
+                    .select('id, title, customer_id, customer:customers(id, name), value, job_description')
+                    .eq('organisation_id', organisationId)
+                    .eq('status', 'redo_fakturera')
+                    .order('created_at', { ascending: false }),
+            ]).then(([customersResult, savedItemsResult, ordersResult]) => {
                 if (customersResult.data) setCustomers(customersResult.data);
                 if (savedItemsResult.data) setSavedLineItems(savedItemsResult.data);
+                if (ordersResult.data) setReadyOrders(ordersResult.data as LinkedOrder[]);
                 setDataLoading(false);
             });
         }
@@ -87,6 +119,7 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
     const resetForm = () => {
         setFormData({
             customer_id: '',
+            order_id: '',
             due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
             line_items: [{ description: '', quantity: 1, unit_price: 0, total: 0 }],
             work_summary: '',
@@ -100,10 +133,29 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
             rut_amount: 0,
         });
         setIsNewCustomer(false);
+        setIsEditingExistingCustomer(false);
         setNewCustomerForm({
             name: '', customer_type: 'company', org_number: '',
-            email: '', address: '', postal_code: '', city: '',
+            email: '', phone_number: '', address: '', postal_code: '', city: '',
+            sales_area: '', vat_handling: '25%', invoice_delivery_method: 'e-post', e_invoice_address: '',
         });
+    };
+
+    // When an order is selected, auto-populate customer and work summary
+    const handleOrderSelect = (orderId: string) => {
+        const order = readyOrders.find(o => o.id === orderId);
+        if (!order) {
+            setFormData(prev => ({ ...prev, order_id: '' }));
+            return;
+        }
+        setFormData(prev => ({
+            ...prev,
+            order_id: orderId,
+            customer_id: order.customer_id || prev.customer_id,
+            work_summary: order.job_description || order.title || prev.work_summary,
+        }));
+        setIsNewCustomer(false);
+        setIsEditingExistingCustomer(false);
     };
 
     const addLineItem = () => {
@@ -146,6 +198,36 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
         }
     };
 
+    const handleUpdateExistingCustomer = async () => {
+        const sel = customers.find(c => c.id === formData.customer_id);
+        if (!sel) return;
+        setSavingExistingCustomer(true);
+        try {
+            await updateCustomer(sel.id, {
+                name: existingCustomerEditForm.name || undefined,
+                email: existingCustomerEditForm.email || null,
+                phone_number: existingCustomerEditForm.phone_number || null,
+                org_number: existingCustomerEditForm.org_number || null,
+                address: existingCustomerEditForm.address || null,
+                postal_code: existingCustomerEditForm.postal_code || null,
+                city: existingCustomerEditForm.city || null,
+                sales_area: existingCustomerEditForm.sales_area || null,
+                vat_handling: existingCustomerEditForm.vat_handling as any,
+                invoice_delivery_method: existingCustomerEditForm.invoice_delivery_method as any,
+                e_invoice_address: existingCustomerEditForm.e_invoice_address || null,
+            } as any);
+            if (organisationId) {
+                const res = await getCustomers(organisationId);
+                if (res.data) setCustomers(res.data);
+            }
+            setIsEditingExistingCustomer(false);
+        } catch {
+            // silent
+        } finally {
+            setSavingExistingCustomer(false);
+        }
+    };
+
     const calculateSubtotal = () => formData.line_items.reduce((s, i) => s + i.total, 0);
     const calculateVAT = () => calculateSubtotal() * 0.25;
     const calculateTotal = () => calculateSubtotal() + calculateVAT();
@@ -160,7 +242,6 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
         setLoading(true);
 
         try {
-            // Handle inline customer creation
             let customerId = formData.customer_id;
             if (isNewCustomer) {
                 if (!newCustomerForm.name.trim()) {
@@ -175,9 +256,14 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                     customer_type: newCustomerForm.customer_type,
                     org_number: newCustomerForm.org_number.trim() || null,
                     email: newCustomerForm.email.trim() || null,
+                    phone_number: newCustomerForm.phone_number.trim() || null,
                     address: newCustomerForm.address.trim() || null,
                     postal_code: newCustomerForm.postal_code.trim() || null,
                     city: newCustomerForm.city.trim() || null,
+                    sales_area: newCustomerForm.sales_area.trim() || null,
+                    vat_handling: newCustomerForm.vat_handling || '25%',
+                    invoice_delivery_method: newCustomerForm.invoice_delivery_method || 'e-post',
+                    e_invoice_address: newCustomerForm.e_invoice_address.trim() || null,
                 } as Omit<Customer, 'id' | 'created_at'>);
 
                 if (customerError || !createdCustomer) {
@@ -188,6 +274,7 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
 
                 customerId = createdCustomer.id;
                 setCustomers(prev => [...prev, createdCustomer]);
+                success('Kund skapad', `${createdCustomer.name} har lagts till`);
             }
 
             if (!customerId) {
@@ -205,22 +292,26 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
 
             const total = calculateTotal();
 
-            const { error } = await createInvoice({
-                organisation_id: organisationId,
-                customer_id: customerId,
-                amount: total,
-                due_date: formData.due_date,
-                job_description: formData.work_summary || null,
-                invoice_line_items: validItems,
-                include_rot: formData.include_rot,
-                rot_personnummer: formData.rot_personnummer,
-                rot_organisationsnummer: formData.rot_organisationsnummer,
-                rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
-                rot_amount: formData.rot_amount,
-                include_rut: formData.include_rut,
-                rut_personnummer: formData.rut_personnummer,
-                rut_amount: formData.rut_amount,
-            } as any);
+            // Pass lineItems as the SECOND argument — not embedded in invoice object
+            const { error } = await createInvoice(
+                {
+                    organisation_id: organisationId,
+                    customer_id: customerId,
+                    order_id: formData.order_id || null,
+                    amount: total,
+                    due_date: formData.due_date,
+                    job_description: formData.work_summary || null,
+                    include_rot: formData.include_rot,
+                    rot_personnummer: formData.rot_personnummer,
+                    rot_organisationsnummer: formData.rot_organisationsnummer,
+                    rot_fastighetsbeteckning: formData.rot_fastighetsbeteckning,
+                    rot_amount: formData.rot_amount,
+                    include_rut: formData.include_rut,
+                    rut_personnummer: formData.rut_personnummer,
+                    rut_amount: formData.rut_amount,
+                } as any,
+                validItems
+            );
 
             if (error) {
                 showError('Fel', error.message);
@@ -258,6 +349,35 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                         </div>
                     ) : (
                         <>
+                            {/* Link to order (optional) */}
+                            {readyOrders.length > 0 && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Link className="w-4 h-4 text-amber-600" />
+                                        <label className="block text-sm font-medium text-amber-800">
+                                            Koppla till redo-att-fakturera order (valfritt)
+                                        </label>
+                                    </div>
+                                    <select
+                                        value={formData.order_id}
+                                        onChange={e => handleOrderSelect(e.target.value)}
+                                        className="w-full px-3 py-2 border border-amber-300 rounded-md text-sm bg-white focus:ring-amber-500 focus:border-amber-500"
+                                    >
+                                        <option value="">— Ingen kopplad order —</option>
+                                        {readyOrders.map(o => (
+                                            <option key={o.id} value={o.id}>
+                                                {o.title}{o.customer ? ` — ${o.customer.name}` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {formData.order_id && (
+                                        <p className="text-xs text-amber-700 mt-1">
+                                            Ordern markeras automatiskt som "Fakturerad" när fakturan skapas.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Customer + Due Date */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
@@ -267,6 +387,7 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                                             type="button"
                                             onClick={() => {
                                                 setIsNewCustomer(!isNewCustomer);
+                                                setIsEditingExistingCustomer(false);
                                                 if (!isNewCustomer) setFormData(prev => ({ ...prev, customer_id: '' }));
                                             }}
                                             className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
@@ -277,7 +398,8 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                                     </div>
 
                                     {isNewCustomer ? (
-                                        <div className="space-y-3 bg-gray-50 p-3 rounded-md border">
+                                        <div className="space-y-3 bg-blue-50 border border-blue-200 p-3 rounded-md">
+                                            {/* Företag/Privatperson toggle */}
                                             <div className="flex space-x-2">
                                                 <button type="button"
                                                     onClick={() => setNewCustomerForm(prev => ({ ...prev, customer_type: 'company' }))}
@@ -286,57 +408,176 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                                                     Företag
                                                 </button>
                                                 <button type="button"
-                                                    onClick={() => setNewCustomerForm(prev => ({ ...prev, customer_type: 'private' }))}
+                                                    onClick={() => setNewCustomerForm(prev => ({ ...prev, customer_type: 'private', org_number: '' }))}
                                                     className={`flex-1 py-1 text-xs rounded border ${newCustomerForm.customer_type === 'private' ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white border-gray-300'}`}
                                                 >
                                                     Privatperson
                                                 </button>
                                             </div>
-                                            <input type="text" placeholder={newCustomerForm.customer_type === 'company' ? 'Företagsnamn *' : 'Namn *'}
-                                                className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border"
+                                            <input type="text"
+                                                placeholder={newCustomerForm.customer_type === 'company' ? 'Företagsnamn *' : 'Namn *'}
+                                                className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
                                                 value={newCustomerForm.name}
                                                 onChange={e => setNewCustomerForm(prev => ({ ...prev, name: e.target.value }))}
                                             />
-                                            {newCustomerForm.customer_type === 'company' && (
-                                                <input type="text" placeholder="Organisationsnummer"
-                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border"
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input type="text"
+                                                    placeholder={newCustomerForm.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}
+                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
                                                     value={newCustomerForm.org_number}
                                                     onChange={e => setNewCustomerForm(prev => ({ ...prev, org_number: e.target.value }))}
                                                 />
-                                            )}
+                                                <input type="tel"
+                                                    placeholder="Telefon"
+                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
+                                                    value={newCustomerForm.phone_number}
+                                                    onChange={e => setNewCustomerForm(prev => ({ ...prev, phone_number: e.target.value }))}
+                                                />
+                                            </div>
                                             <input type="email" placeholder="E-post"
-                                                className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border"
+                                                className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
                                                 value={newCustomerForm.email}
                                                 onChange={e => setNewCustomerForm(prev => ({ ...prev, email: e.target.value }))}
                                             />
                                             <input type="text" placeholder="Adress"
-                                                className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border"
+                                                className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
                                                 value={newCustomerForm.address}
                                                 onChange={e => setNewCustomerForm(prev => ({ ...prev, address: e.target.value }))}
                                             />
                                             <div className="grid grid-cols-2 gap-2">
                                                 <input type="text" placeholder="Postnummer"
-                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border"
+                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
                                                     value={newCustomerForm.postal_code}
                                                     onChange={e => setNewCustomerForm(prev => ({ ...prev, postal_code: e.target.value }))}
                                                 />
                                                 <input type="text" placeholder="Ort"
-                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border"
+                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
                                                     value={newCustomerForm.city}
                                                     onChange={e => setNewCustomerForm(prev => ({ ...prev, city: e.target.value }))}
                                                 />
                                             </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input type="text" placeholder="Försäljningsområde"
+                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
+                                                    value={newCustomerForm.sales_area}
+                                                    onChange={e => setNewCustomerForm(prev => ({ ...prev, sales_area: e.target.value }))}
+                                                />
+                                                <select
+                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
+                                                    value={newCustomerForm.vat_handling}
+                                                    onChange={e => setNewCustomerForm(prev => ({ ...prev, vat_handling: e.target.value }))}
+                                                >
+                                                    <option value="25%">25% moms</option>
+                                                    <option value="12%">12% moms</option>
+                                                    <option value="6%">6% moms</option>
+                                                    <option value="0%">Momsfri (0%)</option>
+                                                </select>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <select
+                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
+                                                    value={newCustomerForm.invoice_delivery_method}
+                                                    onChange={e => setNewCustomerForm(prev => ({ ...prev, invoice_delivery_method: e.target.value }))}
+                                                >
+                                                    <option value="e-post">E-post</option>
+                                                    <option value="e-faktura">E-faktura</option>
+                                                    <option value="post">Post</option>
+                                                </select>
+                                                {newCustomerForm.invoice_delivery_method === 'e-faktura' && (
+                                                    <input type="text" placeholder="E-fakturaadress (GLN/PEPPOL)"
+                                                        className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
+                                                        value={newCustomerForm.e_invoice_address}
+                                                        onChange={e => setNewCustomerForm(prev => ({ ...prev, e_invoice_address: e.target.value }))}
+                                                    />
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-blue-700">Kunden skapas automatiskt när du skapar fakturan.</p>
                                         </div>
                                     ) : (
-                                        <select
-                                            required={!isNewCustomer}
-                                            value={formData.customer_id}
-                                            onChange={e => setFormData(prev => ({ ...prev, customer_id: e.target.value }))}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                                        >
-                                            <option value="">Välj kund...</option>
-                                            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </select>
+                                        <div className="space-y-2">
+                                            <select
+                                                required={!isNewCustomer}
+                                                value={formData.customer_id}
+                                                onChange={e => { setFormData(prev => ({ ...prev, customer_id: e.target.value })); setIsEditingExistingCustomer(false); }}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                            >
+                                                <option value="">Välj kund...</option>
+                                                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                            </select>
+
+                                            {formData.customer_id && (() => {
+                                                const sel = customers.find(c => c.id === formData.customer_id);
+                                                if (!sel) return null;
+                                                return (
+                                                    <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2">
+                                                        {!isEditingExistingCustomer ? (
+                                                            <>
+                                                                <div className="flex items-center justify-between">
+                                                                    <div>
+                                                                        <p className="text-sm font-medium text-gray-900">{sel.name}</p>
+                                                                        <p className="text-xs text-gray-500">{(sel as any).customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
+                                                                    </div>
+                                                                    <button type="button"
+                                                                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                                                        onClick={() => {
+                                                                            setExistingCustomerEditForm({ name: sel.name || '', email: (sel as any).email || '', phone_number: (sel as any).phone_number || '', org_number: (sel as any).org_number || '', address: (sel as any).address || '', postal_code: (sel as any).postal_code || '', city: (sel as any).city || '', sales_area: (sel as any).sales_area || '', vat_handling: (sel as any).vat_handling || '25%', invoice_delivery_method: (sel as any).invoice_delivery_method || 'e-post', e_invoice_address: (sel as any).e_invoice_address || '' });
+                                                                            setIsEditingExistingCustomer(true);
+                                                                        }}>
+                                                                        <Edit2 className="w-3 h-3" /> Redigera
+                                                                    </button>
+                                                                </div>
+                                                                {(sel as any).email && <p className="text-xs text-gray-500">{(sel as any).email}</p>}
+                                                                {(sel as any).phone_number && <p className="text-xs text-gray-500">{(sel as any).phone_number}</p>}
+                                                                {(sel as any).org_number && <p className="text-xs text-gray-500">{(sel as any).customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}: {(sel as any).org_number}</p>}
+                                                                {[(sel as any).address, (sel as any).postal_code, (sel as any).city].filter(Boolean).length > 0 && (
+                                                                    <p className="text-xs text-gray-500">{[(sel as any).address, (sel as any).postal_code, (sel as any).city].filter(Boolean).join(', ')}</p>
+                                                                )}
+                                                                {(sel as any).vat_handling && <p className="text-xs text-gray-500">Moms: {(sel as any).vat_handling}</p>}
+                                                            </>
+                                                        ) : (
+                                                            <div className="space-y-1.5">
+                                                                <div className="grid grid-cols-2 gap-1.5">
+                                                                    <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Namn *" value={existingCustomerEditForm.name} onChange={e => setExistingCustomerEditForm(p => ({ ...p, name: e.target.value }))} />
+                                                                    <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="E-post" value={existingCustomerEditForm.email} onChange={e => setExistingCustomerEditForm(p => ({ ...p, email: e.target.value }))} />
+                                                                    <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Telefon" value={existingCustomerEditForm.phone_number} onChange={e => setExistingCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))} />
+                                                                    <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder={(sel as any).customer_type === 'company' ? 'Org.nummer' : 'Personnummer'} value={existingCustomerEditForm.org_number} onChange={e => setExistingCustomerEditForm(p => ({ ...p, org_number: e.target.value }))} />
+                                                                </div>
+                                                                <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Adress" value={existingCustomerEditForm.address} onChange={e => setExistingCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
+                                                                <div className="flex gap-1.5">
+                                                                    <input className="w-20 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Postnr" value={existingCustomerEditForm.postal_code} onChange={e => setExistingCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
+                                                                    <input className="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Stad" value={existingCustomerEditForm.city} onChange={e => setExistingCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                                                                </div>
+                                                                <div className="grid grid-cols-2 gap-1.5">
+                                                                    <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Försäljningsområde" value={existingCustomerEditForm.sales_area} onChange={e => setExistingCustomerEditForm(p => ({ ...p, sales_area: e.target.value }))} />
+                                                                    <select className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" value={existingCustomerEditForm.vat_handling} onChange={e => setExistingCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}>
+                                                                        <option value="25%">25% moms</option>
+                                                                        <option value="12%">12% moms</option>
+                                                                        <option value="6%">6% moms</option>
+                                                                        <option value="0%">Momsfri (0%)</option>
+                                                                    </select>
+                                                                    <select className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" value={existingCustomerEditForm.invoice_delivery_method} onChange={e => setExistingCustomerEditForm(p => ({ ...p, invoice_delivery_method: e.target.value }))}>
+                                                                        <option value="e-post">E-post</option>
+                                                                        <option value="e-faktura">E-faktura</option>
+                                                                        <option value="post">Post</option>
+                                                                    </select>
+                                                                    {existingCustomerEditForm.invoice_delivery_method === 'e-faktura' && (
+                                                                        <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="E-fakturaadress" value={existingCustomerEditForm.e_invoice_address} onChange={e => setExistingCustomerEditForm(p => ({ ...p, e_invoice_address: e.target.value }))} />
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex gap-2 justify-end">
+                                                                    <button type="button" className="text-xs text-gray-500 px-2 py-1" onClick={() => setIsEditingExistingCustomer(false)}>Avbryt</button>
+                                                                    <button type="button" disabled={savingExistingCustomer}
+                                                                        className="text-xs font-medium bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center gap-1 disabled:opacity-50"
+                                                                        onClick={handleUpdateExistingCustomer}>
+                                                                        {savingExistingCustomer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Spara
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
                                     )}
                                 </div>
 
