@@ -528,6 +528,7 @@ export interface Order {
   commission_split_percentage?: number | null;
   commission_amount?: number | null;
   commission_paid?: boolean | null;
+  region?: string | null;
 
   // Relations
   customer?: Customer;

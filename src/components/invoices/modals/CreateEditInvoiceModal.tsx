@@ -246,15 +246,13 @@ export default function CreateEditInvoiceModal({
                                                 value={manualCustomerForm.name}
                                                 onChange={(e) => setManualCustomerForm((prev: any) => ({ ...prev, name: e.target.value }))}
                                             />
-                                            {manualCustomerForm.customer_type === 'company' && (
-                                                <input
-                                                    type="text"
-                                                    placeholder="Organisationsnummer"
-                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm"
-                                                    value={manualCustomerForm.org_number}
-                                                    onChange={(e) => setManualCustomerForm((prev: any) => ({ ...prev, org_number: e.target.value }))}
-                                                />
-                                            )}
+                                            <input
+                                                type="text"
+                                                placeholder={manualCustomerForm.customer_type === 'company' ? 'Organisationsnummer' : 'Personnummer'}
+                                                className="block w-full rounded-md border-gray-300 shadow-sm text-sm"
+                                                value={manualCustomerForm.org_number}
+                                                onChange={(e) => setManualCustomerForm((prev: any) => ({ ...prev, org_number: e.target.value }))}
+                                            />
                                             <input
                                                 type="email"
                                                 placeholder="E-post"

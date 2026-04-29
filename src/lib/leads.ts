@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import type { Lead, Customer, UserProfile, LeadStatus, SalesTask, TaskNote, TaskStatus } from '../types/database';
 import { createNotification } from './notifications'; // Assuming you have this function
+import { createLeadActivity } from './database';
+import { LEAD_STATUS_LABELS } from '../types/database';
 
 export interface LeadWithRelations extends Lead {
   customer?: Customer;
@@ -231,9 +233,17 @@ export const createLead = async (
 
 export const updateLead = async (
   id: string,
-  updates: Partial<Lead>
+  updates: Partial<Lead>,
+  actingUserId?: string | null
 ): Promise<{ data: LeadWithRelations | null; error: Error | null }> => {
   try {
+    // Fetch current state for activity comparison
+    const { data: currentLead } = await supabase
+      .from('leads')
+      .select('status, assigned_to_user_id')
+      .eq('id', id)
+      .single();
+
     const { data, error } = await supabase
       .from('leads')
       .update({
@@ -246,6 +256,22 @@ export const updateLead = async (
 
     if (error) {
       return { data: null, error: new Error(error.message) };
+    }
+
+    // Record activities for significant changes (non-blocking)
+    if (currentLead) {
+      if (updates.status && updates.status !== currentLead.status) {
+        const oldLabel = LEAD_STATUS_LABELS[currentLead.status as LeadStatus] || currentLead.status;
+        const newLabel = LEAD_STATUS_LABELS[updates.status as LeadStatus] || String(updates.status);
+        createLeadActivity(id, actingUserId ?? null, 'status_changed',
+          `Status ändrad från ${oldLabel} till ${newLabel}`
+        ).catch(() => undefined);
+      }
+      if (updates.assigned_to_user_id !== undefined && updates.assigned_to_user_id !== currentLead.assigned_to_user_id) {
+        createLeadActivity(id, actingUserId ?? null, 'assigned',
+          updates.assigned_to_user_id ? 'Förfrågan tilldelad' : 'Tilldelning borttagen'
+        ).catch(() => undefined);
+      }
     }
 
     // Enrich with customer and user data

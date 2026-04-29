@@ -37,7 +37,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { useTranslation } from '../locales/sv';
-import { formatCurrency, formatDate, getTeamMembers } from '../lib/database';
+import { formatCurrency, formatDate, getTeamMembers, getCustomers } from '../lib/database';
 import { getTeams } from '../lib/teams';
 import {
   getOrder,
@@ -50,6 +50,7 @@ import {
   addAttachmentToOrder,
   deleteOrderAttachment,
   getAttachmentPublicUrl,
+  createOrderActivity,
   type OrderWithRelations,
   type OrderAttachment,
 } from '../lib/orders';
@@ -62,6 +63,7 @@ import {
   type JobType,
   type AssignmentType,
   type UserProfile,
+  type Customer,
 } from '../types/database';
 import type { TeamWithRelations } from '../lib/teams';
 
@@ -106,6 +108,8 @@ interface EditFormState {
   assignment_type: AssignmentType;
   assigned_to_user_id: string;
   assigned_to_team_id: string;
+  customer_id: string;
+  region: string;
   include_rot: boolean;
   rot_personnummer: string | null;
   rot_organisationsnummer: string | null;
@@ -125,6 +129,8 @@ const buildEditForm = (o: OrderWithRelations | null): EditFormState => ({
   assignment_type: (o?.assignment_type || 'individual') as AssignmentType,
   assigned_to_user_id: o?.assigned_to_user_id || '',
   assigned_to_team_id: o?.assigned_to_team_id || '',
+  customer_id: o?.customer_id || '',
+  region: o?.region || '',
   include_rot: o?.include_rot || false,
   rot_personnummer: o?.rot_personnummer || null,
   rot_organisationsnummer: o?.rot_organisationsnummer || null,
@@ -156,9 +162,10 @@ function OrderDetailModal({
   const [orderActivities, setOrderActivities] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<OrderAttachment[]>([]);
 
-  // Team members / teams for assignment dropdowns in edit mode
+  // Team members / teams / customers for dropdowns in edit mode
   const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
   const [teams, setTeams] = useState<TeamWithRelations[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
   // UI state
   const [activeTab, setActiveTab] = useState<TabType>('details');
@@ -245,21 +252,23 @@ function OrderDetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id]);
 
-  // Load team members/teams once (needed for edit dropdowns)
+  // Load team members/teams/customers once (needed for edit dropdowns)
   useEffect(() => {
     if (!isOpen || !organisationId) return;
     let cancelled = false;
     (async () => {
       try {
-        const [membersRes, teamsRes] = await Promise.all([
+        const [membersRes, teamsRes, customersRes] = await Promise.all([
           getTeamMembers(organisationId),
           getTeams(organisationId),
+          getCustomers(organisationId),
         ]);
         if (cancelled) return;
         if (membersRes.data) setTeamMembers(membersRes.data);
         if (teamsRes.data) setTeams(teamsRes.data);
+        if (customersRes.data) setCustomers(customersRes.data);
       } catch (err) {
-        console.error('Error loading team data:', err);
+        console.error('Error loading edit data:', err);
       }
     })();
     return () => {
@@ -301,6 +310,8 @@ function OrderDetailModal({
           editFormData.assignment_type === 'team'
             ? editFormData.assigned_to_team_id
             : null,
+        customer_id: editFormData.customer_id || null,
+        region: editFormData.region.trim() || null,
         include_rot: editFormData.include_rot,
         rot_personnummer: editFormData.rot_personnummer,
         rot_organisationsnummer: editFormData.rot_organisationsnummer,
@@ -316,6 +327,7 @@ function OrderDetailModal({
 
       success(kanban.MESSAGES.SUCCESS_TITLE, kanban.MESSAGES.ORDER_UPDATED);
       setIsEditing(false);
+      createOrderActivity(order.id, user?.id ?? null, 'order_updated', 'Orderdetaljer uppdaterade').catch(() => undefined);
       await loadOrder();
       onOrderUpdated?.();
     } catch (err) {
@@ -360,6 +372,7 @@ function OrderDetailModal({
       setNewNote('');
       const notesResult = await getOrderNotes(order.id);
       if (notesResult.data) setOrderNotes(notesResult.data);
+      createOrderActivity(order.id, user.id, 'note_added', 'Anteckning tillagd').catch(() => undefined);
       onOrderUpdated?.();
     } catch (err) {
       console.error('Error adding note:', err);
@@ -384,6 +397,7 @@ function OrderDetailModal({
       success('Klart', 'Bilaga uppladdad.');
       const res = await getAttachmentsForOrder(order.id);
       if (res.data) setAttachments(res.data as OrderAttachment[]);
+      createOrderActivity(order.id, user.id, 'attachment_added', `Bilaga uppladdad: ${file.name}`).catch(() => undefined);
       onOrderUpdated?.();
     } catch (err) {
       console.error('Error uploading attachment:', err);
@@ -523,6 +537,36 @@ function OrderDetailModal({
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Kund</label>
+                  <select
+                    value={editFormData.customer_id}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({ ...prev, customer_id: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  >
+                    <option value="">— Välj kund —</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Område</label>
+                  <input
+                    type="text"
+                    placeholder="t.ex. Stockholm, Göteborg"
+                    value={editFormData.region}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({ ...prev, region: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
               </div>
 
               <div>
@@ -1046,14 +1090,36 @@ function OrderDetailModal({
                                 </span>
                               </div>
                             )}
-                            {order.customer.city && (
-                              <div className="flex items-center">
-                                <MapPin className="w-4 h-4 mr-2 text-gray-400" />
+                            {(order.customer.address || order.customer.city) && (
+                              <div className="flex items-start">
+                                <MapPin className="w-4 h-4 mr-2 text-gray-400 mt-0.5 flex-shrink-0" />
                                 <span className="text-sm text-gray-900">
-                                  {order.customer.city}
+                                  {[order.customer.address, order.customer.postal_code, order.customer.city].filter(Boolean).join(', ')}
                                 </span>
                               </div>
                             )}
+                            {order.customer.org_number && (
+                              <div className="flex items-center">
+                                <User className="w-4 h-4 mr-2 text-gray-400" />
+                                <span className="text-xs text-gray-500 mr-1">
+                                  {order.customer.customer_type === 'private' ? 'Personnummer:' : 'Org.nr:'}
+                                </span>
+                                <span className="text-sm text-gray-900">
+                                  {order.customer.org_number}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Region / area */}
+                      {order.region && (
+                        <div>
+                          <h4 className="font-medium text-gray-900 mb-2">Område</h4>
+                          <div className="flex items-center bg-gray-50 rounded-lg px-4 py-3">
+                            <MapPin className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-900">{order.region}</span>
                           </div>
                         </div>
                       )}

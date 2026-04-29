@@ -27,10 +27,10 @@
 - Impact: Components reading `template.settings.design_options` and those reading `template.design_options` may diverge silently.
 - Fix approach: Consolidate to one location (top-level preferred, matches DB column). Deprecate and migrate `settings.design_options` usages.
 
-**`ordermanagement.tsx` vs `OrderKanban.tsx` overlap:**
-- Issue: Both `src/components/ordermanagement.tsx` (889 lines) and `src/components/OrderKanban.tsx` (2297 lines) appear to manage orders. The lowercase filename `ordermanagement.tsx` violates the PascalCase convention used everywhere else and suggests an older duplicated module.
-- Impact: Logic drift between the two files; unclear which is authoritative; increases bundle size.
-- Fix approach: Audit both files for unique logic, merge into `OrderKanban.tsx`, delete the lowercase file.
+**`ordermanagement.tsx` — intentional parallel pipeline, not dead code:**
+- Clarification: `src/components/ordermanagement.tsx` (889 lines) and `src/components/OrderKanban.tsx` (2297 lines) are **both intentionally active** in production. They serve distinct routes: `Orders.tsx` → `/Säljtunnel` (Kanban drag-and-drop view via `OrderKanban.tsx`) and `Ordrar.tsx` → `/Orderhantering` (table/management view via `ordermanagement.tsx`). Do not merge or delete either.
+- Remaining concern: The lowercase filename `ordermanagement.tsx` violates the PascalCase convention used everywhere else. Rename to `OrderManagement.tsx` when touching the file.
+- Impact: Logic drift between the two files is a real risk — changes to order status handling or mutations may need to be applied in both.
 
 **`src/components/invoices/modals/CreateEditInvoiceModal.tsx:78` and `InvoiceDetailsModal.tsx:41` — untyped `orderNotes`:**
 ```typescript
@@ -38,6 +38,12 @@ orderNotes: any[]; // TODO: type this
 invoiceOrderNotes: any[]; // TODO: type this
 ```
 - Fix approach: Extend the `OrderNote` type from `src/types/database.ts`.
+
+**Confirmed dead code — safe to delete:**
+- `src/components/BlockBasedTemplateEditor.tsx` — orphaned, no longer imported anywhere. Superseded by `TemplateBuilder.tsx`.
+- `src/components/QuoteTemplateSettings.tsx` — orphaned, no longer imported anywhere. Superseded by `TemplateBuilder.tsx`.
+- `src/pages/Jobs.tsx` & `src/components/JobManagement.tsx` — ~48KB combined, completely unreferenced in `AppRoutes.tsx`. Worker job handling exists elsewhere via `WorkerDashboard.tsx`.
+- Note: `src/components/QuoteCreationModal.tsx` looks legacy but is **not** dead — it is still actively imported by `CalendarView.tsx` for calendar-driven quote creation.
 
 ---
 
