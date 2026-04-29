@@ -186,6 +186,12 @@ const OrderKanbanRow = ({
           {order.assigned_team.name}
         </span>
       )}
+      {order.region && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[80px]">
+          <MapPin className="w-3 h-3 flex-shrink-0" />
+          {order.region}
+        </span>
+      )}
       {order.created_at && (
         <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto">
           <Calendar className="w-3 h-3" />
@@ -238,6 +244,12 @@ const LeadKanbanRow = ({
         <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[100px]">
           <Activity className="w-3 h-3 flex-shrink-0" />
           {lead.source}
+        </span>
+      )}
+      {lead.city && (
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[80px]">
+          <MapPin className="w-3 h-3 flex-shrink-0" />
+          {lead.city}
         </span>
       )}
       {lead.assigned_to && (

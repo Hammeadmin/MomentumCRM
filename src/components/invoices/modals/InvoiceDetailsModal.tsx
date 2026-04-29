@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
     X, Edit, Send, FileUp, MessageSquare, User, Users2, Paperclip,
-    CheckCircle, ExternalLink,
+    CheckCircle, ExternalLink, Phone, MapPin,
 } from 'lucide-react';
 import InvoicePreview from '../../InvoicePreview';
 import ROTInformation from '../../ROTInformation';
@@ -360,12 +360,27 @@ export default function InvoiceDetailsModal({
                     <div>
                         <div className="mb-4 bg-gray-50 p-4 rounded-lg border print:hidden">
                             <label className="block text-sm font-medium text-gray-700 mb-1">Kund</label>
-                            <div className="text-sm font-medium text-gray-900">
+                            <div className="text-sm font-medium text-gray-900 mb-1">
                                 {invoice.customer ? invoice.customer.name : (invoice.customer_name || 'Okänd kund')}
                             </div>
-                            <div className="text-sm text-gray-500">
-                                {invoice.customer ? invoice.customer.email : invoice.customer_email}
-                            </div>
+                            {(invoice.customer?.email || invoice.customer_email) && (
+                                <div className="flex items-center gap-1.5 text-sm text-gray-500 mb-0.5">
+                                    <User className="w-3.5 h-3.5 flex-shrink-0" />
+                                    {invoice.customer ? invoice.customer.email : invoice.customer_email}
+                                </div>
+                            )}
+                            {invoice.customer?.phone_number && (
+                                <div className="flex items-center gap-1.5 text-sm text-gray-500 mb-0.5">
+                                    <Phone className="w-3.5 h-3.5 flex-shrink-0" />
+                                    {invoice.customer.phone_number}
+                                </div>
+                            )}
+                            {(invoice.customer?.address || invoice.customer?.city) && (
+                                <div className="flex items-start gap-1.5 text-sm text-gray-500">
+                                    <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                    {[invoice.customer.address, invoice.customer.postal_code, invoice.customer.city].filter(Boolean).join(', ')}
+                                </div>
+                            )}
                             <div className="flex justify-between items-center mb-2">
                                 <label className="block text-sm font-medium text-gray-700">Välj designmall</label>
                                 {templates.length === 0 && (

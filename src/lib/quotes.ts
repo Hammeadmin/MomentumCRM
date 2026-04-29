@@ -699,3 +699,76 @@ export const createQuoteFromLead = async (
     return { data: null, error: err as Error };
   }
 };
+
+// ── Quote Attachments ────────────────────────────────────────────────────────
+
+export interface QuoteAttachment {
+  id: string;
+  organisation_id: string;
+  quote_id: string;
+  uploaded_by_user_id?: string | null;
+  file_path: string;
+  file_name: string;
+  file_type?: string | null;
+  description?: string | null;
+  created_at: string;
+}
+
+export const getAttachmentsForQuote = async (quoteId: string) =>
+  supabase
+    .from('quote_attachments')
+    .select('*')
+    .eq('quote_id', quoteId)
+    .order('created_at', { ascending: false });
+
+export const addAttachmentToQuote = async (
+  quoteId: string,
+  organisationId: string,
+  userId: string,
+  file: File,
+  description?: string
+): Promise<{ data: QuoteAttachment | null; error: Error | null }> => {
+  const ext = file.name.split('.').pop();
+  const filePath = `quotes/${quoteId}/${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('documents')
+    .upload(filePath, file);
+
+  if (uploadError) {
+    return { data: null, error: new Error(uploadError.message) };
+  }
+
+  const { data, error: dbError } = await supabase
+    .from('quote_attachments')
+    .insert([{
+      organisation_id: organisationId,
+      quote_id: quoteId,
+      uploaded_by_user_id: userId,
+      file_path: filePath,
+      file_name: file.name,
+      file_type: file.type || null,
+      description: description || null,
+    }])
+    .select()
+    .single();
+
+  if (dbError) {
+    return { data: null, error: new Error(dbError.message) };
+  }
+  return { data, error: null };
+};
+
+export const deleteQuoteAttachment = async (attachment: QuoteAttachment): Promise<{ error: Error | null }> => {
+  await supabase.storage.from('documents').remove([attachment.file_path]);
+  const { error } = await supabase
+    .from('quote_attachments')
+    .delete()
+    .eq('id', attachment.id);
+  return { error: error ? new Error(error.message) : null };
+};
+
+export const getQuoteAttachmentPublicUrl = (filePath: string): string => {
+  const { data } = supabase.storage.from('documents').getPublicUrl(filePath);
+  return data.publicUrl;
+};

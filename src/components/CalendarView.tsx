@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -141,6 +141,7 @@ const getRoleColor = (role?: string) => {
 function CalendarView({ newEventTrigger = 0 }: { newEventTrigger?: number }) {
   const { user, session } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const { success, error: showToastError, warning } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
@@ -2224,6 +2225,7 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
       {showDetailModal && selectedEvent && (() => {
 
         const relatedOrder = orders.find(order => order.id === selectedEvent.related_order_id);
+        const relatedLead = leads.find(l => l.id === selectedEvent.related_lead_id) || selectedEvent.related_lead;
 
         return (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -2412,12 +2414,15 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
                     </div>
                   )}
 
-                  {relatedOrder && ( // Use the new relatedOrder variable
+                  {relatedOrder && (
                     <div className="flex items-start md:col-span-2">
                       <Package className="w-5 h-5 mr-3 mt-1 text-gray-400 flex-shrink-0" />
                       <div className="flex-1">
                         <h4 className="font-medium text-gray-800">Kopplad Order</h4>
                         <p className="text-gray-600">{relatedOrder.title}</p>
+                        {relatedOrder.customer && (
+                          <p className="text-sm text-gray-500 mt-0.5">{relatedOrder.customer.name}</p>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
@@ -2427,7 +2432,31 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
                           className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm shadow-sm"
                         >
                           <Package className="w-4 h-4" />
-                          Visa / Redigera Order
+                          Se order
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {relatedLead && (
+                    <div className="flex items-start md:col-span-2">
+                      <Briefcase className="w-5 h-5 mr-3 mt-1 text-gray-400 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-800">Kopplad Förfrågan</h4>
+                        <p className="text-gray-600">{relatedLead.title}</p>
+                        {relatedLead.customer && (
+                          <p className="text-sm text-gray-500 mt-0.5">{relatedLead.customer.name}</p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowDetailModal(false);
+                            navigate('/leads');
+                          }}
+                          className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm shadow-sm"
+                        >
+                          <Briefcase className="w-4 h-4" />
+                          Se förfrågan
                         </button>
                       </div>
                     </div>
@@ -2673,6 +2702,8 @@ function EventModal({ event, eventFormData, currentUser, availableUsers, availab
     related_lead_id: eventFormData.related_lead_id || event?.related_lead_id || ''
   });
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // Notes state
   const [existingNotes, setExistingNotes] = useState<CalendarEventNote[]>([]);
   const [pendingNotes, setPendingNotes] = useState<string[]>([]);
@@ -2720,7 +2751,10 @@ function EventModal({ event, eventFormData, currentUser, availableUsers, availab
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ ...formData, pendingNotes });
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    Promise.resolve(onSave({ ...formData, pendingNotes }))
+      .finally(() => setIsSubmitting(false));
   };
 
   const canAssignToUser = (userId: string) => {
@@ -3013,9 +3047,10 @@ function EventModal({ event, eventFormData, currentUser, availableUsers, availab
             </button>
             <button
               type="submit"
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              disabled={isSubmitting}
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {event ? 'Uppdatera' : 'Skapa'} händelse
+              {isSubmitting ? 'Sparar...' : (event ? 'Uppdatera' : 'Skapa') + ' händelse'}
             </button>
           </div>
         </form>

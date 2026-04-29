@@ -379,9 +379,9 @@ function TemplateBuilder() {
     return (
         <div className="h-[calc(100vh-200px)] flex flex-col">
             {/* Header */}
-            <div className="flex justify-between items-center mb-4 shrink-0">
+            <div className="flex flex-wrap justify-between items-center gap-2 mb-4 shrink-0">
                 <h2 className="text-lg font-semibold text-gray-900">Mallbyggare</h2>
-                <div className="flex space-x-2 items-center">
+                <div className="flex flex-wrap gap-2 items-center">
                     {/* Template Selector */}
                     {templates.length > 0 && (
                         <select
@@ -445,7 +445,7 @@ function TemplateBuilder() {
             {/* 3-Column Layout */}
             <div className="flex-1 flex gap-0 overflow-hidden rounded-lg border border-gray-200 bg-white">
                 {/* Left: Toolbox */}
-                <div className="w-56 border-r border-gray-200 bg-white shrink-0 overflow-hidden">
+                <div className="w-52 border-r border-gray-200 bg-white shrink-0 overflow-hidden">
                     <ToolboxSidebar
                         selectedTemplate={selectedTemplate}
                         onAddBlock={handleAddBlock}
@@ -458,7 +458,7 @@ function TemplateBuilder() {
                 </div>
 
                 {/* Middle: Structure */}
-                <div className="w-72 border-r border-gray-200 bg-white shrink-0 overflow-hidden">
+                <div className="w-64 border-r border-gray-200 bg-white shrink-0 overflow-hidden">
                     {selectedTemplate ? (
                         <StructurePanel
                             template={selectedTemplate}

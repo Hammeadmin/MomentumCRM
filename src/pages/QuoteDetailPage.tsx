@@ -40,7 +40,11 @@ import {
     ExternalLink,
     MessageSquare,
     Copy,
-    Flame
+    Flame,
+    Paperclip,
+    Upload,
+    Download,
+    X as XIcon
 } from 'lucide-react';
 import QuoteEditModal from '../components/QuoteEditModal';
 import QuotePreview from '../components/QuotePreview';
@@ -49,7 +53,11 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { convertQuoteToJob, formatDate, formatCurrency } from '../lib/database';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
-import { getQuote, updateQuote, deleteQuote } from '../lib/quotes';
+import {
+    getQuote, updateQuote, deleteQuote,
+    getAttachmentsForQuote, addAttachmentToQuote, deleteQuoteAttachment, getQuoteAttachmentPublicUrl,
+    type QuoteAttachment,
+} from '../lib/quotes';
 import { getCustomers, getLeads } from '../lib/database';
 import { getQuoteTemplates, type QuoteTemplate } from '../lib/quoteTemplates';
 import { supabase } from '../lib/supabase';
@@ -70,12 +78,12 @@ import { type QuoteWithRelations } from '../lib/quotes';
 export default function QuoteDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { organisationId } = useAuth();
+    const { user, organisationId } = useAuth();
     const { success, error: showError } = useToast();
 
     const [quote, setQuote] = useState<QuoteWithRelations | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'items' | 'preview' | 'details' | 'history'>('items');
+    const [activeTab, setActiveTab] = useState<'items' | 'preview' | 'details' | 'history' | 'attachments'>('items');
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSendModal, setShowSendModal] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -88,6 +96,11 @@ export default function QuoteDetailPage() {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [leads, setLeads] = useState<Lead[]>([]);
     const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
+
+    // Attachments
+    const [attachments, setAttachments] = useState<QuoteAttachment[]>([]);
+    const [uploadingAttachment, setUploadingAttachment] = useState(false);
+    const attachmentInputRef = useRef<HTMLInputElement>(null);
 
     // View tracking data
     const [viewData, setViewData] = useState<{ count: number; lastViewed: string | null }>({ count: 0, lastViewed: null });
@@ -105,6 +118,7 @@ export default function QuoteDetailPage() {
         if (id) {
             loadQuoteData();
             loadViewData();
+            loadAttachments();
         }
     }, [id]);
 
@@ -170,6 +184,36 @@ export default function QuoteDetailPage() {
         } catch (err) {
             console.error('Error loading aux data', err);
         }
+    };
+
+    const loadAttachments = async () => {
+        if (!id) return;
+        const { data } = await getAttachmentsForQuote(id);
+        if (data) setAttachments(data as QuoteAttachment[]);
+    };
+
+    const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !id || !organisationId || !user) return;
+        try {
+            setUploadingAttachment(true);
+            const { error } = await addAttachmentToQuote(id, organisationId, user.id, file);
+            if (error) { showError('Fel', 'Kunde inte ladda upp bilagan.'); return; }
+            success('Klart', 'Bilaga uppladdad.');
+            await loadAttachments();
+        } catch {
+            showError('Fel', 'Kunde inte ladda upp bilagan.');
+        } finally {
+            setUploadingAttachment(false);
+            e.target.value = '';
+        }
+    };
+
+    const handleDeleteAttachment = async (attachment: QuoteAttachment) => {
+        if (!confirm(`Ta bort bilagan "${attachment.file_name}"?`)) return;
+        const { error } = await deleteQuoteAttachment(attachment);
+        if (error) { showError('Fel', 'Kunde inte ta bort bilagan.'); return; }
+        setAttachments(prev => prev.filter(a => a.id !== attachment.id));
     };
 
     const handleStatusChange = async (newStatus: QuoteStatus) => {
@@ -435,7 +479,9 @@ export default function QuoteDetailPage() {
                                         {quote.customer.org_number && (
                                             <div className="flex items-center gap-2 text-sm text-gray-600">
                                                 <Building2 className="w-4 h-4 flex-shrink-0 text-gray-400" />
-                                                <span className="text-gray-500">Org.nr:</span>
+                                                <span className="text-gray-500">
+                                                    {quote.customer.customer_type === 'private' ? 'Personnummer:' : 'Org.nr:'}
+                                                </span>
                                                 <span className="font-medium">{quote.customer.org_number}</span>
                                             </div>
                                         )}
@@ -620,6 +666,21 @@ export default function QuoteDetailPage() {
                             >
                                 <History className="w-4 h-4" />
                                 Historik
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('attachments')}
+                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 font-medium text-sm transition-colors ${activeTab === 'attachments'
+                                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                    }`}
+                            >
+                                <Paperclip className="w-4 h-4" />
+                                Bilagor
+                                {attachments.length > 0 && (
+                                    <span className="ml-1 px-1.5 py-0.5 text-xs bg-gray-200 text-gray-700 rounded-full">
+                                        {attachments.length}
+                                    </span>
+                                )}
                             </button>
                         </div>
 
@@ -887,6 +948,67 @@ export default function QuoteDetailPage() {
                                             )}
                                         </div>
                                     </div>
+                                </div>
+                            )}
+
+                            {/* Attachments Tab */}
+                            {activeTab === 'attachments' && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-sm text-gray-500">
+                                            {attachments.length === 0 ? 'Inga bilagor uppladdade.' : `${attachments.length} bilaga(or)`}
+                                        </p>
+                                        <button
+                                            onClick={() => attachmentInputRef.current?.click()}
+                                            disabled={uploadingAttachment}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-60"
+                                        >
+                                            {uploadingAttachment
+                                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                                : <Upload className="w-4 h-4" />
+                                            }
+                                            Ladda upp
+                                        </button>
+                                        <input
+                                            ref={attachmentInputRef}
+                                            type="file"
+                                            className="hidden"
+                                            onChange={handleAttachmentUpload}
+                                        />
+                                    </div>
+                                    {attachments.length > 0 && (
+                                        <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+                                            {attachments.map((att) => (
+                                                <li key={att.id} className="flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        <Paperclip className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-medium text-gray-900 truncate">{att.file_name}</p>
+                                                            <p className="text-xs text-gray-400">{new Date(att.created_at).toLocaleDateString('sv-SE')}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                                        <a
+                                                            href={getQuoteAttachmentPublicUrl(att.file_path)}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
+                                                            title="Ladda ner"
+                                                        >
+                                                            <Download className="w-4 h-4" />
+                                                        </a>
+                                                        <button
+                                                            onClick={() => handleDeleteAttachment(att)}
+                                                            className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+                                                            title="Ta bort"
+                                                        >
+                                                            <XIcon className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
                                 </div>
                             )}
                         </div>

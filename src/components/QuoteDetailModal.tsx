@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react';
 import {
     X, FileText, Trash2, Send, Check, Edit, User, Calendar,
-    Package, Clock, Mail, Building, Loader2, Copy, ExternalLink
+    Package, Clock, Mail, Building, Phone, MapPin, Loader2, Copy, ExternalLink
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../hooks/useToast';
@@ -439,9 +439,28 @@ export function QuoteDetailModal({
                                                         )}
                                                         {quote.customer.phone_number && (
                                                             <div className="flex items-center gap-2">
-                                                                <User className="w-4 h-4 text-gray-400" />
+                                                                <Phone className="w-4 h-4 text-gray-400" />
                                                                 <span className="text-sm text-gray-600 dark:text-gray-400">
                                                                     {quote.customer.phone_number}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {(quote.customer.address || quote.customer.city) && (
+                                                            <div className="flex items-start gap-2">
+                                                                <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                                                                <span className="text-sm text-gray-600 dark:text-gray-400">
+                                                                    {[quote.customer.address, quote.customer.postal_code, quote.customer.city].filter(Boolean).join(', ')}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {quote.customer.org_number && (
+                                                            <div className="flex items-center gap-2">
+                                                                <User className="w-4 h-4 text-gray-400" />
+                                                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                                    {quote.customer.customer_type === 'private' ? 'Personnummer:' : 'Org.nr:'}
+                                                                </span>
+                                                                <span className="text-sm text-gray-600 dark:text-gray-400">
+                                                                    {quote.customer.org_number}
                                                                 </span>
                                                             </div>
                                                         )}
