@@ -19,7 +19,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { updateLead, type LeadWithRelations } from '../lib/leads';
-import { getLeadNotes, createLeadNote, formatDate, formatCurrency } from '../lib/database';
+import { getLeadNotes, createLeadNote, formatDate, formatDateTime, formatCurrency } from '../lib/database';
 import { LEAD_STATUS_LABELS, type LeadStatus, type UserProfile, type LeadNote } from '../types/database';
 
 interface LeadEditModalProps {
@@ -468,7 +468,7 @@ export default function LeadEditModal({
                       <span className="text-xs font-medium text-gray-700">
                         {note.user?.full_name || 'Okänd användare'}
                       </span>
-                      <span className="text-xs text-gray-400">{formatDate(note.created_at)}</span>
+                      <span className="text-xs text-gray-400">{formatDateTime(note.created_at)}</span>
                     </div>
                     <p className="text-sm text-gray-700">{note.content}</p>
                   </div>

@@ -46,7 +46,7 @@ import {
     createOrderNote,
     type OrderWithRelations
 } from '../lib/orders';
-import { formatDate } from '../lib/database';
+import { formatDate, formatDateTime } from '../lib/database';
 import { ORDER_STATUS_LABELS, type OrderStatus, type OrderNote, type OrderActivity } from '../types/database';
 import { Button } from '../components/ui';
 import OrderDetailModal from '../components/OrderDetailModal';
@@ -597,7 +597,7 @@ export default function OrderDetailPage() {
                                                         <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
                                                             <span>{activity.user?.full_name || 'System'}</span>
                                                             <span>•</span>
-                                                            <span>{activity.created_at ? formatDate(activity.created_at) : ''}</span>
+                                                            <span>{activity.created_at ? formatDateTime(activity.created_at) : ''}</span>
                                                         </div>
                                                     </div>
                                                 </div>

@@ -39,7 +39,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { useTranslation } from '../locales/sv';
-import { formatCurrency, formatDate, getTeamMembers, getCustomers, updateCustomer } from '../lib/database';
+import { formatCurrency, formatDate, formatDateTime, getTeamMembers, getCustomers, updateCustomer } from '../lib/database';
 import { getTeams } from '../lib/teams';
 import {
   getOrder,
@@ -1379,7 +1379,7 @@ function OrderDetailModal({
                                     {note.user?.full_name || 'Okänd användare'}
                                   </span>
                                   <span className="text-xs text-gray-500">
-                                    {formatDate(note.created_at)}
+                                    {formatDateTime(note.created_at)}
                                   </span>
                                 </div>
                                 <p className="text-sm text-gray-700">{note.content}</p>
@@ -1403,7 +1403,7 @@ function OrderDetailModal({
                                 <div className="flex-1">
                                   <p className="text-gray-900">{activity.description}</p>
                                   <p className="text-xs text-gray-500">
-                                    {formatDate(activity.created_at)}
+                                    {formatDateTime(activity.created_at)}
                                     {activity.user && ` • ${activity.user.full_name}`}
                                   </p>
                                 </div>

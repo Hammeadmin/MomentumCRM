@@ -43,7 +43,7 @@ import {
 import { type LeadWithRelations } from '../lib/leads';
 import { createQuote, type QuoteWithRelations } from '../lib/quotes';
 // Teams now fetched by useKanbanData hook
-import { formatCurrency, formatDate } from '../lib/database';
+import { formatCurrency, formatDate, formatDateTime } from '../lib/database';
 import {
   ORDER_STATUS_LABELS,
   getOrderStatusColor,
@@ -2000,7 +2000,7 @@ function OrderKanban() {
                               <div className="flex-1">
                                 <p className="text-gray-900">{activity.description}</p>
                                 <p className="text-xs text-gray-500">
-                                  {formatDate(activity.created_at)}
+                                  {formatDateTime(activity.created_at)}
                                   {activity.user && ` • ${activity.user.full_name}`}
                                 </p>
                               </div>
