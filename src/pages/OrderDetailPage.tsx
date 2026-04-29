@@ -49,6 +49,7 @@ import {
 import { formatDate } from '../lib/database';
 import { ORDER_STATUS_LABELS, type OrderStatus, type OrderNote, type OrderActivity } from '../types/database';
 import { Button } from '../components/ui';
+import OrderDetailModal from '../components/OrderDetailModal';
 
 // Status options matching Kanban columns - same as Säljtunnel/OrderKanban
 const ORDER_STATUS_OPTIONS: { status: OrderStatus; label: string; color: string }[] = [
@@ -188,6 +189,7 @@ export default function OrderDetailPage() {
     const [showStatusConfirm, setShowStatusConfirm] = useState(false);
     const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
     const [statusChangeLoading, setStatusChangeLoading] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
 
     useEffect(() => {
         if (id) {
@@ -248,9 +250,8 @@ export default function OrderDetailPage() {
         }
     };
 
-    // Handle edit button - navigate to order management page
     const handleEdit = () => {
-        navigate('/app/Orderhantering');
+        setShowEditModal(true);
     };
 
     const handleAddNote = async () => {
@@ -670,6 +671,18 @@ export default function OrderDetailPage() {
                     )}
                 </div>
             </div>
+
+            {showEditModal && id && (
+                <OrderDetailModal
+                    isOpen={showEditModal}
+                    onClose={() => setShowEditModal(false)}
+                    orderId={id}
+                    onOrderUpdated={() => {
+                        loadOrderData();
+                        setShowEditModal(false);
+                    }}
+                />
+            )}
         </div>
     );
 }
