@@ -309,15 +309,14 @@ export function Ordermanagement() {
               <RefreshCw className="w-4 h-4 mr-2" />
               Uppdatera
             </Button>
-            <Button
-              variant="primary"
-              size="md"
+            <button
+              type="button"
               onClick={() => handleOpenEditModal(null)}
-              className="!bg-white !text-indigo-600 hover:!bg-indigo-50"
+              className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-white text-indigo-600 hover:bg-indigo-50 transition-colors shadow-sm"
             >
               <Plus className="w-4 h-4 mr-2" />
               Skapa ny order
-            </Button>
+            </button>
           </div>
         </div>
       </div>
@@ -506,8 +505,8 @@ function OrderDetailModal({ order, onClose, onOpenEdit, onOpenDelete }: {
 
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-6 border-b">
           <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-3">
             <Package className="text-blue-600" />
@@ -707,8 +706,8 @@ function OrderEditModal({ order, customers, users, teams, products, onClose, onS
 
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <form onSubmit={handleSubmit} className="flex flex-col h-full">
           <div className="flex items-center justify-between p-6 border-b">
             <h3 className="text-lg font-semibold text-gray-900">{order ? 'Redigera Order' : 'Skapa Ny Order'}</h3>
@@ -722,6 +721,21 @@ function OrderEditModal({ order, customers, users, teams, products, onClose, onS
                   <option value="" disabled>Välj kund</option>
                   {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+                {formData.customer_id && (() => {
+                  const sel = customers.find(c => c.id === formData.customer_id);
+                  if (!sel) return null;
+                  return (
+                    <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md space-y-1">
+                      <p className="text-sm font-medium text-gray-800">{sel.name}</p>
+                      <p className="text-xs text-gray-500">{(sel as any).customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
+                      {(sel as any).email && <p className="text-xs text-gray-500">{(sel as any).email}</p>}
+                      {(sel as any).phone_number && <p className="text-xs text-gray-500">{(sel as any).phone_number}</p>}
+                      {(sel as any).org_number && <p className="text-xs text-gray-500">{(sel as any).customer_type === 'company' ? 'Org.nr' : 'Personnr'}: {(sel as any).org_number}</p>}
+                      {((sel as any).address || (sel as any).city) && <p className="text-xs text-gray-500">{[(sel as any).address, (sel as any).postal_code, (sel as any).city].filter(Boolean).join(', ')}</p>}
+                      {(sel as any).vat_handling && <p className="text-xs text-gray-500">Moms: {(sel as any).vat_handling}</p>}
+                    </div>
+                  );
+                })()}
               </FormField>
               <FormField label="Primär säljare">
                 <select

@@ -256,8 +256,8 @@ export function QuoteDetailModal({
 
     return (
         <>
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                <div className="bg-white dark:bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+                <div className="bg-white dark:bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
                     {/* Header */}
                     <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                         <div className="flex items-center">
@@ -661,8 +661,8 @@ export function QuoteDetailModal({
 
             {/* Send Dialog */}
             {showSendDialog && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]" onClick={() => setShowSendDialog(false)}>
+                    <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                             Skicka offert via e-post
                         </h3>
