@@ -96,6 +96,7 @@ function InvoiceManagement() {
     include_rot: false, rot_personnummer: null as string | null,
     rot_organisationsnummer: null as string | null,
     rot_fastighetsbeteckning: null as string | null, rot_amount: 0,
+    include_rut: false, rut_personnummer: null as string | null, rut_amount: 0,
   });
   const [workSummary, setWorkSummary] = useState('');
   const [isManualCustomer, setIsManualCustomer] = useState(false);
@@ -188,7 +189,7 @@ function InvoiceManagement() {
   };
 
   const resetForm = () => {
-    setFormData({ invoice_number: '', customer_id: '', order_id: '', amount: '', due_date: '', line_items: [{ description: '', quantity: 1, unit_price: 0, total: 0 }], include_rot: false, rot_personnummer: null, rot_organisationsnummer: null, rot_fastighetsbeteckning: null, rot_amount: 0 });
+    setFormData({ invoice_number: '', customer_id: '', order_id: '', amount: '', due_date: '', line_items: [{ description: '', quantity: 1, unit_price: 0, total: 0 }], include_rot: false, rot_personnummer: null, rot_organisationsnummer: null, rot_fastighetsbeteckning: null, rot_amount: 0, include_rut: false, rut_personnummer: null, rut_amount: 0 });
     setWorkSummary(''); setIsManualCustomer(false);
     setPreInvoiceAssignmentType('individual'); setPreInvoiceAssignedToUserId(null); setPreInvoiceAssignedToTeamId(null);
   };
@@ -268,7 +269,7 @@ function InvoiceManagement() {
   // Component-local UI helpers
   const handleEditInvoiceClick = (invoice: InvoiceWithRelations) => {
     setEditingInvoice(invoice); loadOrderDocuments(invoice.order_id || ''); setSelectedOrder(invoice.order || null);
-    setFormData({ customer_id: invoice.customer_id || '', order_id: invoice.order_id || '', due_date: invoice.due_date || '', invoice_number: invoice.invoice_number, amount: invoice.amount.toString(), line_items: invoice.invoice_line_items?.length ? invoice.invoice_line_items : [{ description: invoice.job_description || '', quantity: 1, unit_price: invoice.amount, total: invoice.amount }], include_rot: invoice.include_rot || false, rot_personnummer: invoice.rot_personnummer || null, rot_organisationsnummer: invoice.rot_organisationsnummer || null, rot_fastighetsbeteckning: invoice.rot_fastighetsbeteckning || null, rot_amount: invoice.rot_amount || 0 });
+    setFormData({ customer_id: invoice.customer_id || '', order_id: invoice.order_id || '', due_date: invoice.due_date || '', invoice_number: invoice.invoice_number, amount: invoice.amount.toString(), line_items: invoice.invoice_line_items?.length ? invoice.invoice_line_items : [{ description: invoice.job_description || '', quantity: 1, unit_price: invoice.amount, total: invoice.amount }], include_rot: invoice.include_rot || false, rot_personnummer: invoice.rot_personnummer || null, rot_organisationsnummer: invoice.rot_organisationsnummer || null, rot_fastighetsbeteckning: invoice.rot_fastighetsbeteckning || null, rot_amount: invoice.rot_amount || 0, include_rut: (invoice as any).include_rut || false, rut_personnummer: (invoice as any).rut_personnummer || null, rut_amount: (invoice as any).rut_amount || 0 });
     setWorkSummary(invoice.job_description || ''); setPreInvoiceAssignmentType(invoice.assignment_type || 'individual'); setPreInvoiceAssignedToUserId(invoice.assigned_user_id || null); setPreInvoiceAssignedToTeamId(invoice.assigned_team_id || null);
     setShowUnifiedModal(true);
   };
@@ -518,7 +519,7 @@ function InvoiceManagement() {
                                 total: (item.quantity || 1) * (item.unit_price || 0),
                               }))
                               : [{ description: order.job_description || order.title || '', quantity: 1, unit_price: order.value || 0, total: order.value || 0 }];
-                            setFormData({ customer_id: order.customer_id || '', order_id: order.id, due_date: new Date(Date.now() + (systemSettings?.default_payment_terms || 30) * 86400000).toISOString().split('T')[0], invoice_number: '', amount: '', line_items: lineItemsFromQuote, include_rot: order.include_rot || false, rot_personnummer: order.rot_personnummer || null, rot_organisationsnummer: order.rot_organisationsnummer || null, rot_fastighetsbeteckning: order.rot_fastighetsbeteckning || null, rot_amount: order.rot_amount || 0 });
+                            setFormData({ customer_id: order.customer_id || '', order_id: order.id, due_date: new Date(Date.now() + (systemSettings?.default_payment_terms || 30) * 86400000).toISOString().split('T')[0], invoice_number: '', amount: '', line_items: lineItemsFromQuote, include_rot: order.include_rot || false, rot_personnummer: order.rot_personnummer || null, rot_organisationsnummer: order.rot_organisationsnummer || null, rot_fastighetsbeteckning: order.rot_fastighetsbeteckning || null, rot_amount: order.rot_amount || 0, include_rut: (order as any).include_rut || false, rut_personnummer: (order as any).rut_personnummer || null, rut_amount: (order as any).rut_amount || 0 });
                             setWorkSummary(order.job_description || order.description || ''); setPreInvoiceAssignmentType(order.assignment_type || 'individual'); setPreInvoiceAssignedToUserId(order.assigned_to_user_id || null); setPreInvoiceAssignedToTeamId(order.assigned_to_team_id || null);
                             setShowUnifiedModal(true);
                           }} className="text-blue-600 hover:text-blue-900" title="Granska och redigera"><Edit className="w-4 h-4" /></button>

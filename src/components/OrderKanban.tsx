@@ -43,7 +43,7 @@ import {
 import { updateLead, type LeadWithRelations } from '../lib/leads';
 import { createQuote, updateQuote, type QuoteWithRelations } from '../lib/quotes';
 // Teams now fetched by useKanbanData hook
-import { formatCurrency, formatDate, formatDateTime } from '../lib/database';
+import { formatCurrency, formatDate, formatDateTime, updateCustomer } from '../lib/database';
 import {
   ORDER_STATUS_LABELS,
   getOrderStatusColor,
@@ -80,6 +80,7 @@ import { SkeletonColumn } from './ui';
 import QuoteEditModal from './QuoteEditModal';
 import QuoteDetailModal from './QuoteDetailModal';
 import LeadEditModal from './LeadEditModal';
+import OrderDetailModal from './OrderDetailModal';
 import { supabase } from '../lib/supabase';
 import { getQuoteTemplates, type QuoteTemplate } from '../lib/quoteTemplates';
 
@@ -505,12 +506,14 @@ function OrderKanban() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'notes' | 'history' | 'communication'>('details');
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithRelations | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<OrderWithRelations | null>(null);
   const [showRevertToQuoteDialog, setShowRevertToQuoteDialog] = useState(false);
   const [orderToRevert, setOrderToRevert] = useState<OrderWithRelations | null>(null);
+  const [isEditingCreateCustomer, setIsEditingCreateCustomer] = useState(false);
+  const [createCustomerEditForm, setCreateCustomerEditForm] = useState({ name: '', email: '', phone_number: '', org_number: '', address: '', postal_code: '', city: '' });
+  const [savingCreateCustomer, setSavingCreateCustomer] = useState(false);
   const [isEmailComposerOpen, setIsEmailComposerOpen] = useState(false);
   const [isSmsComposerOpen, setIsSmsComposerOpen] = useState(false);
   const [communications, setCommunications] = useState<any[]>([]);
@@ -599,12 +602,6 @@ function OrderKanban() {
   };
 
   // Removed manual useEffect for data fetching - now handled by useKanbanData hook
-
-  useEffect(() => {
-    if (selectedOrder && showEditModal) {
-      setEditFormData(getInitialEditFormData(selectedOrder));
-    }
-  }, [selectedOrder, showEditModal]);
 
   // loadData is now provided by useKanbanData hook as refetch
 
@@ -708,7 +705,7 @@ function OrderKanban() {
       }
 
       success(kanban.MESSAGES.SUCCESS_TITLE, kanban.MESSAGES.ORDER_UPDATED);
-      setShowEditModal(false);
+      setShowDetailsModal(false);
       setSelectedOrder(null);
       await loadData();
     } catch (err) {
@@ -875,6 +872,29 @@ function OrderKanban() {
       showError(kanban.MESSAGES.ERROR_TITLE, kanban.MESSAGES.ERROR_NOTE);
     } finally {
       setAddingNote(false);
+    }
+  };
+
+  const handleSaveCreateModalCustomer = async () => {
+    if (!formData.customer_id) return;
+    setSavingCreateCustomer(true);
+    try {
+      await updateCustomer(formData.customer_id, {
+        name: createCustomerEditForm.name || undefined,
+        email: createCustomerEditForm.email || null,
+        phone_number: createCustomerEditForm.phone_number || null,
+        org_number: createCustomerEditForm.org_number || null,
+        address: createCustomerEditForm.address || null,
+        postal_code: createCustomerEditForm.postal_code || null,
+        city: createCustomerEditForm.city || null,
+      } as any);
+      success('Sparat', 'Kunduppgifter uppdaterade.');
+      setIsEditingCreateCustomer(false);
+      loadData();
+    } catch {
+      showError('Fel', 'Kunde inte spara kunduppgifter.');
+    } finally {
+      setSavingCreateCustomer(false);
     }
   };
 
@@ -1295,7 +1315,7 @@ function OrderKanban() {
                             onClick={() => handleOrderClick(order)}
                             onEdit={() => {
                               setSelectedOrder(order);
-                              setShowEditModal(true);
+                              setShowDetailsModal(true);
                             }}
                             onDelete={() => {
                               setOrderToDelete(order);
@@ -1370,167 +1390,6 @@ function OrderKanban() {
         })}
       </div>
 
-      {/* Edit Order Modal */}
-      {showEditModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">{forms.EDIT_ORDER}</h3>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleUpdateOrder} className="p-6 space-y-4">
-              {/* Most form fields are the same as the create modal, but bound to `editFormData` */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{forms.TITLE} *</label>
-                <input
-                  type="text"
-                  required
-                  value={editFormData.title}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{forms.JOB_DESCRIPTION} *</label>
-                <textarea
-                  required
-                  value={editFormData.job_description}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, job_description: e.target.value }))}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
-
-              <div className="border-t border-gray-200 pt-4">
-                <ROTFields
-                  data={{
-                    include_rot: editFormData.include_rot,
-                    rot_personnummer: editFormData.rot_personnummer,
-                    rot_organisationsnummer: editFormData.rot_organisationsnummer,
-                    rot_fastighetsbeteckning: editFormData.rot_fastighetsbeteckning,
-                    rot_amount: editFormData.rot_amount,
-                  }}
-                  onChange={(rotData) =>
-                    setEditFormData(prev => ({ ...prev, ...rotData }))
-                  }
-                  totalAmount={parseFloat(editFormData.value) || 0}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{forms.ESTIMATED_HOURS}</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    value={editFormData.estimated_hours}
-                    onChange={(e) => setEditFormData(prev => ({ ...prev, estimated_hours: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{forms.COMPLEXITY}</label>
-                  <select
-                    value={editFormData.complexity_level}
-                    onChange={(e) => setEditFormData(prev => ({ ...prev, complexity_level: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  >
-                    <option value="1">1 - Mycket enkelt</option>
-                    <option value="2">2 - Enkelt</option>
-                    <option value="3">3 - Medel</option>
-                    <option value="4">4 - Svårt</option>
-                    <option value="5">5 - Mycket svårt</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Assignment Section */}
-              <div className="border-t border-gray-200 pt-4">
-                <h4 className="font-medium text-gray-900 mb-4">{forms.ASSIGNMENT}</h4>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">{forms.ASSIGNMENT_TYPE}</label>
-                    <div className="flex space-x-4">
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          value="individual"
-                          checked={editFormData.assignment_type === 'individual'}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, assignment_type: e.target.value as AssignmentType, assigned_to_team_id: '' }))}
-                          className="h-4 w-4 text-primary-600"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">{forms.INDIVIDUAL}</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          value="team"
-                          checked={editFormData.assignment_type === 'team'}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, assignment_type: e.target.value as AssignmentType, assigned_to_user_id: '' }))}
-                          className="h-4 w-4 text-primary-600"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">{forms.TEAM}</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div>
-                    {editFormData.assignment_type === 'individual' ? (
-                      <select
-                        value={editFormData.assigned_to_user_id || ''}
-                        onChange={(e) => setEditFormData(prev => ({ ...prev, assigned_to_user_id: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      >
-                        <option value="">{forms.SELECT_PERSON}</option>
-                        {teamMembers.map(member => (
-                          <option key={member.id} value={member.id}>{member.full_name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <select
-                        value={editFormData.assigned_to_team_id || ''}
-                        onChange={(e) => setEditFormData(prev => ({ ...prev, assigned_to_team_id: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      >
-                        <option value="">{forms.SELECT_TEAM}</option>
-                        {teams.map(team => (
-                          <option key={team.id} value={team.id}>{team.name}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium"
-                >
-                  {actions.CANCEL}
-                </button>
-                <button
-                  type="submit"
-                  disabled={formLoading}
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
-                >
-                  {formLoading ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Save className="w-4 h-4 mr-2" />}
-                  {forms.SAVE_CHANGES}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Create Order Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1578,6 +1437,48 @@ function OrderKanban() {
                     <option key={customer.id} value={customer.id}>{customer.name}</option>
                   ))}
                 </select>
+                {/* Selected customer detail + inline edit */}
+                {formData.customer_id && (() => {
+                  const sel = customers.find(c => c.id === formData.customer_id);
+                  if (!sel) return null;
+                  return (
+                    <div className="mt-2 border border-gray-200 rounded-lg p-3 bg-gray-50 text-sm space-y-1.5">
+                      {!isEditingCreateCustomer ? (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-gray-900">{sel.name}</span>
+                            <button type="button" className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                              onClick={() => { setCreateCustomerEditForm({ name: sel.name || '', email: (sel as any).email || '', phone_number: (sel as any).phone_number || '', org_number: (sel as any).org_number || '', address: (sel as any).address || '', postal_code: (sel as any).postal_code || '', city: (sel as any).city || '' }); setIsEditingCreateCustomer(true); }}>
+                              <Edit className="w-3 h-3" /> Redigera
+                            </button>
+                          </div>
+                          {(sel as any).email && <p className="text-gray-500">{(sel as any).email}</p>}
+                          {(sel as any).phone_number && <p className="text-gray-500">{(sel as any).phone_number}</p>}
+                          {((sel as any).address || (sel as any).city) && <p className="text-gray-500">{[(sel as any).address, (sel as any).postal_code, (sel as any).city].filter(Boolean).join(', ')}</p>}
+                          {(sel as any).org_number && <p className="text-gray-500">{(sel as any).customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}: {(sel as any).org_number}</p>}
+                        </>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <input className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Namn" value={createCustomerEditForm.name} onChange={e => setCreateCustomerEditForm(p => ({ ...p, name: e.target.value }))} />
+                          <input className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="E-post" value={createCustomerEditForm.email} onChange={e => setCreateCustomerEditForm(p => ({ ...p, email: e.target.value }))} />
+                          <input className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Telefon" value={createCustomerEditForm.phone_number} onChange={e => setCreateCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))} />
+                          <input className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder={(sel as any).customer_type === 'company' ? 'Org.nummer' : 'Personnummer'} value={createCustomerEditForm.org_number} onChange={e => setCreateCustomerEditForm(p => ({ ...p, org_number: e.target.value }))} />
+                          <input className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Adress" value={createCustomerEditForm.address} onChange={e => setCreateCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
+                          <div className="flex gap-1.5">
+                            <input className="w-20 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Postnr" value={createCustomerEditForm.postal_code} onChange={e => setCreateCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
+                            <input className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Stad" value={createCustomerEditForm.city} onChange={e => setCreateCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                          </div>
+                          <div className="flex gap-2 justify-end pt-1">
+                            <button type="button" className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1" onClick={() => setIsEditingCreateCustomer(false)}>Avbryt</button>
+                            <button type="button" className="text-xs font-medium bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1" disabled={savingCreateCustomer} onClick={handleSaveCreateModalCustomer}>
+                              {savingCreateCustomer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Spara
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>
@@ -1845,380 +1746,14 @@ function OrderKanban() {
 
       {/* Order Details Modal */}
       {showDetailsModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{selectedOrder.title}</h3>
-                <OrderStatusBadge status={selectedOrder.status} size="md" className="mt-2" />
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => {
-                    setOrderToDelete(selectedOrder);
-                    setShowDeleteDialog(true);
-                  }}
-                  className="text-gray-400 hover:text-error-600"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => setShowDetailsModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-
-            {/* === ADD TAB BUTTONS HERE === */}
-            <div className="border-b border-gray-200">
-              <nav className="-mb-px flex space-x-8 px-6" aria-label="Tabs">
-                <button
-                  onClick={() => setActiveTab('details')}
-                  className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'details'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                >
-                  {tabs.DETAILS}
-                </button>
-                <button
-                  onClick={() => setActiveTab('communication')}
-                  className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'communication'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                >
-                  {tabs.COMMUNICATION}
-                </button>
-              </nav>
-            </div>
-
-
-            {/* === END OF TAB BUTTONS === */}
-
-
-            {activeTab === 'details' && (
-              <div className="p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Order Information */}
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">{forms.ORDER_INFO}</h4>
-                      <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                        {selectedOrder.description && (
-                          <div>
-                            <span className="text-sm font-medium text-gray-500">{forms.DESCRIPTION}:</span>
-                            <p className="text-sm text-gray-900">{selectedOrder.description}</p>
-                          </div>
-                        )}
-
-                        {/* ROT INFORMATION DISPLAY */}
-                        {selectedOrder && selectedOrder.include_rot && (
-                          <div>
-                            <h4 className="font-medium text-gray-900 mb-2">{forms.ROT_INFO}</h4>
-                            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                              <ROTInformation
-                                data={selectedOrder}
-                                totalAmount={selectedOrder.value || 0}
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        <div>
-                          <h4 className="font-medium text-gray-900 mb-2">{forms.COMMISSION}</h4>
-                          <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                            {selectedOrder.primary_salesperson_id ? (
-                              <div>
-                                <span className="text-sm font-medium text-gray-500">{forms.PRIMARY_SALESPERSON}:</span>
-                                <p className="text-sm text-gray-900">{selectedOrder.assigned_to?.full_name || forms.NOT_SPECIFIED}</p>
-                              </div>
-                            ) : (
-                              <p className="text-sm text-gray-500">{forms.NO_SALESPERSON}</p>
-                            )}
-                            <button
-                              onClick={() => setShowCommissionModal(true)}
-                              className="w-full mt-2 px-4 py-2 bg-primary-100 text-primary-700 text-sm font-semibold rounded-md hover:bg-primary-200"
-                            >
-                              {forms.MANAGE_COMMISSION}
-                            </button>
-                          </div>
-                        </div>
-
-                        {selectedOrder.job_description && (
-                          <div>
-                            <span className="text-sm font-medium text-gray-500">{forms.JOB_DESCRIPTION}:</span>
-                            <p className="text-sm text-gray-900">{selectedOrder.job_description}</p>
-                          </div>
-                        )}
-
-                        {selectedOrder.job_type && (
-                          <div>
-                            <span className="text-sm font-medium text-gray-500">{forms.JOB_TYPE}:</span>
-                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ml-2 ${getJobTypeColor(selectedOrder.job_type)}`}>
-                              {JOB_TYPE_LABELS[selectedOrder.job_type]}
-                            </span>
-                          </div>
-                        )}
-
-                        {selectedOrder.value && (
-                          <div>
-                            <span className="text-sm font-medium text-gray-500">{forms.VALUE}:</span>
-                            <p className="text-sm text-gray-900">{formatCurrency(selectedOrder.value)}</p>
-                          </div>
-                        )}
-
-                        {selectedOrder.estimated_hours && (
-                          <div>
-                            <span className="text-sm font-medium text-gray-500">{forms.ESTIMATED_HOURS}:</span>
-                            <p className="text-sm text-gray-900">{selectedOrder.estimated_hours} tim</p>
-                          </div>
-                        )}
-
-                        {selectedOrder.complexity_level && (
-                          <div>
-                            <span className="text-sm font-medium text-gray-500">{forms.COMPLEXITY}:</span>
-                            <div className="flex items-center mt-1">
-                              {Array.from({ length: 5 }, (_, i) => (
-                                <Star
-                                  key={i}
-                                  className={`w-4 h-4 ${i < selectedOrder.complexity_level! ? 'text-warning-400 fill-current' : 'text-gray-300'
-                                    }`}
-                                />
-                              ))}
-                              <span className="ml-2 text-sm text-gray-600">
-                                {selectedOrder.complexity_level}/5
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        {selectedOrder.source && (
-                          <div>
-                            <span className="text-sm font-medium text-gray-500">Källa:</span>
-                            <p className="text-sm text-gray-900">{selectedOrder.source}</p>
-                          </div>
-                        )}
-
-                        <div>
-                          <span className="text-sm font-medium text-gray-500">Skapad:</span>
-                          <p className="text-sm text-gray-900">{formatDate(selectedOrder.created_at)}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Assignment Information */}
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Tilldelning</h4>
-                      <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                        <div>
-                          <span className="text-sm font-medium text-gray-500">Typ:</span>
-                          <p className="text-sm text-gray-900 capitalize">
-                            {selectedOrder.assignment_type === 'individual' ? 'Individ' : 'Team'}
-                          </p>
-                        </div>
-
-                        {selectedOrder.assignment_type === 'individual' && selectedOrder.assigned_to && (
-                          <div>
-                            <span className="text-sm font-medium text-gray-500">Tilldelad till:</span>
-                            <div className="flex items-center mt-1">
-                              <User className="w-4 h-4 mr-2 text-gray-400" />
-                              <span className="text-sm text-gray-900">{selectedOrder.assigned_to.full_name}</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {selectedOrder.assignment_type === 'team' && selectedOrder.assigned_team && (
-                          <div>
-                            <span className="text-sm font-medium text-gray-500">Tilldelat team:</span>
-                            <div className="mt-1">
-                              <div className="flex items-center mb-2">
-                                <Users2 className="w-4 h-4 mr-2 text-gray-400" />
-                                <span className="text-sm text-gray-900">{selectedOrder.assigned_team.name}</span>
-                                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ml-2 ${getTeamSpecialtyColor(selectedOrder.assigned_team.specialty)}`}>
-                                  {TEAM_SPECIALTY_LABELS[selectedOrder.assigned_team.specialty]}
-                                </span>
-                              </div>
-                              {selectedOrder.assigned_team.team_leader && (
-                                <div className="flex items-center text-xs text-gray-600">
-                                  <Crown className="w-3 h-3 mr-1 text-warning-600" />
-                                  Ledare: {selectedOrder.assigned_team.team_leader.full_name}
-                                </div>
-                              )}
-                              {selectedOrder.assigned_team.members && selectedOrder.assigned_team.members.length > 0 && (
-                                <div className="mt-2">
-                                  <span className="text-xs text-gray-500">Medlemmar:</span>
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {selectedOrder.assigned_team.members.map(member => (
-                                      <span key={member.id} className="text-xs bg-white px-2 py-1 rounded border">
-                                        {member.user?.full_name}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Customer Information */}
-                    {selectedOrder.customer && (
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Kundinformation</h4>
-                        <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                          <div className="flex items-center">
-                            <Users className="w-4 h-4 mr-2 text-gray-400" />
-                            <span className="text-sm text-gray-900">{selectedOrder.customer.name}</span>
-                          </div>
-                          {selectedOrder.customer.email && (
-                            <div className="flex items-center">
-                              <Mail className="w-4 h-4 mr-2 text-gray-400" />
-                              <span className="text-sm text-gray-900">{selectedOrder.customer.email}</span>
-                            </div>
-                          )}
-                          {selectedOrder.customer.phone_number && (
-                            <div className="flex items-center">
-                              <Phone className="w-4 h-4 mr-2 text-gray-400" />
-                              <span className="text-sm text-gray-900">{selectedOrder.customer.phone_number}</span>
-                            </div>
-                          )}
-                          {selectedOrder.customer.city && (
-                            <div className="flex items-center">
-                              <MapPin className="w-4 h-4 mr-2 text-gray-400" />
-                              <span className="text-sm text-gray-900">{selectedOrder.customer.city}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Status Actions */}
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-3">Ändra status</h4>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Nuvarande status
-                          </label>
-                          <OrderStatusDropdown
-                            currentStatus={selectedOrder.status}
-                            onStatusChange={(newStatus) => handleStatusChange(selectedOrder.id, newStatus)}
-                          />
-                        </div>
-
-                        <div className="bg-primary-50 p-3 rounded-lg">
-                          <h5 className="text-sm font-medium text-primary-900 mb-2">Statusbeskrivningar:</h5>
-                          <div className="space-y-1 text-xs text-primary-800">
-                            <p><strong>Öppen Order:</strong> Ny order som väntar på bekräftelse</p>
-                            <p><strong>Bokad och Bekräftad:</strong> Order bekräftad och schemalagd</p>
-                            <p><strong>Ej Slutfört:</strong> Arbetet kunde inte slutföras</p>
-                            <p><strong>Redo att Fakturera:</strong> Arbetet är klart för fakturering</p>
-                            <p><strong>Avbokad av Kund:</strong> Kunden har avbokat ordern</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Notes and Activities */}
-                  <div className="space-y-4">
-                    {/* Status Change History */}
-                    <StatusChangeHistory orderId={selectedOrder.id} />
-
-                    {/* Add Note */}
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Lägg till anteckning</h4>
-                      <div className="space-y-2">
-                        <textarea
-                          value={newNote}
-                          onChange={(e) => setNewNote(e.target.value)}
-                          rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-                          placeholder="Skriv en anteckning..."
-                        />
-                        <button
-                          onClick={handleAddNote}
-                          disabled={!newNote.trim() || addingNote}
-                          className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {addingNote ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-white" />
-                          ) : (
-                            <MessageSquare className="w-4 h-4 mr-2" />
-                          )}
-                          Lägg till
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Notes */}
-                    {orderNotes.length > 0 && (
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Anteckningar</h4>
-                        <div className="space-y-3 max-h-48 overflow-y-auto">
-                          {orderNotes.map((note) => (
-                            <div key={note.id} className="bg-gray-50 rounded-lg p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-gray-900">
-                                  {note.user?.full_name || 'Okänd användare'}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  {formatDate(note.created_at)}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-700">{note.content}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Activities */}
-                    {orderActivities.length > 0 && (
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Aktiviteter</h4>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {orderActivities.map((activity) => (
-                            <div key={activity.id} className="flex items-start space-x-3 text-sm">
-                              <Activity className="w-4 h-4 text-gray-400 mt-0.5" />
-                              <div className="flex-1">
-                                <p className="text-gray-900">{activity.description}</p>
-                                <p className="text-xs text-gray-500">
-                                  {formatDateTime(activity.created_at)}
-                                  {activity.user && ` • ${activity.user.full_name}`}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'communication' && (
-              <div className="p-6">
-                <CommunicationPanel
-                  order={selectedOrder}
-                  communications={communications}
-                  loading={loadingCommunications}
-                  onSendEmail={() => setIsEmailComposerOpen(true)}
-                  onSendSms={() => setIsSmsComposerOpen(true)}
-                />
-              </div>
-            )}
-
-          </div>
-        </div>
+        <OrderDetailModal
+          isOpen={showDetailsModal}
+          onClose={() => { setShowDetailsModal(false); setSelectedOrder(null); }}
+          order={selectedOrder}
+          onOrderUpdated={() => { loadData(); }}
+        />
       )}
+
 
 
 

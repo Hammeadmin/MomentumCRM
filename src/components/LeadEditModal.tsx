@@ -19,7 +19,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { updateLead, type LeadWithRelations } from '../lib/leads';
-import { getLeadNotes, createLeadNote, formatDate, formatDateTime, formatCurrency } from '../lib/database';
+import { getLeadNotes, createLeadNote, formatDate, formatDateTime, formatCurrency, updateCustomer } from '../lib/database';
 import { LEAD_STATUS_LABELS, type LeadStatus, type UserProfile, type LeadNote } from '../types/database';
 
 interface LeadEditModalProps {
@@ -80,6 +80,18 @@ export default function LeadEditModal({
   const [addingNote, setAddingNote] = useState(false);
   const [loadingNotes, setLoadingNotes] = useState(false);
 
+  const [isEditingCustomer, setIsEditingCustomer] = useState(false);
+  const [customerEditForm, setCustomerEditForm] = useState({
+    name: lead.customer?.name || '',
+    email: lead.customer?.email || '',
+    phone_number: lead.customer?.phone_number || '',
+    org_number: lead.customer?.org_number || '',
+    address: lead.customer?.address || '',
+    postal_code: lead.customer?.postal_code || '',
+    city: lead.customer?.city || '',
+  });
+  const [savingCustomer, setSavingCustomer] = useState(false);
+
   useEffect(() => {
     setFormData(buildForm(lead));
     loadNotes();
@@ -136,6 +148,30 @@ export default function LeadEditModal({
       showError('Fel', 'Kunde inte spara anteckning.');
     } finally {
       setAddingNote(false);
+    }
+  };
+
+  const handleUpdateCustomer = async () => {
+    if (!lead.customer) return;
+    setSavingCustomer(true);
+    try {
+      const { error } = await updateCustomer(lead.customer.id, {
+        name: customerEditForm.name,
+        email: customerEditForm.email || null,
+        phone_number: customerEditForm.phone_number || null,
+        org_number: customerEditForm.org_number || null,
+        address: customerEditForm.address || null,
+        postal_code: customerEditForm.postal_code || null,
+        city: customerEditForm.city || null,
+      });
+      if (error) { showError('Fel', (error as any).message || 'Kunde inte spara.'); return; }
+      success('Sparat', 'Kunduppgifter uppdaterade.');
+      setIsEditingCustomer(false);
+      onUpdated();
+    } catch {
+      showError('Fel', 'Kunde inte spara kunduppgifter.');
+    } finally {
+      setSavingCustomer(false);
     }
   };
 
@@ -333,37 +369,72 @@ export default function LeadEditModal({
                   <div className="bg-gray-50 rounded-lg p-4 space-y-2.5">
                     {lead.customer ? (
                       <>
-                        <div className="flex items-center gap-2">
-                          <Users className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                          <span className="text-sm font-medium text-gray-900">{lead.customer.name}</span>
-                        </div>
-                        {lead.customer.email && (
-                          <div className="flex items-center gap-2">
-                            <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <a href={`mailto:${lead.customer.email}`} className="text-sm text-blue-600 hover:underline">{lead.customer.email}</a>
-                          </div>
-                        )}
-                        {lead.customer.phone_number && (
-                          <div className="flex items-center gap-2">
-                            <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <a href={`tel:${lead.customer.phone_number}`} className="text-sm text-blue-600 hover:underline">{lead.customer.phone_number}</a>
-                          </div>
-                        )}
-                        {(lead.customer.address || lead.customer.city) && (
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <span className="text-sm text-gray-700">
-                              {[lead.customer.address, lead.customer.city].filter(Boolean).join(', ')}
-                            </span>
-                          </div>
-                        )}
-                        {lead.customer.org_number && (
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <span className="text-xs text-gray-500">
-                              {lead.customer.customer_type === 'company' ? 'Org.nummer:' : 'Personnummer:'}
-                            </span>
-                            <span className="text-sm text-gray-700">{lead.customer.org_number}</span>
+                        {!isEditingCustomer ? (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Users className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                <span className="text-sm font-medium text-gray-900">{lead.customer.name}</span>
+                              </div>
+                              <button
+                                className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                onClick={() => { setCustomerEditForm({ name: lead.customer!.name || '', email: lead.customer!.email || '', phone_number: lead.customer!.phone_number || '', org_number: lead.customer!.org_number || '', address: lead.customer!.address || '', postal_code: lead.customer!.postal_code || '', city: lead.customer!.city || '' }); setIsEditingCustomer(true); }}
+                              >
+                                <Edit2 className="w-3 h-3" /> Redigera
+                              </button>
+                            </div>
+                            {lead.customer.email && (
+                              <div className="flex items-center gap-2">
+                                <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                <a href={`mailto:${lead.customer.email}`} className="text-sm text-blue-600 hover:underline">{lead.customer.email}</a>
+                              </div>
+                            )}
+                            {lead.customer.phone_number && (
+                              <div className="flex items-center gap-2">
+                                <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                <a href={`tel:${lead.customer.phone_number}`} className="text-sm text-blue-600 hover:underline">{lead.customer.phone_number}</a>
+                              </div>
+                            )}
+                            {(lead.customer.address || lead.customer.postal_code || lead.customer.city) && (
+                              <div className="flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                <span className="text-sm text-gray-700">
+                                  {[lead.customer.address, lead.customer.postal_code, lead.customer.city].filter(Boolean).join(', ')}
+                                </span>
+                              </div>
+                            )}
+                            {lead.customer.org_number && (
+                              <div className="flex items-center gap-2">
+                                <User className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                <span className="text-xs text-gray-500">
+                                  {lead.customer.customer_type === 'company' ? 'Org.nummer:' : 'Personnummer:'}
+                                </span>
+                                <span className="text-sm text-gray-700">{lead.customer.org_number}</span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="space-y-2">
+                            <input className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Namn *" value={customerEditForm.name} onChange={e => setCustomerEditForm(p => ({ ...p, name: e.target.value }))} />
+                            <input className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="E-post" value={customerEditForm.email} onChange={e => setCustomerEditForm(p => ({ ...p, email: e.target.value }))} />
+                            <input className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Telefon" value={customerEditForm.phone_number} onChange={e => setCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))} />
+                            <input className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder={lead.customer.customer_type === 'company' ? 'Org.nummer (556xxx-xxxx)' : 'Personnummer (ÅÅMMDD-XXXX)'} value={customerEditForm.org_number} onChange={e => setCustomerEditForm(p => ({ ...p, org_number: e.target.value }))} />
+                            <input className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Adress" value={customerEditForm.address} onChange={e => setCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
+                            <div className="flex gap-2">
+                              <input className="w-24 text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Postnr" value={customerEditForm.postal_code} onChange={e => setCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
+                              <input className="flex-1 text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Stad" value={customerEditForm.city} onChange={e => setCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                            </div>
+                            <div className="flex gap-2 justify-end pt-1">
+                              <button className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1" onClick={() => setIsEditingCustomer(false)}>Avbryt</button>
+                              <button
+                                className="text-xs font-medium bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center gap-1 disabled:opacity-50"
+                                onClick={handleUpdateCustomer}
+                                disabled={savingCustomer}
+                              >
+                                {savingCustomer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                Spara
+                              </button>
+                            </div>
                           </div>
                         )}
                       </>
