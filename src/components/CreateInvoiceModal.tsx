@@ -229,7 +229,22 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
     };
 
     const calculateSubtotal = () => formData.line_items.reduce((s, i) => s + i.total, 0);
-    const calculateVAT = () => calculateSubtotal() * 0.25;
+
+    const getActiveVatHandling = (): string => {
+        if (isNewCustomer) return newCustomerForm.vat_handling;
+        const sel = customers.find(c => c.id === formData.customer_id);
+        return (sel as any)?.vat_handling || '25%';
+    };
+
+    const getVatRate = (): number => {
+        const vh = getActiveVatHandling();
+        if (vh === '12%') return 0.12;
+        if (vh === '6%') return 0.06;
+        if (vh === '0%' || vh === 'omvänd byggmoms') return 0;
+        return 0.25;
+    };
+
+    const calculateVAT = () => calculateSubtotal() * getVatRate();
     const calculateTotal = () => calculateSubtotal() + calculateVAT();
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -301,6 +316,7 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                     amount: total,
                     due_date: formData.due_date,
                     job_description: formData.work_summary || null,
+                    work_summary: formData.work_summary || null,
                     include_rot: formData.include_rot,
                     rot_personnummer: formData.rot_personnummer,
                     rot_organisationsnummer: formData.rot_organisationsnummer,
@@ -715,7 +731,11 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                                             <span className="font-medium">{formatCurrency(calculateSubtotal())}</span>
                                         </div>
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-gray-600">Moms (25%)</span>
+                                            <span className="text-gray-600">
+                                                {getActiveVatHandling() === 'omvänd byggmoms'
+                                                    ? 'Moms (Omvänd byggmoms, 0%)'
+                                                    : `Moms (${getActiveVatHandling()})`}
+                                            </span>
                                             <span className="font-medium">{formatCurrency(calculateVAT())}</span>
                                         </div>
                                         <div className="flex justify-between text-lg font-bold pt-2 border-t">
