@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { X, Edit, Eye, Trash2, Paperclip, Send, Camera, FileText, Mail } from 'lucide-react';
-import ContactCustomerModal from './ContactCustomerModal';
+import SendQuoteModal from './SendQuoteModal';
 import type { Customer } from '../types/database';
 import {
   getOrderNotes,
@@ -270,10 +270,11 @@ export const WorkerJobDetailsModal = ({ order, onClose }: WorkerJobDetailsModalP
       </div>
     </div>
     {order.customer && (
-      <ContactCustomerModal
+      <SendQuoteModal
         isOpen={showContactModal}
         onClose={() => setShowContactModal(false)}
         customer={order.customer as Customer}
+        quote={null}
       />
     )}
     </>

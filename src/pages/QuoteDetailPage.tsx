@@ -51,7 +51,8 @@ import OrderDetailModal from '../components/OrderDetailModal';
 import QuotePreview from '../components/QuotePreview';
 import SendQuoteModal from '../components/SendQuoteModal';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { convertQuoteToJob, formatDate, formatCurrency } from '../lib/database';
+import { convertQuoteToJob, formatDate, formatDateTime, formatCurrency } from '../lib/database';
+import { getCustomerCommunications, type CommunicationWithRelations } from '../lib/communications';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import {
@@ -107,6 +108,10 @@ export default function QuoteDetailPage() {
     // View tracking data
     const [viewData, setViewData] = useState<{ count: number; lastViewed: string | null }>({ count: 0, lastViewed: null });
 
+    // Communication history
+    const [communications, setCommunications] = useState<CommunicationWithRelations[]>([]);
+    const [loadingComms, setLoadingComms] = useState(false);
+
     // Print ref for preview
     const printRef = useRef<HTMLDivElement>(null);
 
@@ -152,10 +157,24 @@ export default function QuoteDetailPage() {
             const { data, error } = await getQuote(id);
             if (error) throw error;
             setQuote(data);
+            // Load communications for this customer once we have the quote
+            if (data?.customer_id) {
+                loadCommunications(data.customer_id);
+            }
         } catch (err: any) {
             showError('Kunde inte ladda offert', err.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadCommunications = async (customerId: string) => {
+        setLoadingComms(true);
+        try {
+            const { data } = await getCustomerCommunications(customerId);
+            if (data) setCommunications(data);
+        } finally {
+            setLoadingComms(false);
         }
     };
 
@@ -886,7 +905,13 @@ export default function QuoteDetailPage() {
                                                 </div>
                                                 <div className="flex-1 pb-4">
                                                     <p className="text-sm font-medium text-gray-900">Offert skapad</p>
-                                                    <p className="text-xs text-gray-500">{quote.created_at ? formatDate(quote.created_at) : '-'}</p>
+                                                    <p className="text-xs text-gray-500">{quote.created_at ? formatDateTime(quote.created_at) : '-'}</p>
+                                                    {(quote as any).created_by?.full_name && (
+                                                        <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                                                            <User className="w-3 h-3" />
+                                                            {(quote as any).created_by.full_name}
+                                                        </p>
+                                                    )}
                                                     {quote.lead_id && (
                                                         <p className="text-xs text-indigo-600 mt-1">Skapad från lead</p>
                                                     )}
@@ -955,6 +980,44 @@ export default function QuoteDetailPage() {
                                                 </div>
                                             )}
                                         </div>
+                                    </div>
+
+                                    {/* Communication history */}
+                                    <div className="mt-6 border-t border-gray-100 pt-5">
+                                        <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                            <MessageSquare className="w-4 h-4" />
+                                            Kommunikationshistorik
+                                        </h4>
+                                        {loadingComms ? (
+                                            <div className="flex justify-center py-4">
+                                                <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                                            </div>
+                                        ) : communications.length === 0 ? (
+                                            <p className="text-sm text-gray-400 italic">Ingen kommunikation registrerad.</p>
+                                        ) : (
+                                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                                                {communications.map(comm => (
+                                                    <div key={comm.id} className="bg-gray-50 rounded-lg p-3 text-sm">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full ${comm.type === 'email' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                                                                    {comm.type === 'email' ? <Mail className="w-3 h-3" /> : <Phone className="w-3 h-3" />}
+                                                                    {comm.type === 'email' ? 'E-post' : 'SMS'}
+                                                                </span>
+                                                                <span className="text-xs font-medium text-gray-700">
+                                                                    {comm.created_by?.full_name || 'Okänd användare'}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-xs text-gray-400">{formatDateTime(comm.created_at)}</span>
+                                                        </div>
+                                                        {comm.subject && (
+                                                            <p className="text-xs text-gray-500 mb-1 font-medium">{comm.subject}</p>
+                                                        )}
+                                                        <p className="text-gray-700 line-clamp-2">{comm.content}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}

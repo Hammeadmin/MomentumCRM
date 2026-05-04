@@ -12,6 +12,7 @@ export interface QuoteWithRelations extends Quote {
   line_items?: QuoteLineItem[];
   order?: any;
   organisation?: { id: string; name: string; email?: string; phone?: string; org_number?: string };
+  created_by?: { id: string; full_name: string | null } | null;
 }
 
 export interface QuoteFilters {
@@ -169,7 +170,8 @@ export const getQuote = async (
         lead:leads(*),
         quote_line_items(*),
         order:orders(id, title, status),
-        organisation:organisations(id, name, email, phone, org_number, address, postal_code, city)
+        organisation:organisations(id, name, email, phone, org_number, address, postal_code, city),
+        created_by:user_profiles!quotes_created_by_user_id_fkey(id, full_name)
       `)
       .eq('id', id)
       .single();
@@ -592,7 +594,8 @@ export const saveQuoteTemplateSnapshot = async (
 export const createQuoteFromLead = async (
   lead: Lead & { form_data?: Record<string, any> | null },
   organisationId: string,
-  linkedProductId?: string
+  linkedProductId?: string,
+  createdByUserId?: string | null
 ): Promise<{ data: Quote | null; error: Error | null }> => {
   try {
     if (!lead.customer_id) {
@@ -687,6 +690,7 @@ export const createQuoteFromLead = async (
       status: 'draft' as const,
       subtotal: calculatedPrice,
       vat_amount: 0,
+      created_by_user_id: createdByUserId ?? null,
     };
 
     const lineItems = lineItemToInsert ? [lineItemToInsert] : [];

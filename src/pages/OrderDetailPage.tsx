@@ -56,7 +56,7 @@ import { ORDER_STATUS_LABELS, type OrderStatus, type OrderNote, type OrderActivi
 import { Button } from '../components/ui';
 import OrderDetailModal from '../components/OrderDetailModal';
 import CreateInvoiceModal from '../components/CreateInvoiceModal';
-import ContactCustomerModal from '../components/ContactCustomerModal';
+import SendQuoteModal from '../components/SendQuoteModal';
 
 // Status options matching Kanban columns - same as Säljtunnel/OrderKanban
 const ORDER_STATUS_OPTIONS: { status: OrderStatus; label: string; color: string }[] = [
@@ -912,11 +912,12 @@ export default function OrderDetailPage() {
             )}
 
             {showContactModal && order.customer && (
-                <ContactCustomerModal
+                <SendQuoteModal
                     isOpen={showContactModal}
                     onClose={() => setShowContactModal(false)}
                     customer={order.customer}
-                    onCommunicationSent={() => setShowContactModal(false)}
+                    quote={null}
+                    onSent={() => setShowContactModal(false)}
                 />
             )}
         </div>

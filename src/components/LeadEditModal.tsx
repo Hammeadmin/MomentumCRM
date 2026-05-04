@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
-import ContactCustomerModal from './ContactCustomerModal';
+import SendQuoteModal from './SendQuoteModal';
 import { updateLead, type LeadWithRelations } from '../lib/leads';
 import { getLeadNotes, createLeadNote, getLeadActivities, formatDate, formatDateTime, formatCurrency, updateCustomer } from '../lib/database';
 import { LEAD_STATUS_LABELS, type LeadStatus, type UserProfile, type LeadNote, type LeadActivity } from '../types/database';
@@ -668,11 +668,12 @@ export default function LeadEditModal({
       </div>
     </div>
     {showContactModal && lead.customer && (
-      <ContactCustomerModal
+      <SendQuoteModal
         isOpen={showContactModal}
         onClose={() => setShowContactModal(false)}
         customer={lead.customer}
-        onCommunicationSent={() => setShowContactModal(false)}
+        quote={null}
+        onSent={() => setShowContactModal(false)}
       />
     )}
     </>

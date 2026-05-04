@@ -1,15 +1,17 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
     X, Edit, Send, FileUp, MessageSquare, User, Users2, Paperclip,
-    CheckCircle, ExternalLink, Phone, MapPin, Mail,
+    CheckCircle, ExternalLink, Phone, MapPin, Mail, Loader2,
 } from 'lucide-react';
-import ContactCustomerModal from '../../ContactCustomerModal';
+import SendQuoteModal from '../../SendQuoteModal';
 import InvoicePreview from '../../InvoicePreview';
 import ROTInformation from '../../ROTInformation';
 import InvoiceCreditHistory from '../../InvoiceCreditHistory';
 import { type InvoiceWithRelations } from '../../../lib/invoices';
 import { getAttachmentPublicUrl, type OrderAttachment } from '../../../lib/orders';
+import { getCustomerCommunications, type CommunicationWithRelations } from '../../../lib/communications';
+import { formatDateTime } from '../../../lib/database';
 import { type QuoteTemplate } from '../../../lib/quoteTemplates';
 import {
     INVOICE_STATUS_LABELS,
@@ -78,6 +80,18 @@ export default function InvoiceDetailsModal({
     );
     const [selectedTemplate, setSelectedTemplate] = useState<QuoteTemplate | null>(null);
     const [showContactModal, setShowContactModal] = useState(false);
+    const [communications, setCommunications] = useState<CommunicationWithRelations[]>([]);
+    const [loadingComms, setLoadingComms] = useState(false);
+
+    useEffect(() => {
+        if (isOpen && invoice.customer_id) {
+            setLoadingComms(true);
+            getCustomerCommunications(invoice.customer_id)
+                .then(({ data }) => { if (data) setCommunications(data); })
+                .finally(() => setLoadingComms(false));
+        }
+        if (!isOpen) setCommunications([]);
+    }, [isOpen, invoice.customer_id]);
 
     if (!isOpen) return null;
 
@@ -369,6 +383,44 @@ export default function InvoiceDetailsModal({
                                 ))}
                             </div>
                         </div>
+
+                        {/* Communication History */}
+                        <div>
+                            <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                <MessageSquare className="w-4 h-4 text-gray-400" />
+                                Kommunikationshistorik
+                            </h4>
+                            {loadingComms ? (
+                                <div className="flex justify-center py-4">
+                                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                                </div>
+                            ) : communications.length === 0 ? (
+                                <p className="text-sm text-gray-400 italic">Ingen kommunikation registrerad.</p>
+                            ) : (
+                                <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    {communications.map(comm => (
+                                        <div key={comm.id} className="bg-gray-50 rounded-lg p-3 text-sm">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full ${comm.type === 'email' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                                                        {comm.type === 'email' ? <Mail className="w-3 h-3" /> : <Phone className="w-3 h-3" />}
+                                                        {comm.type === 'email' ? 'E-post' : 'SMS'}
+                                                    </span>
+                                                    <span className="text-xs font-medium text-gray-700">
+                                                        {comm.created_by?.full_name || 'Okänd användare'}
+                                                    </span>
+                                                </div>
+                                                <span className="text-xs text-gray-400">{formatDateTime(comm.created_at)}</span>
+                                            </div>
+                                            {comm.subject && (
+                                                <p className="text-xs text-gray-500 font-medium mb-1">{comm.subject}</p>
+                                            )}
+                                            <p className="text-gray-700 line-clamp-2">{comm.content}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Right Column: Invoice Preview */}
@@ -482,11 +534,12 @@ export default function InvoiceDetailsModal({
             </div>
         </div>
         {showContactModal && invoice.customer && (
-            <ContactCustomerModal
+            <SendQuoteModal
                 isOpen={showContactModal}
                 onClose={() => setShowContactModal(false)}
                 customer={invoice.customer}
-                onCommunicationSent={() => setShowContactModal(false)}
+                quote={null}
+                onSent={() => setShowContactModal(false)}
             />
         )}
         </>

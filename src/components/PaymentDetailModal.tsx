@@ -28,7 +28,7 @@ import { Invoice, InvoiceStatus, INVOICE_STATUS_LABELS, Customer } from '../type
 import { supabase } from '../lib/supabase';
 import { useToast } from '../hooks/useToast';
 import { StatusBadge } from './ui';
-import ContactCustomerModal from './ContactCustomerModal';
+import SendQuoteModal from './SendQuoteModal';
 
 interface InvoiceHistory {
   id: string;
@@ -545,10 +545,11 @@ export function PaymentDetailModal({
       </div>
     </div>
     {invoice.customer && (
-      <ContactCustomerModal
+      <SendQuoteModal
         isOpen={showContactModal}
         onClose={() => setShowContactModal(false)}
         customer={invoice.customer as Customer}
+        quote={null}
       />
     )}
     </>

@@ -9,7 +9,7 @@ import {
     X, FileText, Trash2, Send, Check, Edit, User, Calendar,
     Package, Clock, Mail, Building, Phone, MapPin, Loader2, Copy, ExternalLink, MessageSquare
 } from 'lucide-react';
-import ContactCustomerModal from './ContactCustomerModal';
+import SendQuoteModal from './SendQuoteModal';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../hooks/useToast';
 import {
@@ -712,11 +712,12 @@ export function QuoteDetailModal({
                 </div>
             )}
         {showContactModal && quote?.customer && (
-            <ContactCustomerModal
+            <SendQuoteModal
                 isOpen={showContactModal}
                 onClose={() => setShowContactModal(false)}
                 customer={quote.customer}
-                onCommunicationSent={() => setShowContactModal(false)}
+                quote={null}
+                onSent={() => setShowContactModal(false)}
             />
         )}
         </>

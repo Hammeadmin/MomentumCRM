@@ -362,7 +362,8 @@ export default function QuoteEditModal({
                     ...commonData,
                     organisation_id: organisationId,
                     status: 'draft',
-                    total_amount: 0 // Calc by DB
+                    total_amount: 0, // Calc by DB
+                    created_by_user_id: user?.id ?? null,
                 }, lineItems);
             }
 

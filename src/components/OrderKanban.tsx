@@ -24,7 +24,8 @@ import {
   Crown,
   Briefcase,
   Loader2,
-  Edit
+  Edit,
+  Eye
 } from 'lucide-react';
 import { Button } from './ui';
 import { useAuth } from '../contexts/AuthContext';
@@ -78,7 +79,8 @@ import { useMoveCard } from '../hooks/useMoveCard';
 
 import { SkeletonColumn } from './ui';
 import QuoteEditModal from './QuoteEditModal';
-import QuoteDetailModal from './QuoteDetailModal';
+import QuotePreviewModal from './QuotePreviewModal';
+import SendQuoteModal from './SendQuoteModal';
 import LeadEditModal from './LeadEditModal';
 import OrderDetailModal from './OrderDetailModal';
 import CreateOrderModal from './CreateOrderModal';
@@ -419,12 +421,14 @@ const LeadKanbanRow = ({
 };
 
 const QuoteKanbanRow = ({
-  quote, borderColor, onDragStart, onClick,
+  quote, borderColor, onDragStart, onClick, onPreview, onSend,
 }: {
   quote: QuoteWithRelations;
   borderColor: string;
   onDragStart: (e: React.DragEvent) => void;
   onClick: () => void;
+  onPreview?: () => void;
+  onSend?: () => void;
 }) => (
   <div
     className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
@@ -465,6 +469,27 @@ const QuoteKanbanRow = ({
           <Calendar className="w-3 h-3" />
           {formatDate((quote as any).created_at)}
         </span>
+      )}
+    </div>
+    {/* Row 4: Action buttons (visible on hover) */}
+    <div className="hidden group-hover:flex items-center gap-2 pt-1 border-t border-gray-100 mt-0.5">
+      {onPreview && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onPreview(); }}
+          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-0.5 rounded hover:bg-indigo-50 transition-colors"
+        >
+          <Eye className="w-3 h-3" />
+          Förhandsgranska
+        </button>
+      )}
+      {onSend && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onSend(); }}
+          className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 font-medium px-2 py-0.5 rounded hover:bg-green-50 transition-colors"
+        >
+          <Mail className="w-3 h-3" />
+          Skicka
+        </button>
       )}
     </div>
   </div>
@@ -522,6 +547,8 @@ function OrderKanban() {
   const [showLeadEditModal, setShowLeadEditModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState<LeadWithRelations | null>(null);
   const [showQuoteEditModal, setShowQuoteEditModal] = useState(false);
+  const [showQuotePreviewModal, setShowQuotePreviewModal] = useState(false);
+  const [showSendQuoteModal, setShowSendQuoteModal] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<QuoteWithRelations | null>(null);
   const [showQuoteCreateFromLead, setShowQuoteCreateFromLead] = useState(false);
   const [leadForQuote, setLeadForQuote] = useState<LeadWithRelations | null>(null);
@@ -1031,7 +1058,8 @@ function OrderKanban() {
           description: lead.description,
           total_amount: lead.estimated_value || 0,
           status: 'draft' as QuoteStatus,
-          quote_number: `QT-${Math.floor(Date.now() / 1000)}`
+          quote_number: `QT-${Math.floor(Date.now() / 1000)}`,
+          created_by_user_id: user?.id ?? null,
         };
 
         const result = await createQuote(quoteData, []);
@@ -1303,6 +1331,14 @@ function OrderKanban() {
                               setSelectedQuote(quote);
                               setShowQuoteEditModal(true);
                             }}
+                            onPreview={() => {
+                              setSelectedQuote(quote);
+                              setShowQuotePreviewModal(true);
+                            }}
+                            onSend={() => {
+                              setSelectedQuote(quote);
+                              setShowSendQuoteModal(true);
+                            }}
                           />
                         ))}
 
@@ -1408,16 +1444,25 @@ function OrderKanban() {
         />
       )}
 
-      {/* Quote Detail Modal */}
+      {/* Quote Edit Modal — full edit when clicking a quote card */}
       {showQuoteEditModal && selectedQuote && (
-        <QuoteDetailModal
+        <QuoteEditModal
           isOpen={showQuoteEditModal}
           onClose={() => {
             setShowQuoteEditModal(false);
             setSelectedQuote(null);
           }}
-          onQuoteUpdated={loadData}
-          quoteId={selectedQuote.id}
+          quote={selectedQuote}
+          customers={customers}
+          leads={leads as any}
+          templates={quoteTemplates}
+          companyInfo={companyInfo}
+          organisationId={organisationId!}
+          onSave={async () => {
+            await loadData();
+            setShowQuoteEditModal(false);
+            setSelectedQuote(null);
+          }}
         />
       )}
 
@@ -1513,20 +1558,35 @@ function OrderKanban() {
         />
       )}
 
-      {/* Quote Detail Modal - for clicking on quotes in the kanban */}
-      {showQuoteEditModal && selectedQuote && (
-        <QuoteDetailModal
-          isOpen={showQuoteEditModal}
+      {/* Quote Preview Modal — opened via hover preview button */}
+      {showQuotePreviewModal && selectedQuote && (
+        <QuotePreviewModal
+          isOpen={showQuotePreviewModal}
           onClose={() => {
-            setShowQuoteEditModal(false);
+            setShowQuotePreviewModal(false);
             setSelectedQuote(null);
           }}
-          onQuoteUpdated={() => {
+          quote={selectedQuote}
+          templates={quoteTemplates}
+          companyInfo={companyInfo}
+        />
+      )}
+
+      {/* Send Quote Modal — opened via hover send button */}
+      {showSendQuoteModal && selectedQuote && (
+        <SendQuoteModal
+          isOpen={showSendQuoteModal}
+          onClose={() => {
+            setShowSendQuoteModal(false);
+            setSelectedQuote(null);
+          }}
+          quote={selectedQuote}
+          templates={quoteTemplates}
+          onSent={() => {
             loadData();
-            setShowQuoteEditModal(false);
+            setShowSendQuoteModal(false);
             setSelectedQuote(null);
           }}
-          quoteId={selectedQuote.id}
         />
       )}
 

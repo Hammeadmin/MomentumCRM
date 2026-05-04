@@ -33,7 +33,7 @@ export function QuoteCreationModal({
     onQuoteCreated,
     lead
 }: QuoteCreationModalProps) {
-    const { organisationId } = useAuth();
+    const { user, organisationId } = useAuth();
     const { success, error: showError } = useToast();
 
     const [loading, setLoading] = useState(false);
@@ -133,6 +133,7 @@ export function QuoteCreationModal({
                     status: 'draft' as const,
                     valid_until: validUntil.toISOString().split('T')[0],
                     total_amount: 0, // Will be calculated by createQuote
+                    created_by_user_id: user?.id ?? null,
                 },
                 quoteLineItems
             );
