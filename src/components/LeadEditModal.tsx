@@ -20,8 +20,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import ContactCustomerModal from './ContactCustomerModal';
 import { updateLead, type LeadWithRelations } from '../lib/leads';
-import { getLeadNotes, createLeadNote, formatDate, formatDateTime, formatCurrency, updateCustomer } from '../lib/database';
-import { LEAD_STATUS_LABELS, type LeadStatus, type UserProfile, type LeadNote } from '../types/database';
+import { getLeadNotes, createLeadNote, getLeadActivities, formatDate, formatDateTime, formatCurrency, updateCustomer } from '../lib/database';
+import { LEAD_STATUS_LABELS, type LeadStatus, type UserProfile, type LeadNote, type LeadActivity } from '../types/database';
 
 interface LeadEditModalProps {
   lead: LeadWithRelations;
@@ -81,6 +81,8 @@ export default function LeadEditModal({
   const [newNote, setNewNote] = useState('');
   const [addingNote, setAddingNote] = useState(false);
   const [loadingNotes, setLoadingNotes] = useState(false);
+  const [leadActivities, setLeadActivities] = useState<(LeadActivity & { user?: UserProfile })[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
 
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [customerEditForm, setCustomerEditForm] = useState({
@@ -101,6 +103,7 @@ export default function LeadEditModal({
   useEffect(() => {
     setFormData(buildForm(lead));
     loadNotes();
+    loadActivities();
   }, [lead.id]);
 
   const loadNotes = async () => {
@@ -110,6 +113,16 @@ export default function LeadEditModal({
       if (data) setNotes(data as (LeadNote & { user?: UserProfile })[]);
     } finally {
       setLoadingNotes(false);
+    }
+  };
+
+  const loadActivities = async () => {
+    setLoadingActivities(true);
+    try {
+      const { data } = await getLeadActivities(lead.id);
+      if (data) setLeadActivities(data as (LeadActivity & { user?: UserProfile })[]);
+    } finally {
+      setLoadingActivities(false);
     }
   };
 
@@ -599,6 +612,38 @@ export default function LeadEditModal({
               <p className="text-sm text-gray-400 italic">Inga anteckningar ännu.</p>
             )}
           </div>
+
+          {/* ======== ACTIVITIES ======== */}
+          {!isEditing && (
+            <div className="border-t border-gray-100 pt-4">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
+                <Activity className="w-4 h-4 text-gray-400" />
+                Aktivitetslogg
+              </h4>
+              {loadingActivities ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                </div>
+              ) : leadActivities.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {leadActivities.map(activity => (
+                    <div key={activity.id} className="flex items-start gap-2 text-sm">
+                      <Activity className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-gray-900">{activity.description}</p>
+                        <p className="text-xs text-gray-500">
+                          {formatDateTime(activity.created_at)}
+                          {activity.user && ` • ${activity.user.full_name}`}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 italic">Inga aktiviteter registrerade.</p>
+              )}
+            </div>
+          )}
 
           {/* Action buttons */}
           {!isEditing && (
