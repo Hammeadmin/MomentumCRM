@@ -4,7 +4,7 @@ import {
     X, Edit, Send, FileUp, MessageSquare, User, Users2, Paperclip,
     CheckCircle, ExternalLink, Phone, MapPin, Mail, Loader2,
 } from 'lucide-react';
-import ContactCustomerModal from '../../ContactCustomerModal';
+import SendQuoteModal from '../../SendQuoteModal';
 import InvoicePreview from '../../InvoicePreview';
 import ROTInformation from '../../ROTInformation';
 import InvoiceCreditHistory from '../../InvoiceCreditHistory';
@@ -534,11 +534,12 @@ export default function InvoiceDetailsModal({
             </div>
         </div>
         {showContactModal && invoice.customer && (
-            <ContactCustomerModal
+            <SendQuoteModal
                 isOpen={showContactModal}
                 onClose={() => setShowContactModal(false)}
                 customer={invoice.customer}
-                onCommunicationSent={() => setShowContactModal(false)}
+                quote={null}
+                onSent={() => setShowContactModal(false)}
             />
         )}
         </>

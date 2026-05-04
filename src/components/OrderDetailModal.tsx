@@ -71,7 +71,7 @@ import type { TeamWithRelations } from '../lib/teams';
 
 import ROTFields from './ROTFields';
 import RUTFields from './RUTFields';
-import ContactCustomerModal from './ContactCustomerModal';
+import SendQuoteModal from './SendQuoteModal';
 import ROTInformation from './ROTInformation';
 import RUTInformation from './RUTInformation';
 import OrderStatusBadge from './OrderStatusBadge';
@@ -1642,11 +1642,12 @@ function OrderDetailModal({
       />
 
       {showContactModal && order.customer && (
-        <ContactCustomerModal
+        <SendQuoteModal
           isOpen={showContactModal}
           onClose={() => setShowContactModal(false)}
           customer={order.customer}
-          onCommunicationSent={() => setShowContactModal(false)}
+          quote={null}
+          onSent={() => setShowContactModal(false)}
         />
       )}
     </>

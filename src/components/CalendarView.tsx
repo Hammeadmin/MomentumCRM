@@ -87,7 +87,7 @@ import { Button } from './ui';
 import EmptyState from './EmptyState';
 import { Loader2 } from 'lucide-react';
 import InvitationPreviewModal from './InvitationPreviewModal';
-import ContactCustomerModal from './ContactCustomerModal';
+import SendQuoteModal from './SendQuoteModal';
 import QuoteCreationModal from './QuoteCreationModal';
 import { Video } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
@@ -2789,11 +2789,12 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
           || (selectedEvent.related_lead as any)?.customer;
         if (!customer) return null;
         return (
-          <ContactCustomerModal
+          <SendQuoteModal
             isOpen={showContactModal}
             onClose={() => setShowContactModal(false)}
             customer={customer}
-            onCommunicationSent={() => setShowContactModal(false)}
+            quote={null}
+            onSent={() => setShowContactModal(false)}
           />
         );
       })()}

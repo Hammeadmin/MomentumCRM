@@ -6,7 +6,7 @@ import { useToast } from '../hooks/useToast';
 import { updateSalesTask, getTaskNotes, createTaskNote } from '../lib/leads';
 import type { SalesTask, UserProfile, TaskNote, TaskStatus, Customer } from '../types/database';
 import { X, CheckSquare, ThumbsDown, Calendar, AlignLeft, Send, Briefcase, Mail } from 'lucide-react';
-import ContactCustomerModal from './ContactCustomerModal';
+import SendQuoteModal from './SendQuoteModal';
 import { formatDate } from '../lib/database';
 
 const TaskDetailModal = ({ task, members, onClose, onUpdate }: { task: SalesTask | null, members: UserProfile[], onClose: () => void, onUpdate: () => void }) => {
@@ -135,10 +135,11 @@ const TaskDetailModal = ({ task, members, onClose, onUpdate }: { task: SalesTask
             </div>
         </div>
         {taskCustomer && (
-            <ContactCustomerModal
+            <SendQuoteModal
                 isOpen={showContactModal}
                 onClose={() => setShowContactModal(false)}
                 customer={taskCustomer}
+                quote={null}
             />
         )}
         </>

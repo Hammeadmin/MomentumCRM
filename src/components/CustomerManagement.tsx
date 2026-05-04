@@ -9,7 +9,7 @@ import {
 import type { Customer, Lead, Quote, Job, Invoice, UserProfile } from '../types/database';
 import { LEAD_STATUS_LABELS, QUOTE_STATUS_LABELS, JOB_STATUS_LABELS, INVOICE_STATUS_LABELS } from '../types/database';
 
-import ContactCustomerModal from './ContactCustomerModal';
+import SendQuoteModal from './SendQuoteModal';
 import { useAuth } from '../contexts/AuthContext';
 import { Button, Badge } from './ui';
 
@@ -1031,14 +1031,15 @@ function CustomerManagement() {
       )}
 
       {selectedCustomer && (
-        <ContactCustomerModal
+        <SendQuoteModal
           isOpen={showContactModal}
           onClose={() => {
             setShowContactModal(false);
             setSelectedCustomer(null);
           }}
           customer={selectedCustomer}
-          onCommunicationSent={() => {
+          quote={null}
+          onSent={() => {
             loadCustomers();
           }}
         />
