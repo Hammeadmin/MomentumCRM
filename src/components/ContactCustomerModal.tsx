@@ -71,6 +71,8 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
   const [content, setContent] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [editEmail, setEditEmail] = useState(customer?.email || '');
+  const [editPhone, setEditPhone] = useState(customer?.phone_number || '');
 
   const [contextData, setContextData] = useState<ContextDataState>({
     orders: [],
@@ -112,7 +114,10 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
   }, [contextRequirements]);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      setEditEmail(customer?.email || '');
+      setEditPhone(customer?.phone_number || '');
+    } else {
       setContextData({
         orders: [],
         invoices: [],
@@ -127,7 +132,7 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
       setShowContextSection(false);
       loadingRef.current = { orders: false, invoices: false, quotes: false };
     }
-  }, [isOpen]);
+  }, [isOpen, customer?.email, customer?.phone_number]);
 
   useEffect(() => {
     if (selectedTemplate && needsContextSelector) {
@@ -409,11 +414,11 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
     }
 
     if (contactMethod === 'email') {
-      if (!customer.email) {
+      if (!editEmail.trim()) {
         showError('Fel', 'Kunden har ingen e-postadress');
         return;
       }
-      if (!validateEmail(customer.email)) {
+      if (!validateEmail(editEmail.trim())) {
         showError('Fel', 'Ogiltig e-postadress');
         return;
       }
@@ -422,11 +427,11 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
         return;
       }
     } else {
-      if (!customer.phone_number) {
+      if (!editPhone.trim()) {
         showError('Fel', 'Kunden har inget telefonnummer');
         return;
       }
-      if (!validatePhoneNumber(customer.phone_number)) {
+      if (!validatePhoneNumber(editPhone.trim())) {
         showError('Fel', 'Ogiltigt telefonnummer');
         return;
       }
@@ -447,7 +452,7 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
         customer_id: customer.id,
         order_id: orderId || null,
         type: contactMethod,
-        recipient: contactMethod === 'email' ? customer.email! : customer.phone_number!,
+        recipient: contactMethod === 'email' ? editEmail.trim() : editPhone.trim(),
         subject: contactMethod === 'email' ? subject : null,
         content: content,
         status: 'draft',
@@ -464,7 +469,7 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
         const { data, error } = await supabase.functions.invoke('send-email', {
           body: {
             communication_id: communicationId,
-            to: customer.email,
+            to: editEmail.trim(),
             subject: subject,
             content: content,
             attachments: attachments.map(att => ({
@@ -478,7 +483,7 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
           throw new Error(error?.message || data?.error || 'Kunde inte skicka e-post');
         }
       } else {
-        const formattedPhone = formatPhoneNumber(customer.phone_number!);
+        const formattedPhone = formatPhoneNumber(editPhone.trim());
         const { data, error } = await supabase.functions.invoke('send-sms', {
           body: {
             to: formattedPhone,
@@ -517,13 +522,15 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
     setSelectedContextType(null);
     setSelectedContextId('');
     setShowContextSection(false);
+    setEditEmail(customer?.email || '');
+    setEditPhone(customer?.phone_number || '');
     onClose();
   };
 
   if (!isOpen) return null;
 
-  const hasEmail = !!customer.email;
-  const hasPhone = !!customer.phone_number;
+  const hasEmail = !!editEmail.trim();
+  const hasPhone = !!editPhone.trim();
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={handleClose}>
@@ -583,10 +590,26 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
           </div>
 
           <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
-            <div className="text-sm text-gray-600 dark:text-gray-300">
-              <span className="font-medium">Mottagare:</span>{' '}
-              {contactMethod === 'email' ? customer.email || 'Ingen e-post' : customer.phone_number || 'Inget telefonnummer'}
-            </div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Mottagare
+            </label>
+            {contactMethod === 'email' ? (
+              <input
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="Ange e-postadress..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            ) : (
+              <input
+                type="tel"
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                placeholder="Ange telefonnummer..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            )}
           </div>
 
           <div>
@@ -780,8 +803,8 @@ const ContactCustomerModal: React.FC<ContactCustomerModalProps> = ({
               <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-amber-700 dark:text-amber-400">
                 {contactMethod === 'email'
-                  ? 'Kunden har ingen registrerad e-postadress. Uppdatera kundens uppgifter for att skicka e-post.'
-                  : 'Kunden har inget registrerat telefonnummer. Uppdatera kundens uppgifter for att skicka SMS.'
+                  ? 'Ange en e-postadress i fältet ovan för att skicka e-post.'
+                  : 'Ange ett telefonnummer i fältet ovan för att skicka SMS.'
                 }
               </p>
             </div>

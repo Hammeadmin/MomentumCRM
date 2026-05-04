@@ -35,7 +35,9 @@ import {
     Plus,
     ChevronRight,
     Loader2,
-    ArrowRight
+    ArrowRight,
+    Package,
+    ShoppingCart
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
@@ -49,11 +51,12 @@ import {
     addAttachmentToOrder,
     type OrderWithRelations
 } from '../lib/orders';
-import { formatDate, formatDateTime, updateCustomer } from '../lib/database';
+import { formatDate, formatDateTime, formatCurrency, updateCustomer } from '../lib/database';
 import { ORDER_STATUS_LABELS, type OrderStatus, type OrderNote, type OrderActivity } from '../types/database';
 import { Button } from '../components/ui';
 import OrderDetailModal from '../components/OrderDetailModal';
 import CreateInvoiceModal from '../components/CreateInvoiceModal';
+import ContactCustomerModal from '../components/ContactCustomerModal';
 
 // Status options matching Kanban columns - same as Säljtunnel/OrderKanban
 const ORDER_STATUS_OPTIONS: { status: OrderStatus; label: string; color: string }[] = [
@@ -195,6 +198,7 @@ export default function OrderDetailPage() {
     const [statusChangeLoading, setStatusChangeLoading] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
+    const [showContactModal, setShowContactModal] = useState(false);
     const [uploadingAttachment, setUploadingAttachment] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isEditingCustomer, setIsEditingCustomer] = useState(false);
@@ -389,6 +393,11 @@ export default function OrderDetailPage() {
                     <Button variant="outline" size="sm" icon={<Edit className="w-4 h-4" />} onClick={handleEdit}>
                         Redigera
                     </Button>
+                    {order.customer && (
+                        <Button variant="outline" size="sm" icon={<Phone className="w-4 h-4" />} onClick={() => setShowContactModal(true)}>
+                            Kontakta kund
+                        </Button>
+                    )}
                     <Button variant="primary" size="sm" icon={<Send className="w-4 h-4" />} onClick={() => setShowCreateInvoiceModal(true)}>
                         Skicka faktura
                     </Button>
@@ -662,6 +671,65 @@ export default function OrderDetailPage() {
                                         )}
                                     </div>
 
+                                    {/* Line Items Section */}
+                                    {(() => {
+                                        const lineItems = (order as any).quote?.quote_line_items;
+                                        if (!lineItems || lineItems.length === 0) return null;
+                                        const quote = (order as any).quote;
+                                        const subtotal = quote?.subtotal ?? lineItems.reduce((sum: number, item: any) => sum + (item.total ?? 0), 0);
+                                        const vatAmount = quote?.vat_amount ?? 0;
+                                        const totalAmount = quote?.total_amount ?? (subtotal + vatAmount);
+                                        return (
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                                    <ShoppingCart className="w-4 h-4" />
+                                                    Orderrader
+                                                </h4>
+                                                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                                    <table className="w-full">
+                                                        <thead>
+                                                            <tr className="text-left text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
+                                                                <th className="px-4 py-2">Beskrivning</th>
+                                                                <th className="px-4 py-2 text-right">Antal</th>
+                                                                <th className="px-4 py-2 text-right">À-pris</th>
+                                                                <th className="px-4 py-2 text-right">Summa</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {lineItems.map((item: any, index: number) => (
+                                                                <tr key={item.id || index} className="border-b border-gray-100 last:border-0">
+                                                                    <td className="px-4 py-3">
+                                                                        <p className="text-sm font-medium text-gray-900">{item.name || item.description}</p>
+                                                                        {item.description && item.name && (
+                                                                            <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-sm text-gray-600 text-right">{item.quantity}</td>
+                                                                    <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(item.unit_price)}</td>
+                                                                    <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{formatCurrency(item.total)}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                    <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 space-y-1 max-w-xs ml-auto">
+                                                        <div className="flex justify-between text-sm text-gray-600">
+                                                            <span>Delsumma</span>
+                                                            <span className="font-medium">{formatCurrency(subtotal)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between text-sm text-gray-600">
+                                                            <span>Moms</span>
+                                                            <span className="font-medium">{formatCurrency(vatAmount)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between text-sm font-semibold text-gray-900 pt-1 border-t border-gray-200">
+                                                            <span>Totalt</span>
+                                                            <span>{formatCurrency(totalAmount)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
                                     {/* Notes Section */}
                                     <div>
                                         <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -840,6 +908,15 @@ export default function OrderDetailPage() {
                     defaultOrderId={id}
                     defaultCustomerId={order?.customer_id ?? undefined}
                     defaultWorkSummary={order?.job_description ?? undefined}
+                />
+            )}
+
+            {showContactModal && order.customer && (
+                <ContactCustomerModal
+                    isOpen={showContactModal}
+                    onClose={() => setShowContactModal(false)}
+                    customer={order.customer}
+                    onCommunicationSent={() => setShowContactModal(false)}
                 />
             )}
         </div>
