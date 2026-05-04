@@ -750,7 +750,8 @@ const LeadManagement: React.FC = () => {
             const { data: quote, error } = await createQuoteFromLead(
                 quotePreview.lead as any,
                 organisationId,
-                quotePreview.linkedProductId
+                quotePreview.linkedProductId,
+                user?.id ?? null
             );
             if (error) {
                 showError('Kunde inte skapa offert', error.message);

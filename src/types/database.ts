@@ -369,6 +369,7 @@ export interface Quote {
   accepted_at?: string | null;
   accepted_by_ip?: string | null;
   order_id?: string | null;
+  created_by_user_id?: string | null;
   customer?: Customer;
   lead?: Lead;
   line_items?: QuoteLineItem[];

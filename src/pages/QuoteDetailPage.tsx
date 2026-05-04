@@ -905,7 +905,13 @@ export default function QuoteDetailPage() {
                                                 </div>
                                                 <div className="flex-1 pb-4">
                                                     <p className="text-sm font-medium text-gray-900">Offert skapad</p>
-                                                    <p className="text-xs text-gray-500">{quote.created_at ? formatDate(quote.created_at) : '-'}</p>
+                                                    <p className="text-xs text-gray-500">{quote.created_at ? formatDateTime(quote.created_at) : '-'}</p>
+                                                    {(quote as any).created_by?.full_name && (
+                                                        <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                                                            <User className="w-3 h-3" />
+                                                            {(quote as any).created_by.full_name}
+                                                        </p>
+                                                    )}
                                                     {quote.lead_id && (
                                                         <p className="text-xs text-indigo-600 mt-1">Skapad från lead</p>
                                                     )}

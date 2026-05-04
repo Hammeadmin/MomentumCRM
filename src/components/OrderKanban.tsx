@@ -1058,7 +1058,8 @@ function OrderKanban() {
           description: lead.description,
           total_amount: lead.estimated_value || 0,
           status: 'draft' as QuoteStatus,
-          quote_number: `QT-${Math.floor(Date.now() / 1000)}`
+          quote_number: `QT-${Math.floor(Date.now() / 1000)}`,
+          created_by_user_id: user?.id ?? null,
         };
 
         const result = await createQuote(quoteData, []);
