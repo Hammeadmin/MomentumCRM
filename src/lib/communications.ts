@@ -331,6 +331,30 @@ export const getOrderCommunications = async (
   }
 };
 
+export const getCustomerCommunications = async (
+  customerId: string
+): Promise<{ data: CommunicationWithRelations[] | null; error: Error | null }> => {
+  try {
+    const { data, error } = await supabase
+      .from('communications')
+      .select(`
+        *,
+        created_by:user_profiles(id, full_name, email)
+      `)
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+
+    return { data: data || [], error: null };
+  } catch (err) {
+    console.error('Error fetching customer communications:', err);
+    return { data: null, error: err as Error };
+  }
+};
+
 export const createCommunication = async (
   communication: Omit<Communication, 'id' | 'created_at'>
 ): Promise<{ data: Communication | null; error: Error | null }> => {
