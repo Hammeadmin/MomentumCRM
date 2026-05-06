@@ -111,28 +111,24 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
     // ── Create Invoice ────────────────────────────────────────────────────────────
 
     const handleCreateInvoice = async () => {
-        console.log('A. handleCreateInvoice triggered');
         if ((!isManualCustomer && !formData.customer_id) || (isManualCustomer && !manualCustomerForm.name)) {
-            console.log('B. Aborting: No customer ID or manual name');
             showError('Fel', 'Kund (eller namn för manuell kund) är obligatoriskt.');
             return;
         }
 
-        if (!formData.line_items[0]?.description) {
-            console.log('C. Aborting: No line items description');
+        const validLineItems = formData.line_items.filter((i: LineItem) => i.description.trim());
+        if (validLineItems.length === 0) {
             showError('Fel', 'Minst en fakturarad med beskrivning är obligatoriskt.');
             return;
         }
 
         try {
-            console.log('D. Setting loading state for create');
             setFormLoading(true);
 
             let finalCustomerId = formData.customer_id;
 
             if (isManualCustomer) {
                 try {
-                    console.log('E. Handling manual customer creation');
                     const { checkDuplicateCustomer, searchCustomers, createCustomer } = await import('../lib/database');
                     const duplicateCheck = await checkDuplicateCustomer(organisationId, manualCustomerForm.email, manualCustomerForm.name);
 
@@ -171,14 +167,20 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 }
             }
 
-            const invoiceNumber = `F${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`;
-            const ocrNumber = invoiceNumber.replace(/\D/g, '');
+            const { data: invoiceNumber, error: numberError } = await supabase.rpc('generate_invoice_number', {
+                org_id: organisationId,
+            });
+            if (numberError || !invoiceNumber) {
+                showError('Fel', 'Kunde inte generera fakturanummer.');
+                return;
+            }
+            const ocrNumber = (invoiceNumber as string).replace(/\D/g, '');
 
-            const subtotalAmt = formData.line_items.reduce((s: number, i: LineItem) => s + i.total, 0);
-            const totalAmt = calculateTotal(formData.line_items);
+            const subtotalAmt = validLineItems.reduce((s: number, i: LineItem) => s + i.total, 0);
+            const totalAmt = calculateTotal(validLineItems);
             const invoiceData = {
                 organisation_id: organisationId,
-                invoice_number: invoiceNumber,
+                invoice_number: invoiceNumber as string,
                 customer_id: finalCustomerId,
                 amount: totalAmt,
                 subtotal: subtotalAmt,
@@ -203,11 +205,21 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 ocr_number: ocrNumber,
             };
 
-            const result = await createInvoice(invoiceData, formData.line_items, user?.id);
+            const result = await createInvoice(invoiceData, validLineItems, user?.id);
 
             if (result.error) {
                 showError('Fel', result.error.message);
                 return;
+            }
+
+            if (result.data) {
+                await supabase.from('invoice_history').insert({
+                    organisation_id: organisationId,
+                    invoice_id: result.data.id,
+                    action_type: 'created',
+                    performed_by_user_id: user?.id ?? null,
+                    details: { invoice_number: result.data.invoice_number },
+                });
             }
 
             showSuccess('Framgång', 'Faktura skapad framgångsrikt!');
