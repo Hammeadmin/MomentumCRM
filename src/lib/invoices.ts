@@ -58,9 +58,9 @@ export interface InvoiceLineItem {
   invoice_id: string;
   description: string;
   quantity: number;
-  unit?: string;
   unit_price: number;
   total: number;
+  unit?: string | null;
 }
 
 export interface InvoiceFilters {
@@ -206,11 +206,17 @@ export const createInvoice = async (
       return { data: null, error: new Error("Failed to create invoice, no data returned.") };
     }
 
-    // 2. Prepare and insert the line items with the new invoice's ID
+    // 2. Prepare and insert the line items with the new invoice's ID.
+    // Use an explicit field list instead of spreading `item` so that unknown
+    // fields (e.g. transient UI state) never reach PostgREST and cause PGRST204.
     const lineItemsToInsert = lineItems.map(item => ({
-      ...item,
-      invoice_id: newInvoice.id
-
+      invoice_id: newInvoice.id,
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      total: item.total,
+      // unit is stored when provided (column added in migration 20260506100000)
+      unit: (item as any).unit || null,
     }));
 
     const { data: insertedLineItems, error: lineItemsError } = await supabase
