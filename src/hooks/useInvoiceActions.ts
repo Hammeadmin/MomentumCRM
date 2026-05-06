@@ -616,6 +616,30 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
 
             if (error) throw error;
 
+            // Copy line items from the source invoice
+            const sourceLineItems = invoice.invoice_line_items || invoice.line_items || [];
+            if (sourceLineItems.length > 0) {
+                const lineItemsToInsert = sourceLineItems.map(item => ({
+                    invoice_id: data.id,
+                    description: item.description,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price,
+                    total: item.total,
+                    unit: item.unit || null,
+                }));
+
+                const { error: lineItemsError } = await supabase
+                    .from('invoice_line_items')
+                    .insert(lineItemsToInsert);
+
+                if (lineItemsError) {
+                    console.error('[Invoice] Failed to copy line items to duplicate:', lineItemsError);
+                    // Roll back the invoice to keep data consistent
+                    await supabase.from('invoices').delete().eq('id', data.id);
+                    throw new Error(`Kunde inte kopiera fakturarader: ${lineItemsError.message}`);
+                }
+            }
+
             await supabase.from('invoice_history').insert({
                 organisation_id: organisationId,
                 invoice_id: data.id,
@@ -626,8 +650,9 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
 
             showSuccess('Faktura duplicerad', `Ny faktura #${data.invoice_number} skapad.`);
             await loadData();
-        } catch {
-            showError('Fel', 'Kunde inte duplicera fakturan.');
+        } catch (err) {
+            console.error('[Invoice] Duplicate invoice error:', err);
+            showError('Fel', err instanceof Error ? err.message : 'Kunde inte duplicera fakturan.');
         }
     };
 
