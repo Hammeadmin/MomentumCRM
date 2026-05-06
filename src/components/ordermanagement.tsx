@@ -6,9 +6,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getOrders, updateOrder, createOrder, createOrderWithQuote, updateOrderAndQuote, deleteOrder, type OrderWithRelations } from '../lib/orders';
-import { getUserProfiles, getCustomers, updateCustomer } from '../lib/database';
-import { getProductLibrary, type ProductLibraryItem, UNIT_DESCRIPTIONS } from '../lib/quoteTemplates';
-import type { UserProfile, Customer, OrderStatus } from '../types/database';
+import { getUserProfiles, getCustomers, updateCustomer, getSavedLineItems, getLeads } from '../lib/database';
+import { UNIT_DESCRIPTIONS } from '../lib/quoteTemplates';
+import type { UserProfile, Customer, OrderStatus, Lead, RichSavedLineItem } from '../types/database';
 import EmptyState from './EmptyState';
 import ConfirmDialog from './ConfirmDialog';
 import { useToast } from '../hooks/useToast';
@@ -49,8 +49,9 @@ export function Ordermanagement() {
   const [orders, setOrders] = useState<OrderWithRelations[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [products, setProducts] = useState<ProductLibraryItem[]>([]);
-  const [teams, setTeams] = useState<TeamWithRelations[]>([]); // Add this line
+  const [products, setProducts] = useState<RichSavedLineItem[]>([]);
+  const [teams, setTeams] = useState<TeamWithRelations[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
 
   // UI State
   const [loading, setLoading] = useState(true);
@@ -83,12 +84,13 @@ export function Ordermanagement() {
       setError(null);
       if (!profile.organisation_id) throw new Error("Organisation not found");
 
-      const [ordersResult, usersResult, customersResult, productsResult, teamsResult] = await Promise.all([
+      const [ordersResult, usersResult, customersResult, productsResult, teamsResult, leadsResult] = await Promise.all([
         getOrders(profile.organisation_id),
         getUserProfiles(profile.organisation_id),
         getCustomers(profile.organisation_id),
-        getProductLibrary(profile.organisation_id),
+        getSavedLineItems(profile.organisation_id),
         getTeams(profile.organisation_id),
+        getLeads(profile.organisation_id),
       ]);
 
       if (ordersResult.error) throw ordersResult.error;
@@ -102,6 +104,7 @@ export function Ordermanagement() {
       setCustomers(customersResult.data || []);
       setProducts(productsResult.data || []);
       setTeams(teamsResult.data || []);
+      setLeads(leadsResult.data || []);
 
     } catch (err: any) {
       setError(`Kunde inte ladda orderdata: ${err.message}`);
@@ -344,7 +347,7 @@ export function Ordermanagement() {
       )}
 
       {isDetailModalOpen && selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setIsDetailModalOpen(false)} onOpenEdit={handleOpenEditModal} onOpenDelete={handleOpenDeleteConfirm} />}
-      {isEditModalOpen && <OrderEditModal order={selectedOrder} customers={customers} users={users} teams={teams} products={products} onClose={() => { setIsEditModalOpen(false); setSelectedOrder(null); }} onSave={handleSaveOrder} />}
+      {isEditModalOpen && <OrderEditModal order={selectedOrder} customers={customers} users={users} teams={teams} products={products} leads={leads} onClose={() => { setIsEditModalOpen(false); setSelectedOrder(null); }} onSave={handleSaveOrder} />}
       {isConfirmDeleteOpen && selectedOrder && <ConfirmDialog isOpen={true} title="Ta bort order?" message={`Är du säker på att du vill ta bort ordern "${selectedOrder.title}"? Denna åtgärd kan inte ångras.`} onConfirm={handleDeleteOrder} onClose={() => setIsConfirmDeleteOpen(false)} confirmText="Ja, ta bort" />}
     </div>
   );
@@ -611,12 +614,13 @@ function InfoItem({ icon: Icon, label, value }: { icon: React.ElementType, label
   );
 }
 
-function OrderEditModal({ order, customers, users, teams, products, onClose, onSave }: {
+function OrderEditModal({ order, customers, users, teams, products, leads, onClose, onSave }: {
   order: OrderWithRelations | null;
   customers: Customer[];
   users: UserProfile[];
   teams: TeamWithRelations[];
-  products: ProductLibraryItem[];
+  products: RichSavedLineItem[];
+  leads: Lead[];
   onClose: () => void;
   onSave: (data: any) => void;
 }) {
@@ -629,6 +633,7 @@ function OrderEditModal({ order, customers, users, teams, products, onClose, onS
   const [formData, setFormData] = useState({
     title: order?.title || '',
     customer_id: order?.customer_id || '',
+    lead_id: order?.lead_id || '',
     assigned_to_user_id: order?.assigned_to_user_id || '',
     assigned_to_team_id: order?.assigned_to_team_id || '',
     status: order?.status || ('öppen_order' as OrderStatus),
@@ -686,7 +691,7 @@ function OrderEditModal({ order, customers, users, teams, products, onClose, onS
         currentItem.name = product.name || '';
         currentItem.description = product.description || '';
         currentItem.unit_price = product.unit_price || 0;
-        currentItem.unit = product.unit || '';
+        currentItem.unit = product.metadata?.unit || '';
       }
     }
     updated[index] = currentItem;
@@ -748,6 +753,7 @@ function OrderEditModal({ order, customers, users, teams, products, onClose, onS
     onSave({
       ...formData,
       value: finalTotalValue,
+      lead_id: formData.lead_id || null,
       estimated_hours: formData.estimated_hours ? parseFloat(formData.estimated_hours) : null,
       complexity_level: parseInt(formData.complexity_level) || 3,
       rot_personnummer: formData.rot_personnummer || null,
@@ -873,6 +879,40 @@ function OrderEditModal({ order, customers, users, teams, products, onClose, onS
             {/* ════ TAB: Kund & Uppdrag ════ */}
             {activeTab === 'kund' && (
               <div className="space-y-5">
+                {/* Lead picker */}
+                {leads.length > 0 && (
+                  <div className="space-y-1.5">
+                    <label className="block text-sm font-medium text-gray-700">Kopplad lead <span className="text-gray-400 text-xs font-normal">(valfri)</span></label>
+                    <select
+                      value={formData.lead_id}
+                      onChange={e => {
+                        const leadId = e.target.value;
+                        setFormData(prev => {
+                          const updated = { ...prev, lead_id: leadId };
+                          // Only auto-fill when creating a new order (not editing)
+                          if (!order && leadId) {
+                            const lead = leads.find(l => l.id === leadId);
+                            if (lead) {
+                              updated.title = lead.title || prev.title;
+                              updated.description = lead.description || prev.description;
+                              updated.customer_id = lead.customer_id || prev.customer_id;
+                              updated.source = lead.source || prev.source;
+                              updated.region = lead.city || prev.region;
+                            }
+                          }
+                          return updated;
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Ingen lead kopplad</option>
+                      {leads.map(l => (
+                        <option key={l.id} value={l.id}>{l.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {/* Customer card */}
                 <div className="border border-gray-200 rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">

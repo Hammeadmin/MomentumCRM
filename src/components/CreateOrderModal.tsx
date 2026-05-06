@@ -9,12 +9,12 @@ import { X, Loader2, UserPlus, Edit2, Save, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { createOrder, createOrderWithQuote } from '../lib/orders';
-import { getCustomers, getTeamMembers, createCustomer, updateCustomer } from '../lib/database';
-import { getProductLibrary, type ProductLibraryItem, UNIT_DESCRIPTIONS } from '../lib/quoteTemplates';
+import { getCustomers, getTeamMembers, createCustomer, updateCustomer, getSavedLineItems, getLeads } from '../lib/database';
+import { UNIT_DESCRIPTIONS } from '../lib/quoteTemplates';
 import { supabase } from '../lib/supabase';
 import ROTFields from './ROTFields';
 import RUTFields from './RUTFields';
-import type { Customer, UserProfile } from '../types/database';
+import type { Customer, UserProfile, Lead, RichSavedLineItem } from '../types/database';
 import {
   JOB_TYPE_LABELS,
   TEAM_SPECIALTY_LABELS,
@@ -49,6 +49,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
     job_description: '',
     job_type: 'allmänt' as JobType,
     customer_id: '',
+    lead_id: '',
     estimated_hours: '',
     complexity_level: '3',
     assignment_type: 'individual' as AssignmentType,
@@ -75,7 +76,8 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [products, setProducts] = useState<ProductLibraryItem[]>([]);
+  const [products, setProducts] = useState<RichSavedLineItem[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
 
@@ -103,12 +105,14 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
         getCustomers(organisationId),
         getTeamMembers(organisationId),
         supabase.from('teams').select('id, name, specialty').eq('organisation_id', organisationId),
-        getProductLibrary(organisationId),
-      ]).then(([customersResult, teamMembersResult, teamsResult, productsResult]) => {
+        getSavedLineItems(organisationId),
+        getLeads(organisationId),
+      ]).then(([customersResult, teamMembersResult, teamsResult, productsResult, leadsResult]) => {
         if (customersResult.data) setCustomers(customersResult.data);
         if (teamMembersResult.data) setTeamMembers(teamMembersResult.data);
         if (teamsResult.data) setTeams(teamsResult.data as Team[]);
         if (productsResult.data) setProducts(productsResult.data);
+        if (leadsResult.data) setLeads(leadsResult.data);
         setDataLoading(false);
       });
     }
@@ -118,7 +122,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
     setActiveTab('info');
     setFormData({
       title: '', description: '', job_description: '',
-      job_type: 'allmänt', customer_id: '',
+      job_type: 'allmänt', customer_id: '', lead_id: '',
       estimated_hours: '', complexity_level: '3',
       assignment_type: 'individual', assigned_to_user_id: '',
       assigned_to_team_id: '', source: '', region: '',
@@ -147,7 +151,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
         item.name = product.name || '';
         item.description = product.description || '';
         item.unit_price = product.unit_price || 0;
-        item.unit = product.unit || '';
+        item.unit = product.metadata?.unit || '';
       }
     }
     updated[index] = item;
@@ -219,6 +223,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
         job_description: formData.job_description.trim(),
         job_type: formData.job_type,
         customer_id: customerId,
+        lead_id: formData.lead_id || null,
         value: validLineItems.length > 0 ? totalValue : null,
         estimated_hours: formData.estimated_hours ? parseFloat(formData.estimated_hours) : null,
         complexity_level: parseInt(formData.complexity_level),
@@ -404,6 +409,42 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
                 {/* ════ TAB: Kund ════ */}
                 {activeTab === 'kund' && (
                   <div className="space-y-4">
+                    {/* Lead picker */}
+                    {leads.length > 0 && (
+                      <div className="space-y-1.5">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Kopplad lead <span className="text-gray-400 text-xs font-normal">(valfri – autofyller kund, titel och källa)</span>
+                        </label>
+                        <select
+                          value={formData.lead_id}
+                          onChange={e => {
+                            const leadId = e.target.value;
+                            setFormData(prev => {
+                              const updated = { ...prev, lead_id: leadId };
+                              if (leadId) {
+                                const lead = leads.find(l => l.id === leadId);
+                                if (lead) {
+                                  updated.title = lead.title || prev.title;
+                                  updated.description = lead.description || prev.description;
+                                  updated.customer_id = lead.customer_id || prev.customer_id;
+                                  updated.source = lead.source || prev.source;
+                                  updated.region = lead.city || prev.region;
+                                }
+                              }
+                              return updated;
+                            });
+                            setIsNewCustomer(false);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                        >
+                          <option value="">Ingen lead kopplad</option>
+                          {leads.map(l => (
+                            <option key={l.id} value={l.id}>{l.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-sm font-medium text-gray-700">Kund <span className="text-red-500">*</span></label>
                       <button type="button"
