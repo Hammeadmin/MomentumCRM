@@ -623,6 +623,9 @@ function OrderEditModal({ order, customers, users, teams, products, onClose, onS
   const { addToast } = useToast();
   const quote = order ? (Array.isArray(order.quote) ? order.quote[0] : order.quote) : null;
 
+  type TabId = 'info' | 'kund' | 'rader' | 'avdrag';
+  const [activeTab, setActiveTab] = useState<TabId>('info');
+
   const [formData, setFormData] = useState({
     title: order?.title || '',
     customer_id: order?.customer_id || '',
@@ -767,256 +770,398 @@ function OrderEditModal({ order, customers, users, teams, products, onClose, onS
 
   const formatCurrency = (value: number) => `${value.toLocaleString('sv-SE')} SEK`;
   const selectedCustomer = customers.find(c => c.id === formData.customer_id);
+  const validLineItemCount = lineItems.filter(i => i.name.trim() !== '').length;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <form onSubmit={handleSubmit} className="flex flex-col h-full">
-          <div className="flex items-center justify-between p-6 border-b">
-            <h3 className="text-lg font-semibold text-gray-900">{order ? 'Redigera Order' : 'Skapa Ny Order'}</h3>
-            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+
+          {/* ── Header ──────────────────────────────────────── */}
+          <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {order ? 'Redigera Order' : 'Skapa Ny Order'}
+            </h3>
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 rounded p-1">
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          <div className="p-6 space-y-5 overflow-y-auto">
+          {/* ── Tab bar ─────────────────────────────────────── */}
+          <div className="border-b flex-shrink-0 bg-gray-50">
+            <nav className="flex px-4">
+              {([
+                { id: 'info' as const, label: 'Grundinfo' },
+                { id: 'kund' as const, label: 'Kund & Uppdrag' },
+                { id: 'rader' as const, label: validLineItemCount > 0 ? `Orderrader (${validLineItemCount})` : 'Orderrader' },
+                { id: 'avdrag' as const, label: 'Avdrag' },
+              ]).map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </div>
 
-            {/* ── Basic info ──────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField label="Titel" required>
-                <input type="text" name="title" value={formData.title} onChange={handleFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
-              </FormField>
-              <FormField label="Status">
-                <select name="status" value={formData.status} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-                </select>
-              </FormField>
-              <FormField label="Jobbtyp">
-                <select name="job_type" value={formData.job_type} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                  <option value="">Välj typ</option>
-                  <option value="el">El</option>
-                  <option value="rör">Rör</option>
-                  <option value="bygg">Bygg</option>
-                  <option value="målning">Målning</option>
-                  <option value="mark">Mark</option>
-                  <option value="ventilation">Ventilation</option>
-                  <option value="allmänt">Allmänt</option>
-                </select>
-              </FormField>
-              <FormField label="Källa">
-                <input type="text" name="source" value={formData.source} onChange={handleFormChange} placeholder="t.ex. Offert, Kundkontakt, Hemsida" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
-              </FormField>
-              <FormField label="Uppskattad tid (tim)">
-                <input type="number" name="estimated_hours" value={formData.estimated_hours} onChange={handleFormChange} min={0} step={0.5} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
-              </FormField>
-              <FormField label="Komplexitet (1–5)">
-                <select name="complexity_level" value={formData.complexity_level} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                  <option value="1">1 – Mycket enkelt</option>
-                  <option value="2">2 – Enkelt</option>
-                  <option value="3">3 – Medel</option>
-                  <option value="4">4 – Svårt</option>
-                  <option value="5">5 – Mycket svårt</option>
-                </select>
-              </FormField>
-              <FormField label="Område">
-                <input type="text" name="region" value={formData.region} onChange={handleFormChange} placeholder="t.ex. Stockholm" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
-              </FormField>
-            </div>
+          {/* ── Scrollable content ──────────────────────────── */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-6">
 
-            {/* ── Customer ─────────────────────────────────────── */}
-            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-700">Kund <span className="text-red-500">*</span></label>
-                {formData.customer_id && !isEditingCustomer && (
-                  <button type="button" onClick={startEditCustomer} className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
-                    <Edit className="w-3 h-3" /> Redigera kunduppgifter
-                  </button>
+            {/* ════ TAB: Grundinfo ════ */}
+            {activeTab === 'info' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField label="Titel" required>
+                    <input type="text" name="title" value={formData.title} onChange={handleFormChange} required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                  </FormField>
+                  <FormField label="Status">
+                    <select name="status" value={formData.status} onChange={handleFormChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                      {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                    </select>
+                  </FormField>
+                  <FormField label="Jobbtyp">
+                    <select name="job_type" value={formData.job_type} onChange={handleFormChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                      <option value="">Välj typ</option>
+                      <option value="el">El</option>
+                      <option value="rör">Rör</option>
+                      <option value="bygg">Bygg</option>
+                      <option value="målning">Målning</option>
+                      <option value="mark">Mark</option>
+                      <option value="ventilation">Ventilation</option>
+                      <option value="allmänt">Allmänt</option>
+                    </select>
+                  </FormField>
+                  <FormField label="Källa">
+                    <input type="text" name="source" value={formData.source} onChange={handleFormChange}
+                      placeholder="t.ex. Offert, Kundkontakt, Hemsida"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                  </FormField>
+                </div>
+                <FormField label="Beskrivning">
+                  <textarea name="description" value={formData.description} onChange={handleFormChange} rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                </FormField>
+                <FormField label="Jobbdetaljer">
+                  <textarea name="job_description" value={formData.job_description} onChange={handleFormChange} rows={3}
+                    placeholder="Beskriv arbetet som ska utföras…"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                </FormField>
+                {/* Linked quote read-only info */}
+                {quote && (
+                  <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-sm space-y-1">
+                    <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Kopplad offert</p>
+                    <p className="text-indigo-900 font-medium">
+                      {(quote as any).title || `Offert #${(quote as any).quote_number || quote.id.slice(0, 8)}`}
+                    </p>
+                    <p className="text-xs text-indigo-500">Redigera rader under fliken "Orderrader"</p>
+                  </div>
                 )}
               </div>
-              <select name="customer_id" value={formData.customer_id} onChange={e => { handleFormChange(e); setIsEditingCustomer(false); }} required className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                <option value="" disabled>Välj kund</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+            )}
 
-              {/* Customer info preview */}
-              {selectedCustomer && !isEditingCustomer && (
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-md space-y-1 text-xs text-gray-600">
-                  <p className="font-medium text-gray-800">{selectedCustomer.name}</p>
-                  {(selectedCustomer as any).customer_type && <p>{(selectedCustomer as any).customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>}
-                  {(selectedCustomer as any).email && <p>{(selectedCustomer as any).email}</p>}
-                  {(selectedCustomer as any).phone_number && <p>{(selectedCustomer as any).phone_number}</p>}
-                  {(selectedCustomer as any).org_number && <p>{(selectedCustomer as any).customer_type === 'company' ? 'Org.nr' : 'Personnr'}: {(selectedCustomer as any).org_number}</p>}
-                  {[(selectedCustomer as any).address, (selectedCustomer as any).postal_code, (selectedCustomer as any).city].filter(Boolean).length > 0 && (
-                    <p>{[(selectedCustomer as any).address, (selectedCustomer as any).postal_code, (selectedCustomer as any).city].filter(Boolean).join(', ')}</p>
+            {/* ════ TAB: Kund & Uppdrag ════ */}
+            {activeTab === 'kund' && (
+              <div className="space-y-5">
+                {/* Customer card */}
+                <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700">Kund <span className="text-red-500">*</span></label>
+                    {formData.customer_id && !isEditingCustomer && (
+                      <button type="button" onClick={startEditCustomer}
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                        <Edit className="w-3 h-3" /> Redigera kunduppgifter
+                      </button>
+                    )}
+                  </div>
+                  <select name="customer_id" value={formData.customer_id}
+                    onChange={e => { handleFormChange(e); setIsEditingCustomer(false); }}
+                    required className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    <option value="" disabled>Välj kund</option>
+                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  {selectedCustomer && !isEditingCustomer && (
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-md space-y-0.5 text-xs text-gray-600">
+                      <p className="font-medium text-gray-800">{selectedCustomer.name}</p>
+                      {(selectedCustomer as any).customer_type && <p>{(selectedCustomer as any).customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>}
+                      {(selectedCustomer as any).email && <p>{(selectedCustomer as any).email}</p>}
+                      {(selectedCustomer as any).phone_number && <p>{(selectedCustomer as any).phone_number}</p>}
+                      {(selectedCustomer as any).org_number && <p>{(selectedCustomer as any).customer_type === 'company' ? 'Org.nr' : 'Personnr'}: {(selectedCustomer as any).org_number}</p>}
+                      {[(selectedCustomer as any).address, (selectedCustomer as any).postal_code, (selectedCustomer as any).city].filter(Boolean).length > 0 && (
+                        <p>{[(selectedCustomer as any).address, (selectedCustomer as any).postal_code, (selectedCustomer as any).city].filter(Boolean).join(', ')}</p>
+                      )}
+                    </div>
                   )}
-                  {(selectedCustomer as any).vat_handling && <p>Moms: {(selectedCustomer as any).vat_handling}</p>}
+                  {isEditingCustomer && (
+                    <div className="space-y-2 border-t border-gray-100 pt-3">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Redigera kund</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="Namn"
+                          value={customerEditForm.name} onChange={e => setCustomerEditForm(p => ({ ...p, name: e.target.value }))} />
+                        <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="E-post" type="email"
+                          value={customerEditForm.email} onChange={e => setCustomerEditForm(p => ({ ...p, email: e.target.value }))} />
+                        <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="Telefon"
+                          value={customerEditForm.phone_number} onChange={e => setCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))} />
+                        <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="Org./Personnummer"
+                          value={customerEditForm.org_number} onChange={e => setCustomerEditForm(p => ({ ...p, org_number: e.target.value }))} />
+                        <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md col-span-2" placeholder="Adress"
+                          value={customerEditForm.address} onChange={e => setCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
+                        <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="Postnr"
+                          value={customerEditForm.postal_code} onChange={e => setCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
+                        <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="Stad"
+                          value={customerEditForm.city} onChange={e => setCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                        <select className="px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                          value={customerEditForm.vat_handling} onChange={e => setCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}>
+                          <option value="25%">25% moms</option>
+                          <option value="12%">12% moms</option>
+                          <option value="6%">6% moms</option>
+                          <option value="0%">Momsfri (0%)</option>
+                        </select>
+                        <select className="px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                          value={customerEditForm.invoice_delivery_method} onChange={e => setCustomerEditForm(p => ({ ...p, invoice_delivery_method: e.target.value }))}>
+                          <option value="e-post">E-post</option>
+                          <option value="e-faktura">E-faktura</option>
+                          <option value="post">Post</option>
+                        </select>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <button type="button" onClick={() => setIsEditingCustomer(false)}
+                          className="px-3 py-1.5 text-xs border border-gray-300 rounded-md">Avbryt</button>
+                        <button type="button" onClick={handleSaveCustomer} disabled={savingCustomer}
+                          className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                          {savingCustomer ? 'Sparar…' : 'Spara kund'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Inline customer edit form */}
-              {isEditingCustomer && (
-                <div className="space-y-2 border-t border-gray-100 pt-3">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Redigera kund</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="Namn" value={customerEditForm.name} onChange={e => setCustomerEditForm(p => ({ ...p, name: e.target.value }))} />
-                    <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="E-post" type="email" value={customerEditForm.email} onChange={e => setCustomerEditForm(p => ({ ...p, email: e.target.value }))} />
-                    <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="Telefon" value={customerEditForm.phone_number} onChange={e => setCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))} />
-                    <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="Org./Personnummer" value={customerEditForm.org_number} onChange={e => setCustomerEditForm(p => ({ ...p, org_number: e.target.value }))} />
-                    <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md col-span-2" placeholder="Adress" value={customerEditForm.address} onChange={e => setCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
-                    <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="Postnr" value={customerEditForm.postal_code} onChange={e => setCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
-                    <input className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" placeholder="Stad" value={customerEditForm.city} onChange={e => setCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
-                    <select className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" value={customerEditForm.vat_handling} onChange={e => setCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}>
-                      <option value="25%">25% moms</option>
-                      <option value="12%">12% moms</option>
-                      <option value="6%">6% moms</option>
-                      <option value="0%">Momsfri (0%)</option>
+                {/* Salespeople & assignment */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField label="Primär säljare">
+                    <select name="primary_salesperson_id" value={formData.primary_salesperson_id} onChange={handleFormChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                      <option value="">Ingen säljare</option>
+                      {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
                     </select>
-                    <select className="px-2 py-1.5 text-xs border border-gray-300 rounded-md" value={customerEditForm.invoice_delivery_method} onChange={e => setCustomerEditForm(p => ({ ...p, invoice_delivery_method: e.target.value }))}>
-                      <option value="e-post">E-post</option>
-                      <option value="e-faktura">E-faktura</option>
-                      <option value="post">Post</option>
+                  </FormField>
+                  <FormField label="Sekundär säljare">
+                    <select name="secondary_salesperson_id" value={formData.secondary_salesperson_id} onChange={handleFormChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                      <option value="">Ingen säljare</option>
+                      {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
                     </select>
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <button type="button" onClick={() => setIsEditingCustomer(false)} className="px-3 py-1.5 text-xs border border-gray-300 rounded-md">Avbryt</button>
-                    <button type="button" onClick={handleSaveCustomer} disabled={savingCustomer} className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
-                      {savingCustomer ? 'Sparar…' : 'Spara kund'}
-                    </button>
-                  </div>
+                  </FormField>
+                  <FormField label="Ansvarig person">
+                    <select name="assigned_to_user_id" value={formData.assigned_to_user_id}
+                      onChange={e => { handleFormChange(e); setFormData(p => ({ ...p, assigned_to_team_id: '' })); }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                      <option value="">Välj Användare</option>
+                      {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                    </select>
+                  </FormField>
+                  <FormField label="Ansvarigt team">
+                    <select name="assigned_to_team_id" value={formData.assigned_to_team_id}
+                      onChange={e => { handleFormChange(e); setFormData(p => ({ ...p, assigned_to_user_id: '' })); }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                      <option value="">Välj Team</option>
+                      {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </FormField>
                 </div>
-              )}
-            </div>
 
-            {/* ── Descriptions ─────────────────────────────────── */}
-            <FormField label="Beskrivning">
-              <textarea name="description" value={formData.description} onChange={handleFormChange} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
-            </FormField>
-            <FormField label="Jobbdetaljer">
-              <textarea name="job_description" value={formData.job_description} onChange={handleFormChange} rows={3} placeholder="Beskriv arbetet som ska utföras…" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
-            </FormField>
+                {/* Details */}
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField label="Uppskattad tid (tim)">
+                    <input type="number" name="estimated_hours" value={formData.estimated_hours} onChange={handleFormChange}
+                      min={0} step={0.5}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                  </FormField>
+                  <FormField label="Komplexitet">
+                    <select name="complexity_level" value={formData.complexity_level} onChange={handleFormChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                      <option value="1">1 – Mycket enkelt</option>
+                      <option value="2">2 – Enkelt</option>
+                      <option value="3">3 – Medel</option>
+                      <option value="4">4 – Svårt</option>
+                      <option value="5">5 – Mycket svårt</option>
+                    </select>
+                  </FormField>
+                  <FormField label="Område">
+                    <input type="text" name="region" value={formData.region} onChange={handleFormChange}
+                      placeholder="t.ex. Stockholm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                  </FormField>
+                </div>
+              </div>
+            )}
 
-            {/* ── Assignment ───────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField label="Primär säljare">
-                <select name="primary_salesperson_id" value={formData.primary_salesperson_id} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                  <option value="">Ingen säljare</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                </select>
-              </FormField>
-              <FormField label="Sekundär säljare">
-                <select name="secondary_salesperson_id" value={formData.secondary_salesperson_id} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                  <option value="">Ingen säljare</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                </select>
-              </FormField>
-              <FormField label="Ansvarig person">
-                <select name="assigned_to_user_id" value={formData.assigned_to_user_id} onChange={e => { handleFormChange(e); setFormData(p => ({ ...p, assigned_to_team_id: '' })); }} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                  <option value="">Välj Användare</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                </select>
-              </FormField>
-              <FormField label="Ansvarigt team">
-                <select name="assigned_to_team_id" value={formData.assigned_to_team_id} onChange={e => { handleFormChange(e); setFormData(p => ({ ...p, assigned_to_user_id: '' })); }} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                  <option value="">Välj Team</option>
-                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </FormField>
-            </div>
+            {/* ════ TAB: Orderrader ════ */}
+            {activeTab === 'rader' && (
+              <div className="space-y-3">
+                {products.length > 0 ? (
+                  <p className="text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-md px-3 py-2">
+                    Välj en produkt i "Bibliotek"-kolumnen för att autofylla raden, eller skriv fritt.
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                    Produktbiblioteket är tomt. Lägg till produkter via Produktbibliotek-sidan, eller skriv orderrader fritt nedan.
+                  </p>
+                )}
 
-            {/* ── Line items ───────────────────────────────────── */}
-            <div>
-              <h4 className="font-medium text-gray-800 mb-3">Orderrader</h4>
-              <div className="space-y-2">
+                {/* Column headers */}
+                <div className="grid grid-cols-12 gap-x-2 text-xs font-medium text-gray-500 pb-1 border-b border-gray-200">
+                  <div className="col-span-4">Namn / Produkt</div>
+                  <div className="col-span-2">Bibliotek</div>
+                  <div className="col-span-2 text-right">Antal</div>
+                  <div className="col-span-1 text-center">Enhet</div>
+                  <div className="col-span-2 text-right">Á-pris (kr)</div>
+                  <div className="col-span-1" />
+                </div>
+
                 {lineItems.map((item, index) => (
                   <div key={index} className="grid grid-cols-12 gap-x-2 items-center">
-                    {/* Free-text name (required for saving) */}
                     <input
-                      type="text"
-                      placeholder="Namn / beskrivning *"
-                      value={item.name}
+                      type="text" placeholder="Namn / beskrivning" value={item.name}
                       onChange={e => handleLineItemChange(index, 'name', e.target.value)}
                       className="col-span-4 px-2 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     />
-                    {/* Optional product library picker */}
                     <select
                       value={item.product_id}
                       onChange={e => handleLineItemChange(index, 'product_id', e.target.value)}
                       className="col-span-2 px-2 py-2 text-xs border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                      title="Välj från produktbibliotek (valfritt)"
                     >
-                      <option value="">Bibliotek…</option>
+                      <option value="">{products.length === 0 ? '—' : 'Välj…'}</option>
                       {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
-                    {/* Quantity */}
                     <input
-                      type="number" placeholder="Antal" value={item.quantity}
+                      type="number" value={item.quantity}
                       onChange={e => handleLineItemChange(index, 'quantity', parseFloat(e.target.value) || 1)}
-                      className="col-span-2 px-2 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-right"
+                      className="col-span-2 px-2 py-2 text-sm border border-gray-300 rounded-md text-right"
                       min={0} step="0.1"
                     />
-                    {/* Unit */}
                     <select value={item.unit} onChange={e => handleLineItemChange(index, 'unit', e.target.value)}
-                      className="col-span-1 px-1 py-2 text-xs border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                      className="col-span-1 px-1 py-2 text-xs border border-gray-300 rounded-md">
                       {Object.entries(UNIT_DESCRIPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
-                    {/* Price */}
                     <input
-                      type="number" placeholder="Pris" value={item.unit_price}
+                      type="number" value={item.unit_price}
                       onChange={e => handleLineItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                      className="col-span-2 px-2 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-right"
+                      className="col-span-2 px-2 py-2 text-sm border border-gray-300 rounded-md text-right"
                       min={0} step="0.01"
                     />
-                    {/* Delete */}
                     <div className="col-span-1 flex justify-center">
-                      <button type="button" onClick={() => removeLineItem(index)} className="text-red-400 hover:text-red-600 p-1" title="Ta bort rad">
+                      <button type="button" onClick={() => removeLineItem(index)}
+                        className="text-red-400 hover:text-red-600 p-1">
                         <Trash2 size={16} />
                       </button>
                     </div>
                   </div>
                 ))}
-              </div>
-              <div className="flex items-center justify-between mt-2">
-                <button type="button" onClick={addLineItem} className="text-sm text-blue-600 hover:text-blue-800 font-medium inline-flex items-center">
-                  <Plus size={16} className="mr-1" /> Lägg till rad
-                </button>
-                <div className="text-right font-bold text-base">Totalt: {formatCurrency(totalValue)}</div>
-              </div>
-            </div>
 
-            {/* ── ROT ──────────────────────────────────────────── */}
-            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" name="include_rot" checked={formData.include_rot} onChange={e => setFormData(p => ({ ...p, include_rot: e.target.checked, ...(e.target.checked ? { include_rut: false } : {}) }))} className="rounded" />
-                <span className="text-sm font-medium text-gray-700">Inkludera ROT-avdrag</span>
-              </label>
-              {formData.include_rot && (
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <div><label className="block text-xs text-gray-500 mb-1">Personnummer</label><input type="text" name="rot_personnummer" value={formData.rot_personnummer} onChange={handleFormChange} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" /></div>
-                  <div><label className="block text-xs text-gray-500 mb-1">Org.nummer</label><input type="text" name="rot_organisationsnummer" value={formData.rot_organisationsnummer} onChange={handleFormChange} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" /></div>
-                  <div><label className="block text-xs text-gray-500 mb-1">Fastighetsbeteckning</label><input type="text" name="rot_fastighetsbeteckning" value={formData.rot_fastighetsbeteckning} onChange={handleFormChange} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" /></div>
-                  <div><label className="block text-xs text-gray-500 mb-1">ROT-belopp (kr)</label><input type="number" name="rot_amount" value={formData.rot_amount} onChange={handleFormChange} min={0} step={0.01} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" /></div>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                  <button type="button" onClick={addLineItem}
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1">
+                    <Plus size={16} /> Lägg till rad
+                  </button>
+                  <div className="text-sm font-bold text-gray-800">Totalt: {formatCurrency(totalValue)}</div>
                 </div>
+              </div>
+            )}
+
+            {/* ════ TAB: Avdrag ════ */}
+            {activeTab === 'avdrag' && (
+              <div className="space-y-4">
+                {/* ROT */}
+                <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="include_rot" checked={formData.include_rot}
+                      onChange={e => setFormData(p => ({ ...p, include_rot: e.target.checked, ...(e.target.checked ? { include_rut: false } : {}) }))}
+                      className="rounded" />
+                    <span className="text-sm font-medium text-gray-700">Inkludera ROT-avdrag</span>
+                  </label>
+                  {formData.include_rot && (
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Personnummer</label>
+                        <input type="text" name="rot_personnummer" value={formData.rot_personnummer} onChange={handleFormChange}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Org.nummer</label>
+                        <input type="text" name="rot_organisationsnummer" value={formData.rot_organisationsnummer} onChange={handleFormChange}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Fastighetsbeteckning</label>
+                        <input type="text" name="rot_fastighetsbeteckning" value={formData.rot_fastighetsbeteckning} onChange={handleFormChange}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">ROT-belopp (kr)</label>
+                        <input type="number" name="rot_amount" value={formData.rot_amount} onChange={handleFormChange}
+                          min={0} step={0.01} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {/* RUT */}
+                <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="include_rut" checked={formData.include_rut}
+                      onChange={e => setFormData(p => ({ ...p, include_rut: e.target.checked, ...(e.target.checked ? { include_rot: false } : {}) }))}
+                      className="rounded" />
+                    <span className="text-sm font-medium text-gray-700">Inkludera RUT-avdrag</span>
+                  </label>
+                  {formData.include_rut && (
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Personnummer</label>
+                        <input type="text" name="rut_personnummer" value={formData.rut_personnummer} onChange={handleFormChange}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">RUT-belopp (kr)</label>
+                        <input type="number" name="rut_amount" value={formData.rut_amount} onChange={handleFormChange}
+                          min={0} step={0.01} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+          </div>{/* end scrollable content */}
+
+          {/* ── Footer ──────────────────────────────────────── */}
+          <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-t bg-gray-50">
+            <div className="text-sm text-gray-500">
+              {validLineItemCount > 0 && (
+                <span>Ordervärde: <strong className="text-gray-800">{formatCurrency(totalValue)}</strong></span>
               )}
             </div>
-
-            {/* ── RUT ──────────────────────────────────────────── */}
-            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" name="include_rut" checked={formData.include_rut} onChange={e => setFormData(p => ({ ...p, include_rut: e.target.checked, ...(e.target.checked ? { include_rot: false } : {}) }))} className="rounded" />
-                <span className="text-sm font-medium text-gray-700">Inkludera RUT-avdrag</span>
-              </label>
-              {formData.include_rut && (
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <div><label className="block text-xs text-gray-500 mb-1">Personnummer</label><input type="text" name="rut_personnummer" value={formData.rut_personnummer} onChange={handleFormChange} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" /></div>
-                  <div><label className="block text-xs text-gray-500 mb-1">RUT-belopp (kr)</label><input type="number" name="rut_amount" value={formData.rut_amount} onChange={handleFormChange} min={0} step={0.01} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" /></div>
-                </div>
-              )}
+            <div className="flex gap-3">
+              <button type="button" onClick={onClose}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                Avbryt
+              </button>
+              <button type="submit"
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+                {order ? 'Uppdatera Order' : 'Skapa Order'}
+              </button>
             </div>
-
-          </div>{/* end scroll area */}
-
-          <div className="flex justify-end space-x-3 p-6 border-t bg-gray-50 mt-auto">
-            <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Avbryt</button>
-            <button type="submit" className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">Spara Order</button>
           </div>
+
         </form>
       </div>
     </div>
