@@ -49,6 +49,7 @@ import {
     updateOrder,
     createOrderNote,
     addAttachmentToOrder,
+    createOrderActivity,
     type OrderWithRelations
 } from '../lib/orders';
 import { formatDate, formatDateTime, formatCurrency, updateCustomer } from '../lib/database';
@@ -286,6 +287,13 @@ export default function OrderDetailPage() {
 
             setOrder(prev => prev ? { ...prev, status: pendingStatus } : null);
             success('Status uppdaterad', `Ordern ändrades till "${ORDER_STATUS_LABELS[pendingStatus]}"`);
+            // Log status change with the current user so it shows in the timeline
+            createOrderActivity(
+                id,
+                user?.id ?? null,
+                'status_changed',
+                `Status ändrad till "${ORDER_STATUS_LABELS[pendingStatus]}"`
+            ).catch(() => undefined);
             loadOrderData(); // Refresh to get new activity
         } catch (err: any) {
             showError('Kunde inte uppdatera status', err.message);
@@ -673,9 +681,11 @@ export default function OrderDetailPage() {
 
                                     {/* Line Items Section */}
                                     {(() => {
-                                        const lineItems = (order as any).quote?.quote_line_items;
+                                        // getOrder returns quote as an array (PostgREST relationship)
+                                        const rawQuote = (order as any).quote;
+                                        const quote = Array.isArray(rawQuote) ? rawQuote[0] : rawQuote;
+                                        const lineItems = quote?.quote_line_items;
                                         if (!lineItems || lineItems.length === 0) return null;
-                                        const quote = (order as any).quote;
                                         const subtotal = quote?.subtotal ?? lineItems.reduce((sum: number, item: any) => sum + (item.total ?? 0), 0);
                                         const vatAmount = quote?.vat_amount ?? 0;
                                         const totalAmount = quote?.total_amount ?? (subtotal + vatAmount);
