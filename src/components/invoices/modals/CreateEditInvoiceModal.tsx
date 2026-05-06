@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
     X, FileText, Users2, Package, Receipt, Loader2, Save, Plus, Trash2, Paperclip,
-    CheckSquare, Square,
+    CheckSquare, Square, Edit2,
 } from 'lucide-react';
 import ROTFields from '../../ROTFields';
 import RUTFields from '../../RUTFields';
@@ -11,12 +11,22 @@ import { type UserProfile, TEAM_SPECIALTY_LABELS, TEAM_ROLE_LABELS, getTeamRoleC
 import { type TeamWithRelations } from '../../../lib/teams';
 import { type SavedLineItem } from '../../../types/database';
 import { type LineItem } from '../../../hooks/useInvoiceForm';
-import { formatCurrency } from '../../../lib/database';
+import { formatCurrency, updateCustomer } from '../../../lib/database';
 
 interface Customer {
     id: string;
     name: string;
-    email?: string;
+    email?: string | null;
+    phone_number?: string | null;
+    org_number?: string | null;
+    address?: string | null;
+    postal_code?: string | null;
+    city?: string | null;
+    vat_handling?: string | null;
+    invoice_delivery_method?: string | null;
+    e_invoice_address?: string | null;
+    customer_type?: 'company' | 'private' | null;
+    sales_area?: string | null;
 }
 
 interface CreateEditInvoiceModalProps {
@@ -130,6 +140,40 @@ export default function CreateEditInvoiceModal({
     handleDeleteAttachment,
 }: CreateEditInvoiceModalProps) {
     const [activeInvoiceTab, setActiveInvoiceTab] = useState<'info' | 'team' | 'docs' | 'lineItems'>('info');
+    const [isEditingExistingCustomer, setIsEditingExistingCustomer] = useState(false);
+    const [existingCustomerEditForm, setExistingCustomerEditForm] = useState({
+        name: '', email: '', phone_number: '', org_number: '',
+        address: '', postal_code: '', city: '',
+        vat_handling: '25%', invoice_delivery_method: 'e-post', e_invoice_address: '',
+    });
+    const [savingExistingCustomer, setSavingExistingCustomer] = useState(false);
+    const [customerOverrides, setCustomerOverrides] = useState<Record<string, Partial<Customer>>>({});
+
+    const handleSaveCustomerEdit = async () => {
+        const sel = customers.find(c => c.id === formData.customer_id);
+        if (!sel) return;
+        setSavingExistingCustomer(true);
+        try {
+            await updateCustomer(sel.id, {
+                name: existingCustomerEditForm.name || undefined,
+                email: existingCustomerEditForm.email || null,
+                phone_number: existingCustomerEditForm.phone_number || null,
+                org_number: existingCustomerEditForm.org_number || null,
+                address: existingCustomerEditForm.address || null,
+                postal_code: existingCustomerEditForm.postal_code || null,
+                city: existingCustomerEditForm.city || null,
+                vat_handling: existingCustomerEditForm.vat_handling as any,
+                invoice_delivery_method: existingCustomerEditForm.invoice_delivery_method as any,
+                e_invoice_address: existingCustomerEditForm.e_invoice_address || null,
+            } as any);
+            setCustomerOverrides(prev => ({ ...prev, [sel.id]: existingCustomerEditForm }));
+            setIsEditingExistingCustomer(false);
+        } catch {
+            // silent
+        } finally {
+            setSavingExistingCustomer(false);
+        }
+    };
 
     if (!isOpen) return null;
 
@@ -214,7 +258,10 @@ export default function CreateEditInvoiceModal({
                                         <select
                                             required={!isManualCustomer}
                                             value={formData.customer_id}
-                                            onChange={(e) => setFormData((prev: any) => ({ ...prev, customer_id: e.target.value, order_id: '' }))}
+                                            onChange={(e) => {
+                                                setFormData((prev: any) => ({ ...prev, customer_id: e.target.value, order_id: '' }));
+                                                setIsEditingExistingCustomer(false);
+                                            }}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md"
                                             disabled={!!selectedOrder || (!!editingInvoice && !isManualCustomer)}
                                         >
@@ -224,18 +271,85 @@ export default function CreateEditInvoiceModal({
                                             ))}
                                         </select>
                                         {formData.customer_id && (() => {
-                                            const sel = customers.find(c => c.id === formData.customer_id);
-                                            if (!sel) return null;
+                                            const base = customers.find(c => c.id === formData.customer_id);
+                                            if (!base) return null;
+                                            const sel = { ...base, ...(customerOverrides[base.id] || {}) } as Customer;
                                             return (
                                                 <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md space-y-1">
-                                                    <p className="text-sm font-medium text-gray-800">{sel.name}</p>
-                                                    <p className="text-xs text-gray-500">{(sel as any).customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
-                                                    {(sel as any).email && <p className="text-xs text-gray-500">{(sel as any).email}</p>}
-                                                    {(sel as any).phone_number && <p className="text-xs text-gray-500">{(sel as any).phone_number}</p>}
-                                                    {(sel as any).org_number && <p className="text-xs text-gray-500">{(sel as any).customer_type === 'company' ? 'Org.nr' : 'Personnr'}: {(sel as any).org_number}</p>}
-                                                    {((sel as any).address || (sel as any).city) && <p className="text-xs text-gray-500">{[(sel as any).address, (sel as any).postal_code, (sel as any).city].filter(Boolean).join(', ')}</p>}
-                                                    {(sel as any).vat_handling && <p className="text-xs text-gray-500">Moms: {(sel as any).vat_handling}</p>}
-                                                    {(sel as any).invoice_delivery_method && <p className="text-xs text-gray-500">Fakturaleverans: {(sel as any).invoice_delivery_method}</p>}
+                                                    {!isEditingExistingCustomer ? (
+                                                        <>
+                                                            <div className="flex items-center justify-between">
+                                                                <p className="text-sm font-medium text-gray-800">{sel.name}</p>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setExistingCustomerEditForm({
+                                                                            name: sel.name || '',
+                                                                            email: sel.email || '',
+                                                                            phone_number: sel.phone_number || '',
+                                                                            org_number: sel.org_number || '',
+                                                                            address: sel.address || '',
+                                                                            postal_code: sel.postal_code || '',
+                                                                            city: sel.city || '',
+                                                                            vat_handling: sel.vat_handling || '25%',
+                                                                            invoice_delivery_method: sel.invoice_delivery_method || 'e-post',
+                                                                            e_invoice_address: sel.e_invoice_address || '',
+                                                                        });
+                                                                        setIsEditingExistingCustomer(true);
+                                                                    }}
+                                                                    className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                                                                >
+                                                                    <Edit2 className="w-3 h-3" /> Redigera
+                                                                </button>
+                                                            </div>
+                                                            <p className="text-xs text-gray-500">{sel.customer_type === 'company' ? 'Företag' : 'Privatperson'}</p>
+                                                            {sel.email && <p className="text-xs text-gray-500">{sel.email}</p>}
+                                                            {sel.phone_number && <p className="text-xs text-gray-500">{sel.phone_number}</p>}
+                                                            {sel.org_number && <p className="text-xs text-gray-500">{sel.customer_type === 'company' ? 'Org.nr' : 'Personnr'}: {sel.org_number}</p>}
+                                                            {(sel.address || sel.city) && <p className="text-xs text-gray-500">{[sel.address, sel.postal_code, sel.city].filter(Boolean).join(', ')}</p>}
+                                                            {sel.vat_handling && <p className="text-xs text-gray-500">Moms: {sel.vat_handling}</p>}
+                                                            {sel.invoice_delivery_method && <p className="text-xs text-gray-500">Fakturaleverans: {sel.invoice_delivery_method}</p>}
+                                                        </>
+                                                    ) : (
+                                                        <div className="space-y-1.5">
+                                                            <div className="grid grid-cols-2 gap-1.5">
+                                                                <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Namn *" value={existingCustomerEditForm.name} onChange={e => setExistingCustomerEditForm(p => ({ ...p, name: e.target.value }))} />
+                                                                <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="E-post" value={existingCustomerEditForm.email} onChange={e => setExistingCustomerEditForm(p => ({ ...p, email: e.target.value }))} />
+                                                                <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Telefon" value={existingCustomerEditForm.phone_number} onChange={e => setExistingCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))} />
+                                                                <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder={sel.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'} value={existingCustomerEditForm.org_number} onChange={e => setExistingCustomerEditForm(p => ({ ...p, org_number: e.target.value }))} />
+                                                            </div>
+                                                            <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Adress" value={existingCustomerEditForm.address} onChange={e => setExistingCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
+                                                            <div className="flex gap-1.5">
+                                                                <input className="w-20 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Postnr" value={existingCustomerEditForm.postal_code} onChange={e => setExistingCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
+                                                                <input className="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Stad" value={existingCustomerEditForm.city} onChange={e => setExistingCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-1.5">
+                                                                <select className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={existingCustomerEditForm.vat_handling} onChange={e => setExistingCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}>
+                                                                    <option value="25%">25% moms</option>
+                                                                    <option value="12%">12% moms</option>
+                                                                    <option value="6%">6% moms</option>
+                                                                    <option value="0%">Momsfri (0%)</option>
+                                                                    <option value="omvänd byggmoms">Omvänd byggmoms</option>
+                                                                </select>
+                                                                <select className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={existingCustomerEditForm.invoice_delivery_method} onChange={e => setExistingCustomerEditForm(p => ({ ...p, invoice_delivery_method: e.target.value }))}>
+                                                                    <option value="e-post">E-post</option>
+                                                                    <option value="e-faktura">E-faktura</option>
+                                                                    <option value="post">Post</option>
+                                                                </select>
+                                                            </div>
+                                                            {existingCustomerEditForm.invoice_delivery_method === 'e-faktura' && (
+                                                                <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="E-fakturaadress (GLN/PEPPOL)" value={existingCustomerEditForm.e_invoice_address} onChange={e => setExistingCustomerEditForm(p => ({ ...p, e_invoice_address: e.target.value }))} />
+                                                            )}
+                                                            <div className="flex gap-2 justify-end pt-1">
+                                                                <button type="button" className="text-xs text-gray-500 px-2 py-1" onClick={() => setIsEditingExistingCustomer(false)}>Avbryt</button>
+                                                                <button type="button" disabled={savingExistingCustomer}
+                                                                    className="text-xs font-medium bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center gap-1 disabled:opacity-50"
+                                                                    onClick={handleSaveCustomerEdit}>
+                                                                    {savingExistingCustomer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Spara
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             );
                                         })()}

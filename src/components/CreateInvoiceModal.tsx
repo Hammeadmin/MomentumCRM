@@ -50,7 +50,7 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
     defaultCustomerId,
     defaultWorkSummary,
 }) => {
-    const { organisationId } = useAuth();
+    const { organisationId, user } = useAuth();
     const { success, error: showError } = useToast();
 
     const [customers, setCustomers] = useState<Customer[]>([]);
@@ -327,10 +327,22 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
             const vatAmount = calculateVAT();
             const total = calculateTotal();
 
-            // Pass lineItems as the SECOND argument — not embedded in invoice object
-            const { error } = await createInvoice(
+            // Generate sequential invoice number via RPC
+            const { data: invoiceNumber, error: numberError } = await supabase.rpc('generate_invoice_number', {
+                org_id: organisationId,
+            });
+            if (numberError || !invoiceNumber) {
+                showError('Fel', 'Kunde inte generera fakturanummer.');
+                setLoading(false);
+                return;
+            }
+            const ocrNumber = (invoiceNumber as string).replace(/\D/g, '');
+
+            const { data: createdInvoice, error } = await createInvoice(
                 {
                     organisation_id: organisationId,
+                    invoice_number: invoiceNumber as string,
+                    ocr_number: ocrNumber,
                     customer_id: customerId,
                     order_id: formData.order_id || null,
                     amount: total,
@@ -348,12 +360,23 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                     rut_personnummer: formData.rut_personnummer,
                     rut_amount: formData.rut_amount,
                 } as any,
-                validItems
+                validItems,
+                user?.id
             );
 
             if (error) {
                 showError('Fel', error.message);
                 return;
+            }
+
+            if (createdInvoice) {
+                await supabase.from('invoice_history').insert({
+                    organisation_id: organisationId,
+                    invoice_id: createdInvoice.id,
+                    action_type: 'created',
+                    performed_by_user_id: user?.id ?? null,
+                    details: { invoice_number: createdInvoice.invoice_number },
+                });
             }
 
             success('Faktura skapad', 'Fakturan har skapats.');

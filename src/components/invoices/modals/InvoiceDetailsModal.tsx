@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
     X, Edit, Send, FileUp, MessageSquare, User, Users2, Paperclip,
-    CheckCircle, ExternalLink, Phone, MapPin, Mail, Loader2,
+    CheckCircle, ExternalLink, Phone, MapPin, Mail, Loader2, Clock,
 } from 'lucide-react';
+import { supabase } from '../../../lib/supabase';
 import SendQuoteModal from '../../SendQuoteModal';
 import InvoicePreview from '../../InvoicePreview';
 import ROTInformation from '../../ROTInformation';
@@ -82,6 +83,19 @@ export default function InvoiceDetailsModal({
     const [showContactModal, setShowContactModal] = useState(false);
     const [communications, setCommunications] = useState<CommunicationWithRelations[]>([]);
     const [loadingComms, setLoadingComms] = useState(false);
+    const [invoiceHistory, setInvoiceHistory] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+
+    const ACTION_TYPE_LABELS: Record<string, string> = {
+        created: 'Faktura skapad',
+        sent: 'Faktura skickad',
+        reminder_sent: 'Påminnelse skickad',
+        viewed: 'Faktura visad',
+        paid: 'Betalning registrerad',
+        status_changed: 'Status ändrad',
+        updated: 'Faktura uppdaterad',
+        duplicated: 'Faktura duplicerad',
+    };
 
     useEffect(() => {
         if (isOpen && invoice.customer_id) {
@@ -92,6 +106,20 @@ export default function InvoiceDetailsModal({
         }
         if (!isOpen) setCommunications([]);
     }, [isOpen, invoice.customer_id]);
+
+    useEffect(() => {
+        if (isOpen && invoice.id) {
+            setLoadingHistory(true);
+            supabase
+                .from('invoice_history')
+                .select('*, performed_by:user_profiles!invoice_history_performed_by_user_id_fkey(full_name)')
+                .eq('invoice_id', invoice.id)
+                .order('created_at', { ascending: false })
+                .then(({ data }) => { if (data) setInvoiceHistory(data); })
+                .finally(() => setLoadingHistory(false));
+        }
+        if (!isOpen) setInvoiceHistory([]);
+    }, [isOpen, invoice.id]);
 
     if (!isOpen) return null;
 
@@ -416,6 +444,40 @@ export default function InvoiceDetailsModal({
                                                 <p className="text-xs text-gray-500 font-medium mb-1">{comm.subject}</p>
                                             )}
                                             <p className="text-gray-700 line-clamp-2">{comm.content}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Activity History */}
+                        <div>
+                            <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-gray-400" />
+                                Aktivitetshistorik
+                            </h4>
+                            {loadingHistory ? (
+                                <div className="flex justify-center py-4">
+                                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                                </div>
+                            ) : invoiceHistory.length === 0 ? (
+                                <p className="text-sm text-gray-400 italic">Ingen aktivitet registrerad.</p>
+                            ) : (
+                                <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    {invoiceHistory.map((entry: any) => (
+                                        <div key={entry.id} className="bg-gray-50 rounded-lg p-3 text-sm border-l-2 border-blue-200">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-xs font-semibold text-gray-800">
+                                                    {ACTION_TYPE_LABELS[entry.action_type] ?? entry.action_type}
+                                                </span>
+                                                <span className="text-xs text-gray-400">{formatDateTime(entry.created_at)}</span>
+                                            </div>
+                                            {entry.performed_by?.full_name && (
+                                                <p className="text-xs text-gray-500 flex items-center gap-1">
+                                                    <User className="w-3 h-3" />
+                                                    {entry.performed_by.full_name}
+                                                </p>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
