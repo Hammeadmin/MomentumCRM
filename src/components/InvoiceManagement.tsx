@@ -594,7 +594,20 @@ function InvoiceManagement() {
           handleAddSavedItem={handleAddSavedItem}
           handleSaveLineItem={handleSaveLineItem}
           calculateTotal={calculateTotal}
-          customers={customers.map(c => ({ id: c.id, name: c.name, email: c.email ?? undefined }))}
+          customers={customers.map(c => ({
+            id: c.id,
+            name: c.name,
+            email: c.email ?? undefined,
+            phone_number: (c as any).phone_number ?? undefined,
+            org_number: (c as any).org_number ?? undefined,
+            address: (c as any).address ?? undefined,
+            postal_code: (c as any).postal_code ?? undefined,
+            city: (c as any).city ?? undefined,
+            customer_type: (c as any).customer_type ?? undefined,
+            vat_handling: (c as any).vat_handling ?? undefined,
+            invoice_delivery_method: (c as any).invoice_delivery_method ?? undefined,
+            e_invoice_address: (c as any).e_invoice_address ?? undefined,
+          }))}
           teamMembers={teamMembers}
           teams={teams}
           savedLineItems={savedLineItems}

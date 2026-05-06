@@ -600,6 +600,15 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                     job_type: invoice.job_type,
                     team_members_involved: invoice.team_members_involved,
                     work_summary: invoice.work_summary,
+                    // Copy ROT/RUT state exactly from source — avoids DB DEFAULT true
+                    include_rot: invoice.include_rot ?? false,
+                    rot_personnummer: invoice.rot_personnummer ?? null,
+                    rot_organisationsnummer: invoice.rot_organisationsnummer ?? null,
+                    rot_fastighetsbeteckning: invoice.rot_fastighetsbeteckning ?? null,
+                    rot_amount: invoice.rot_amount ?? 0,
+                    include_rut: (invoice as any).include_rut ?? false,
+                    rut_personnummer: (invoice as any).rut_personnummer ?? null,
+                    rut_amount: (invoice as any).rut_amount ?? 0,
                     created_by_user_id: user?.id,
                 })
                 .select()
