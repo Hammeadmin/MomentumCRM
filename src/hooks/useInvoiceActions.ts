@@ -108,6 +108,25 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
         t,
     } = deps;
 
+    // ── Shared: generate sequential invoice number with client-side fallback ─────
+
+    const generateInvoiceNumber = async (): Promise<string> => {
+        const { data: rpcNumber, error: numberError } = await supabase.rpc('generate_invoice_number', {
+            org_id: organisationId,
+        });
+        if (numberError) {
+            console.error('[Invoice] generate_invoice_number RPC error:', numberError);
+            const now = new Date();
+            return `${now.getFullYear()}-${String(Date.now()).slice(-6)}`;
+        }
+        if (!rpcNumber) {
+            console.warn('[Invoice] generate_invoice_number returned null, using fallback');
+            const now = new Date();
+            return `${now.getFullYear()}-${String(Date.now()).slice(-6)}`;
+        }
+        return rpcNumber as string;
+    };
+
     // ── Create Invoice ────────────────────────────────────────────────────────────
 
     const handleCreateInvoice = async () => {
@@ -169,22 +188,7 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
             }
 
             // Generate sequential invoice number via RPC, with client-side fallback
-            let invoiceNumber: string;
-            const { data: rpcNumber, error: numberError } = await supabase.rpc('generate_invoice_number', {
-                org_id: organisationId,
-            });
-            if (numberError) {
-                console.error('[Invoice] generate_invoice_number RPC error:', numberError);
-                // Fallback: year + milliseconds tail (unique enough for a draft)
-                const now = new Date();
-                invoiceNumber = `${now.getFullYear()}-${String(Date.now()).slice(-6)}`;
-            } else if (!rpcNumber) {
-                console.warn('[Invoice] generate_invoice_number returned null, using fallback');
-                const now = new Date();
-                invoiceNumber = `${now.getFullYear()}-${String(Date.now()).slice(-6)}`;
-            } else {
-                invoiceNumber = rpcNumber as string;
-            }
+            const invoiceNumber = await generateInvoiceNumber();
             const ocrNumber = invoiceNumber.replace(/\D/g, '');
 
             const subtotalAmt = validLineItems.reduce((s: number, i: LineItem) => s + i.total, 0);
@@ -374,7 +378,7 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 ];
             }
 
-            const invoiceNumber = `F${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`;
+            const invoiceNumber = await generateInvoiceNumber();
             const ocrNumber = invoiceNumber.replace(/\D/g, '');
 
             const dueDate = new Date();
@@ -412,12 +416,15 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
             const result = await createInvoice(invoiceData, lineItemsFromOrder, user?.id);
 
             if (result.error) {
+                console.error('[Invoice] createInvoice (from order) failed:', result.error);
                 throw new Error(result.error.message);
             }
 
+            console.log('[Invoice] Invoice created from order successfully:', result.data?.id);
             showSuccess('Framgång', `Faktura ${invoiceNumber} skapad från order "${order.title}"!`);
             setActiveTab('invoices');
         } catch (err) {
+            console.error('[Invoice] Unexpected error in handleCreateInvoiceFromOrder:', err);
             showError('Fel', err instanceof Error ? err.message : 'Ett oväntat fel inträffade vid skapande av faktura.');
             throw err;
         } finally {
@@ -463,7 +470,7 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 return;
             }
 
-            const invoiceNumber = `F${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`;
+            const invoiceNumber = await generateInvoiceNumber();
             const ocrNumber = invoiceNumber.replace(/\D/g, '');
 
             const subtotalPreInvoice = lineItems.reduce((s: number, i: LineItem) => s + i.total, 0);
@@ -495,19 +502,23 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 rut_amount: formData.rut_amount,
             };
 
+            console.log('[Invoice] Creating invoice (pre-invoice):', { invoice_number: invoiceNumber, order_id: selectedOrder.id, lineItemCount: lineItems.length });
             const result = await createInvoice(invoiceData, lineItems, user?.id);
 
             if (result.error) {
+                console.error('[Invoice] createInvoice (pre-invoice) failed:', result.error);
                 showError('Fel', result.error.message);
                 return;
             }
 
+            console.log('[Invoice] Pre-invoice created successfully:', result.data?.id);
             showSuccess('Framgång', `Faktura ${invoiceNumber} skapad!`);
             setShowUnifiedModal(false);
             setSelectedOrder(null);
             setActiveTab('invoices');
             await loadData();
         } catch (err) {
+            console.error('[Invoice] Unexpected error in handleSavePreInvoiceChangesAndCreateInvoice:', err);
             showError('Fel', 'Ett oväntat fel inträffade.');
         } finally {
             setFormLoading(false);
