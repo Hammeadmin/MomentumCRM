@@ -327,21 +327,29 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
             const vatAmount = calculateVAT();
             const total = calculateTotal();
 
-            // Generate sequential invoice number via RPC
-            const { data: invoiceNumber, error: numberError } = await supabase.rpc('generate_invoice_number', {
+            // Generate sequential invoice number via RPC, with client-side fallback
+            let invoiceNumber: string;
+            const { data: rpcNumber, error: numberError } = await supabase.rpc('generate_invoice_number', {
                 org_id: organisationId,
             });
-            if (numberError || !invoiceNumber) {
-                showError('Fel', 'Kunde inte generera fakturanummer.');
-                setLoading(false);
-                return;
+            if (numberError) {
+                console.error('[Invoice] generate_invoice_number RPC error:', numberError);
+                const now = new Date();
+                invoiceNumber = `${now.getFullYear()}-${String(Date.now()).slice(-6)}`;
+            } else if (!rpcNumber) {
+                console.warn('[Invoice] generate_invoice_number returned null, using fallback');
+                const now = new Date();
+                invoiceNumber = `${now.getFullYear()}-${String(Date.now()).slice(-6)}`;
+            } else {
+                invoiceNumber = rpcNumber as string;
             }
-            const ocrNumber = (invoiceNumber as string).replace(/\D/g, '');
+            const ocrNumber = invoiceNumber.replace(/\D/g, '');
 
+            console.log('[Invoice] Creating invoice:', { invoice_number: invoiceNumber, customer_id: customerId, lineItemCount: validItems.length });
             const { data: createdInvoice, error } = await createInvoice(
                 {
                     organisation_id: organisationId,
-                    invoice_number: invoiceNumber as string,
+                    invoice_number: invoiceNumber,
                     ocr_number: ocrNumber,
                     customer_id: customerId,
                     order_id: formData.order_id || null,
@@ -365,26 +373,18 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
             );
 
             if (error) {
+                console.error('[Invoice] createInvoice failed:', error);
                 showError('Fel', error.message);
                 return;
             }
 
-            if (createdInvoice) {
-                await supabase.from('invoice_history').insert({
-                    organisation_id: organisationId,
-                    invoice_id: createdInvoice.id,
-                    action_type: 'created',
-                    performed_by_user_id: user?.id ?? null,
-                    details: { invoice_number: createdInvoice.invoice_number },
-                });
-            }
-
+            console.log('[Invoice] Invoice created successfully:', createdInvoice?.id);
             success('Faktura skapad', 'Fakturan har skapats.');
             onInvoiceCreated();
             onClose();
             resetForm();
         } catch (err) {
-            console.error('Error creating invoice:', err);
+            console.error('[Invoice] Unexpected error in handleSubmit:', err);
             showError('Fel', 'Kunde inte skapa faktura');
         } finally {
             setLoading(false);

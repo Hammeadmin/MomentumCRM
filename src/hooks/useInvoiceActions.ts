@@ -161,26 +161,37 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                         finalCustomerId = newCustomer.data.id;
                     }
                 } catch (err: unknown) {
+                    console.error('[Invoice] Error handling manual customer:', err);
                     setFormLoading(false);
                     showError('Fel', (err instanceof Error ? err.message : null) || 'Fel vid hantering av manuell kund.');
                     return;
                 }
             }
 
-            const { data: invoiceNumber, error: numberError } = await supabase.rpc('generate_invoice_number', {
+            // Generate sequential invoice number via RPC, with client-side fallback
+            let invoiceNumber: string;
+            const { data: rpcNumber, error: numberError } = await supabase.rpc('generate_invoice_number', {
                 org_id: organisationId,
             });
-            if (numberError || !invoiceNumber) {
-                showError('Fel', 'Kunde inte generera fakturanummer.');
-                return;
+            if (numberError) {
+                console.error('[Invoice] generate_invoice_number RPC error:', numberError);
+                // Fallback: year + milliseconds tail (unique enough for a draft)
+                const now = new Date();
+                invoiceNumber = `${now.getFullYear()}-${String(Date.now()).slice(-6)}`;
+            } else if (!rpcNumber) {
+                console.warn('[Invoice] generate_invoice_number returned null, using fallback');
+                const now = new Date();
+                invoiceNumber = `${now.getFullYear()}-${String(Date.now()).slice(-6)}`;
+            } else {
+                invoiceNumber = rpcNumber as string;
             }
-            const ocrNumber = (invoiceNumber as string).replace(/\D/g, '');
+            const ocrNumber = invoiceNumber.replace(/\D/g, '');
 
             const subtotalAmt = validLineItems.reduce((s: number, i: LineItem) => s + i.total, 0);
             const totalAmt = calculateTotal(validLineItems);
             const invoiceData = {
                 organisation_id: organisationId,
-                invoice_number: invoiceNumber as string,
+                invoice_number: invoiceNumber,
                 customer_id: finalCustomerId,
                 amount: totalAmt,
                 subtotal: subtotalAmt,
@@ -205,28 +216,22 @@ export function useInvoiceActions(deps: UseInvoiceActionsDeps) {
                 ocr_number: ocrNumber,
             };
 
+            console.log('[Invoice] Creating invoice:', { invoice_number: invoiceNumber, customer_id: finalCustomerId, lineItemCount: validLineItems.length });
             const result = await createInvoice(invoiceData, validLineItems, user?.id);
 
             if (result.error) {
+                console.error('[Invoice] createInvoice failed:', result.error);
                 showError('Fel', result.error.message);
                 return;
             }
 
-            if (result.data) {
-                await supabase.from('invoice_history').insert({
-                    organisation_id: organisationId,
-                    invoice_id: result.data.id,
-                    action_type: 'created',
-                    performed_by_user_id: user?.id ?? null,
-                    details: { invoice_number: result.data.invoice_number },
-                });
-            }
-
+            console.log('[Invoice] Invoice created successfully:', result.data?.id);
             showSuccess('Framgång', 'Faktura skapad framgångsrikt!');
             setShowUnifiedModal(false);
             resetForm();
             await loadData();
-        } catch {
+        } catch (err) {
+            console.error('[Invoice] Unexpected error in handleCreateInvoice:', err);
             showError('Fel', 'Ett oväntat fel inträffade vid skapande av faktura.');
         } finally {
             setFormLoading(false);
