@@ -354,8 +354,6 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                     customer_id: customerId,
                     order_id: formData.order_id || null,
                     amount: total,
-                    subtotal: subtotalAmount,
-                    vat_amount: vatAmount,
                     due_date: formData.due_date,
                     job_description: formData.work_summary || null,
                     work_summary: formData.work_summary || null,
