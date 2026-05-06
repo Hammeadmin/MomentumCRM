@@ -44,6 +44,7 @@ import { getTeams } from '../lib/teams';
 import {
   getOrder,
   updateOrder,
+  updateOrderAndQuote,
   deleteOrder,
   getOrderNotes,
   createOrderNote,
@@ -56,6 +57,7 @@ import {
   type OrderWithRelations,
   type OrderAttachment,
 } from '../lib/orders';
+import { getProductLibrary, type ProductLibraryItem, UNIT_DESCRIPTIONS } from '../lib/quoteTemplates';
 import {
   JOB_TYPE_LABELS,
   TEAM_SPECIALTY_LABELS,
@@ -184,6 +186,11 @@ function OrderDetailModal({
   const [editFormData, setEditFormData] = useState<EditFormState>(buildEditForm(null));
   const [formLoading, setFormLoading] = useState(false);
 
+  // Line items editing state
+  type EditLineItem = { name: string; description: string; quantity: number; unit_price: number; unit: string; };
+  const [editLineItems, setEditLineItems] = useState<EditLineItem[]>([{ name: '', description: '', quantity: 1, unit_price: 0, unit: '' }]);
+  const [products, setProducts] = useState<ProductLibraryItem[]>([]);
+
   // Notes
   const [newNote, setNewNote] = useState('');
   const [addingNote, setAddingNote] = useState(false);
@@ -266,9 +273,33 @@ function OrderDetailModal({
     if (order?.id) {
       loadRelated(order.id);
       setEditFormData(buildEditForm(order));
+
+      // Initialise line items from the order's linked quote
+      const rawQuote = (order as any).quote;
+      const quote = Array.isArray(rawQuote) ? rawQuote[0] : rawQuote;
+      const existingItems = quote?.quote_line_items;
+      if (existingItems && existingItems.length > 0) {
+        setEditLineItems(existingItems.map((item: any) => ({
+          name: item.name || item.description || '',
+          description: item.description || '',
+          quantity: item.quantity || 1,
+          unit_price: item.unit_price || 0,
+          unit: item.unit || '',
+        })));
+      } else {
+        setEditLineItems([{ name: '', description: '', quantity: 1, unit_price: 0, unit: '' }]);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id]);
+
+  // Load product library for the line-item picker
+  useEffect(() => {
+    if (!isOpen || !organisationId) return;
+    getProductLibrary(organisationId).then(({ data }) => {
+      if (data) setProducts(data);
+    }).catch(() => undefined);
+  }, [isOpen, organisationId]);
 
   // Load team members/teams/customers once (needed for edit dropdowns)
   useEffect(() => {
@@ -347,7 +378,9 @@ function OrderDetailModal({
         rut_amount: editFormData.rut_amount,
       };
 
-      const result = await updateOrder(order.id, updates);
+      // Only include line items that have a name
+      const validLineItems = editLineItems.filter(item => item.name.trim() !== '');
+      const result = await updateOrderAndQuote(order.id, updates, validLineItems);
       if (result.error) {
         showError('Fel', result.error.message);
         return;
@@ -904,6 +937,98 @@ function OrderDetailModal({
                     <option value="4">4 - Svårt</option>
                     <option value="5">5 - Mycket svårt</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Line Items */}
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Orderrader</h4>
+                <div className="space-y-2">
+                  {editLineItems.map((item, idx) => {
+                    const lineTotal = (item.quantity || 0) * (item.unit_price || 0);
+                    return (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-start">
+                        {/* Product picker (optional) */}
+                        <select
+                          className="col-span-3 px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                          value=""
+                          onChange={e => {
+                            const prod = products.find(p => p.id === e.target.value);
+                            if (!prod) return;
+                            const updated = [...editLineItems];
+                            updated[idx] = { ...updated[idx], name: prod.name, description: prod.description || '', unit_price: prod.unit_price || 0, unit: prod.unit || '' };
+                            setEditLineItems(updated);
+                          }}
+                        >
+                          <option value="">Välj från bibliotek…</option>
+                          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        {/* Name (required) */}
+                        <input
+                          type="text"
+                          placeholder="Namn *"
+                          value={item.name}
+                          onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], name: e.target.value }; setEditLineItems(u); }}
+                          className="col-span-3 px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                        />
+                        {/* Quantity */}
+                        <input
+                          type="number"
+                          placeholder="Antal"
+                          value={item.quantity}
+                          min={0}
+                          step={0.5}
+                          onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], quantity: parseFloat(e.target.value) || 0 }; setEditLineItems(u); }}
+                          className="col-span-1 px-2 py-1.5 text-xs border border-gray-300 rounded-md text-right"
+                        />
+                        {/* Unit */}
+                        <select
+                          value={item.unit}
+                          onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], unit: e.target.value }; setEditLineItems(u); }}
+                          className="col-span-2 px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                        >
+                          {Object.entries(UNIT_DESCRIPTIONS).map(([val, label]) => (
+                            <option key={val} value={val}>{label}</option>
+                          ))}
+                        </select>
+                        {/* Unit price */}
+                        <input
+                          type="number"
+                          placeholder="À-pris"
+                          value={item.unit_price}
+                          min={0}
+                          step={0.01}
+                          onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], unit_price: parseFloat(e.target.value) || 0 }; setEditLineItems(u); }}
+                          className="col-span-2 px-2 py-1.5 text-xs border border-gray-300 rounded-md text-right"
+                        />
+                        {/* Row total */}
+                        <div className="col-span-1 py-1.5 text-xs text-right text-gray-600 font-medium">
+                          {formatCurrency(lineTotal)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditLineItems(prev => [...prev, { name: '', description: '', quantity: 1, unit_price: 0, unit: '' }])}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Lägg till rad
+                  </button>
+                  {editLineItems.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setEditLineItems(prev => prev.slice(0, -1))}
+                      className="text-xs text-red-500 hover:text-red-700"
+                    >
+                      Ta bort sista
+                    </button>
+                  )}
+                  <div className="text-sm font-semibold text-gray-900">
+                    Totalt: {formatCurrency(editLineItems.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0))}
+                  </div>
                 </div>
               </div>
 
