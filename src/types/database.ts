@@ -530,6 +530,7 @@ export interface Order {
   commission_amount?: number | null;
   commission_paid?: boolean | null;
   region?: string | null;
+  lead_id?: string | null;
 
   // Relations
   customer?: Customer;

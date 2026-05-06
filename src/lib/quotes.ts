@@ -136,6 +136,7 @@ export const acceptQuoteAndCreateOrder = async (
       rut_personnummer: quote.rut_personnummer,
       rut_amount: quote.rut_amount,
       primary_salesperson_id: quote.lead?.assigned_to_user_id || null,
+      lead_id: quote.lead_id || null,
     };
 
     const { data: newOrder, error: orderError } = await createOrder(orderData as Omit<Order, 'id' | 'created_at'>);
