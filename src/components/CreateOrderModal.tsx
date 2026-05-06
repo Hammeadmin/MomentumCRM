@@ -172,9 +172,13 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Manual validation — native `required` doesn't fire for unmounted tab content
     if (!organisationId) { showError('Fel', 'Organisation saknas'); return; }
     if (!formData.title.trim()) { showError('Fel', 'Titel är obligatoriskt'); setActiveTab('info'); return; }
     if (!formData.job_description.trim()) { showError('Fel', 'Arbetsbeskrivning är obligatoriskt'); setActiveTab('info'); return; }
+    if (!isNewCustomer && !formData.customer_id) {
+      showError('Fel', 'Välj eller skapa en kund'); setActiveTab('kund'); return;
+    }
     if (formData.assignment_type === 'individual' && !formData.assigned_to_user_id) {
       showError('Fel', 'Välj en person att tilldela till'); setActiveTab('uppdrag'); return;
     }
@@ -334,7 +338,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Titel <span className="text-red-500">*</span></label>
                       <input
-                        type="text" required value={formData.title}
+                        type="text" value={formData.title}
                         onChange={e => setFormData(p => ({ ...p, title: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
                         placeholder="T.ex. Takrengöring villa..."
@@ -343,7 +347,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Jobbtyp <span className="text-red-500">*</span></label>
-                        <select required value={formData.job_type}
+                        <select value={formData.job_type}
                           onChange={e => setFormData(p => ({ ...p, job_type: e.target.value as JobType }))}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
                           {Object.entries(JOB_TYPE_LABELS).map(([v, l]) => (
@@ -397,7 +401,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Arbetsbeskrivning <span className="text-red-500">*</span></label>
-                      <textarea required value={formData.job_description}
+                      <textarea value={formData.job_description}
                         onChange={e => setFormData(p => ({ ...p, job_description: e.target.value }))}
                         rows={3}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
@@ -552,7 +556,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
                       </div>
                     ) : (
                       <>
-                        <select required={!isNewCustomer} value={formData.customer_id}
+                        <select value={formData.customer_id}
                           onChange={e => { setFormData(p => ({ ...p, customer_id: e.target.value })); setIsEditingExistingCustomer(false); }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
                           <option value="">Välj kund...</option>

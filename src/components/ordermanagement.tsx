@@ -748,6 +748,17 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Manual validation — native `required` doesn't fire for unmounted tab content
+    if (!formData.title.trim()) {
+      addToast('Titel är obligatoriskt', 'error');
+      setActiveTab('info');
+      return;
+    }
+    if (!formData.customer_id) {
+      addToast('Välj en kund', 'error');
+      setActiveTab('kund');
+      return;
+    }
     const validLineItems = lineItems.filter(item => item.name && item.name.trim() !== '');
     const finalTotalValue = validLineItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0);
     onSave({
@@ -826,7 +837,7 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField label="Titel" required>
-                    <input type="text" name="title" value={formData.title} onChange={handleFormChange} required
+                    <input type="text" name="title" value={formData.title} onChange={handleFormChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
                   </FormField>
                   <FormField label="Status">
@@ -926,7 +937,7 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
                   </div>
                   <select name="customer_id" value={formData.customer_id}
                     onChange={e => { handleFormChange(e); setIsEditingCustomer(false); }}
-                    required className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                     <option value="" disabled>Välj kund</option>
                     {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
