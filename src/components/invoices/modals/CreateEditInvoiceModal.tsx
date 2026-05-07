@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
-    X, FileText, Users2, Package, Receipt, Loader2, Save, Plus, Trash2, Paperclip,
+    X, FileText, Users2, Package, Receipt, Loader2, Save, Trash2, Paperclip,
     CheckSquare, Square, Edit2,
 } from 'lucide-react';
+import LineItemsEditor from '../../LineItemsEditor';
 import ROTFields from '../../ROTFields';
 import RUTFields from '../../RUTFields';
 import { type InvoiceWithRelations } from '../../../lib/invoices';
@@ -672,146 +673,11 @@ export default function CreateEditInvoiceModal({
 
                     {/* Tab: Fakturarader */}
                     {activeInvoiceTab === 'lineItems' && (
-                        <div>
-                            <div className="flex items-center justify-between mb-4">
-                                <h4 className="text-lg font-medium text-gray-900">Fakturarader</h4>
-                                <div className="flex items-center space-x-2">
-                                    <select
-                                        onChange={(e) => {
-                                            handleAddSavedItem(e.target.value);
-                                            e.target.value = '';
-                                        }}
-                                        className="px-3 py-1.5 border border-gray-300 rounded-md text-sm"
-                                        value=""
-                                    >
-                                        <option value="" disabled>Lägg till sparad rad...</option>
-                                        {savedLineItems.map((item) => (
-                                            <option key={item.id} value={item.id}>
-                                                {item.name} - {formatCurrency(item.unit_price)}
-                                            </option>
-                                        ))}
-                                    </select>
-
-                                    <button
-                                        type="button"
-                                        onClick={addLineItem}
-                                        className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-blue-700 bg-blue-100"
-                                    >
-                                        <Plus className="w-4 h-4 mr-1" />
-                                        Lägg till tom rad
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="space-y-3">
-                                {formData.line_items.map((item, index) => {
-                                    const isAlreadySaved = savedLineItems.some(
-                                        (savedItem) => savedItem.name.toLowerCase() === item.description.toLowerCase()
-                                    );
-
-                                    return (
-                                        <div key={index} className="grid grid-cols-12 gap-2 items-center">
-                                            <div className="col-span-4">
-                                                {index === 0 && (
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Beskrivning</label>
-                                                )}
-                                                <input
-                                                    type="text"
-                                                    value={item.description}
-                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                                                        updateLineItem(index, 'description', e.target.value)
-                                                    }
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                                    placeholder="Beskrivning av tjänst/produkt"
-                                                />
-                                            </div>
-
-                                            <div className="col-span-2">
-                                                {index === 0 && (
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Antal</label>
-                                                )}
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.01"
-                                                    value={item.quantity}
-                                                    onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                                />
-                                            </div>
-
-                                            <div className="col-span-2">
-                                                {index === 0 && (
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Enhet</label>
-                                                )}
-                                                <select
-                                                    value={item.unit || ''}
-                                                    onChange={(e) => updateLineItem(index, 'unit', e.target.value)}
-                                                    className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm bg-white"
-                                                >
-                                                    <option value="">-</option>
-                                                    <option value="st">st</option>
-                                                    <option value="tim">tim</option>
-                                                    <option value="m">m</option>
-                                                    <option value="m2">m²</option>
-                                                    <option value="m3">m³</option>
-                                                    <option value="kg">kg</option>
-                                                    <option value="l">l</option>
-                                                    <option value="paket">paket</option>
-                                                </select>
-                                            </div>
-
-                                            <div className="col-span-2">
-                                                {index === 0 && (
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Enhetspris</label>
-                                                )}
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.01"
-                                                    value={item.unit_price}
-                                                    onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                                />
-                                            </div>
-
-                                            <div className="col-span-1">
-                                                {index === 0 && (
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Summa</label>
-                                                )}
-                                                <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm">
-                                                    {formatCurrency(item.total)}
-                                                </div>
-                                            </div>
-
-                                            <div className="col-span-1 flex items-end h-full">
-                                                <div className="flex items-center">
-                                                    {!isAlreadySaved && item.description && item.unit_price > 0 && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleSaveLineItem(item)}
-                                                            className="p-2 text-blue-600"
-                                                        >
-                                                            <Save className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                    {formData.line_items.length > 1 && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeLineItem(index)}
-                                                            className="p-2 text-red-600"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            <div className="mt-6 flex justify-end">{/*...Totals Section...*/}</div>
+                        <div className="space-y-4">
+                            <LineItemsEditor
+                                lineItems={formData.line_items}
+                                onChange={items => setFormData((prev: any) => ({ ...prev, line_items: items }))}
+                            />
                         </div>
                     )}
                 </div>

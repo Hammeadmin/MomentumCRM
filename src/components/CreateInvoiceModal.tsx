@@ -6,23 +6,17 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-    X, Loader2, Plus, Trash2, UserPlus, Edit2, Save, Link
+    X, Loader2, UserPlus, Edit2, Save, Link
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { createInvoice } from '../lib/invoices';
-import { getCustomers, createCustomer, updateCustomer, formatCurrency, getSavedLineItems } from '../lib/database';
+import { getCustomers, createCustomer, updateCustomer, formatCurrency } from '../lib/database';
 import { supabase } from '../lib/supabase';
 import ROTFields from './ROTFields';
 import RUTFields from './RUTFields';
-import type { Customer, SavedLineItem } from '../types/database';
-
-interface LineItem {
-    description: string;
-    quantity: number;
-    unit_price: number;
-    total: number;
-}
+import type { Customer } from '../types/database';
+import LineItemsEditor, { type LineItem } from './LineItemsEditor';
 
 interface LinkedOrder {
     id: string;
@@ -54,7 +48,6 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
     const { success, error: showError } = useToast();
 
     const [customers, setCustomers] = useState<Customer[]>([]);
-    const [savedLineItems, setSavedLineItems] = useState<SavedLineItem[]>([]);
     const [readyOrders, setReadyOrders] = useState<LinkedOrder[]>([]);
     const [loading, setLoading] = useState(false);
     const [dataLoading, setDataLoading] = useState(false);
@@ -63,7 +56,7 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
         customer_id: '',
         order_id: '',
         due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-        line_items: [{ description: '', quantity: 1, unit_price: 0, total: 0 }] as LineItem[],
+        line_items: [] as LineItem[],
         work_summary: '',
         include_rot: false,
         rot_personnummer: null as string | null,
@@ -106,16 +99,14 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
             setDataLoading(true);
             Promise.all([
                 getCustomers(organisationId),
-                getSavedLineItems(organisationId),
                 supabase
                     .from('orders')
                     .select('id, title, customer_id, customer:customers(id, name), value, job_description')
                     .eq('organisation_id', organisationId)
                     .eq('status', 'redo_fakturera')
                     .order('created_at', { ascending: false }),
-            ]).then(([customersResult, savedItemsResult, ordersResult]) => {
+            ]).then(([customersResult, ordersResult]) => {
                 if (customersResult.data) setCustomers(customersResult.data);
-                if (savedItemsResult.data) setSavedLineItems(savedItemsResult.data);
                 if (ordersResult.data) setReadyOrders(ordersResult.data as LinkedOrder[]);
                 setDataLoading(false);
             });
@@ -139,7 +130,7 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
             customer_id: '',
             order_id: '',
             due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-            line_items: [{ description: '', quantity: 1, unit_price: 0, total: 0 }],
+            line_items: [],
             work_summary: '',
             include_rot: false,
             rot_personnummer: null,
@@ -174,46 +165,6 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
         }));
         setIsNewCustomer(false);
         setIsEditingExistingCustomer(false);
-    };
-
-    const addLineItem = () => {
-        setFormData(prev => ({
-            ...prev,
-            line_items: [...prev.line_items, { description: '', quantity: 1, unit_price: 0, total: 0 }]
-        }));
-    };
-
-    const removeLineItem = (index: number) => {
-        if (formData.line_items.length > 1) {
-            setFormData(prev => ({
-                ...prev,
-                line_items: prev.line_items.filter((_, i) => i !== index)
-            }));
-        }
-    };
-
-    const updateLineItem = (index: number, field: string, value: unknown) => {
-        setFormData(prev => ({
-            ...prev,
-            line_items: prev.line_items.map((item, i) => {
-                if (i !== index) return item;
-                const updated = { ...item, [field]: value };
-                updated.total = updated.quantity * updated.unit_price;
-                return updated;
-            })
-        }));
-    };
-
-    const handleAddSavedItem = (itemId: string) => {
-        const item = savedLineItems.find(i => i.id === itemId);
-        if (!item) return;
-        const newItem: LineItem = { description: item.name, quantity: 1, unit_price: item.unit_price, total: item.unit_price };
-        const last = formData.line_items[formData.line_items.length - 1];
-        if (formData.line_items.length === 1 && !last.description && last.unit_price === 0) {
-            setFormData(prev => ({ ...prev, line_items: [newItem] }));
-        } else {
-            setFormData(prev => ({ ...prev, line_items: [...prev.line_items, newItem] }));
-        }
     };
 
     const handleUpdateExistingCustomer = async () => {
@@ -698,81 +649,15 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                             </div>
 
                             {/* Line Items */}
-                            <div className="border-t border-gray-200 pt-4">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h4 className="text-lg font-medium text-gray-900">Fakturarader</h4>
-                                    <div className="flex items-center space-x-2">
-                                        {savedLineItems.length > 0 && (
-                                            <select
-                                                onChange={e => { handleAddSavedItem(e.target.value); e.target.value = ''; }}
-                                                className="px-3 py-1.5 border border-gray-300 rounded-md text-sm"
-                                                value=""
-                                            >
-                                                <option value="" disabled>Sparade artiklar...</option>
-                                                {savedLineItems.map(item => (
-                                                    <option key={item.id} value={item.id}>
-                                                        {item.name} - {formatCurrency(item.unit_price)}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        )}
-                                        <button type="button" onClick={addLineItem}
-                                            className="inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                                            <Plus className="w-4 h-4 mr-1" /> Lägg till rad
-                                        </button>
-                                    </div>
-                                </div>
+                            <div className="border-t border-gray-200 pt-4 space-y-4">
+                                <LineItemsEditor
+                                    lineItems={formData.line_items}
+                                    onChange={items => setFormData(prev => ({ ...prev, line_items: items }))}
+                                />
 
-                                <div className="space-y-3">
-                                    {formData.line_items.map((item, index) => (
-                                        <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                                            <div className="col-span-5">
-                                                {index === 0 && <label className="block text-xs font-medium text-gray-700 mb-1">Beskrivning</label>}
-                                                <input type="text" value={item.description}
-                                                    onChange={e => updateLineItem(index, 'description', e.target.value)}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                                    placeholder="Beskrivning av tjänst/produkt"
-                                                />
-                                            </div>
-                                            <div className="col-span-2">
-                                                {index === 0 && <label className="block text-xs font-medium text-gray-700 mb-1">Antal</label>}
-                                                <input type="number" min="0" step="0.01" value={item.quantity}
-                                                    onChange={e => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                                />
-                                            </div>
-                                            <div className="col-span-2">
-                                                {index === 0 && <label className="block text-xs font-medium text-gray-700 mb-1">Enhetspris</label>}
-                                                <input type="number" min="0" step="0.01" value={item.unit_price}
-                                                    onChange={e => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                                />
-                                            </div>
-                                            <div className="col-span-2">
-                                                {index === 0 && <label className="block text-xs font-medium text-gray-700 mb-1">Totalt</label>}
-                                                <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm">
-                                                    {formatCurrency(item.total)}
-                                                </div>
-                                            </div>
-                                            <div className="col-span-1">
-                                                {formData.line_items.length > 1 && (
-                                                    <button type="button" onClick={() => removeLineItem(index)}
-                                                        className="p-2 text-red-600 hover:text-red-900">
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Totals */}
-                                <div className="mt-6 bg-gray-50 p-4 rounded-lg">
+                                {/* Totals (VAT breakdown) */}
+                                <div className="bg-gray-50 p-4 rounded-lg">
                                     <div className="space-y-2">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-gray-600">Delsumma</span>
-                                            <span className="font-medium">{formatCurrency(calculateSubtotal())}</span>
-                                        </div>
                                         <div className="flex justify-between text-sm">
                                             <span className="text-gray-600">
                                                 {getActiveVatHandling() === 'omvänd byggmoms'
@@ -782,7 +667,7 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                                             <span className="font-medium">{formatCurrency(calculateVAT())}</span>
                                         </div>
                                         <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                                            <span>Totalt</span>
+                                            <span>Totalt inkl. moms</span>
                                             <span className="text-emerald-600">{formatCurrency(calculateTotal())}</span>
                                         </div>
                                     </div>
