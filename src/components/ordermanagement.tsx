@@ -610,7 +610,7 @@ function InfoItem({ icon: Icon, label, value }: { icon: React.ElementType, label
   );
 }
 
-function OrderEditModal({ order, customers, users, teams, leads, onClose, onSave }: {
+export function OrderEditModal({ order, customers, users, teams, leads, onClose, onSave }: {
   order: OrderWithRelations | null;
   customers: Customer[];
   users: UserProfile[];

@@ -13,17 +13,14 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   X,
-  Save,
   Trash2,
   Edit,
-  Edit2,
   User,
   Users,
   Users2,
   Mail,
   Phone,
   MapPin,
-  Building2,
   Star,
   Crown,
   MessageSquare,
@@ -39,7 +36,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { useTranslation } from '../locales/sv';
-import { formatCurrency, formatDate, formatDateTime, getTeamMembers, getCustomers, updateCustomer } from '../lib/database';
+import { formatCurrency, formatDate, formatDateTime, getTeamMembers, getCustomers, getLeads } from '../lib/database';
 import { getTeams } from '../lib/teams';
 import {
   getOrder,
@@ -57,22 +54,18 @@ import {
   type OrderWithRelations,
   type OrderAttachment,
 } from '../lib/orders';
-import { getProductLibrary, type ProductLibraryItem, UNIT_DESCRIPTIONS } from '../lib/quoteTemplates';
 import {
   JOB_TYPE_LABELS,
   TEAM_SPECIALTY_LABELS,
   getTeamSpecialtyColor,
   getJobTypeColor,
   type OrderStatus,
-  type JobType,
-  type AssignmentType,
   type UserProfile,
   type Customer,
+  type Lead,
 } from '../types/database';
 import type { TeamWithRelations } from '../lib/teams';
 
-import ROTFields from './ROTFields';
-import RUTFields from './RUTFields';
 import SendQuoteModal from './SendQuoteModal';
 import ROTInformation from './ROTInformation';
 import RUTInformation from './RUTInformation';
@@ -82,6 +75,7 @@ import StatusChangeHistory from './StatusChangeHistory';
 import CommunicationPanel from './CommunicationPanel';
 import CommissionAssignmentForm from './CommissionAssignmentForm';
 import ConfirmDialog from './ConfirmDialog';
+import { OrderEditModal } from './ordermanagement';
 
 // Lazy load heavy composer modals
 const EmailComposer = lazy(() => import('./EmailComposer'));
@@ -103,53 +97,6 @@ export interface OrderDetailModalProps {
 
 type TabType = 'details' | 'communication' | 'history' | 'attachments';
 
-interface EditFormState {
-  id: string;
-  title: string;
-  description: string;
-  job_description: string;
-  job_type: JobType;
-  value: string;
-  estimated_hours: string;
-  complexity_level: string;
-  assignment_type: AssignmentType;
-  assigned_to_user_id: string;
-  assigned_to_team_id: string;
-  customer_id: string;
-  region: string;
-  include_rot: boolean;
-  rot_personnummer: string | null;
-  rot_organisationsnummer: string | null;
-  rot_fastighetsbeteckning: string | null;
-  rot_amount: number;
-  include_rut: boolean;
-  rut_personnummer: string | null;
-  rut_amount: number;
-}
-
-const buildEditForm = (o: OrderWithRelations | null): EditFormState => ({
-  id: o?.id || '',
-  title: o?.title || '',
-  description: o?.description || '',
-  job_description: o?.job_description || '',
-  job_type: (o?.job_type || 'allmänt') as JobType,
-  value: o?.value?.toString() || '',
-  estimated_hours: o?.estimated_hours?.toString() || '',
-  complexity_level: o?.complexity_level?.toString() || '3',
-  assignment_type: (o?.assignment_type || 'individual') as AssignmentType,
-  assigned_to_user_id: o?.assigned_to_user_id || '',
-  assigned_to_team_id: o?.assigned_to_team_id || '',
-  customer_id: o?.customer_id || '',
-  region: o?.region || '',
-  include_rot: o?.include_rot || false,
-  rot_personnummer: o?.rot_personnummer || null,
-  rot_organisationsnummer: o?.rot_organisationsnummer || null,
-  rot_fastighetsbeteckning: o?.rot_fastighetsbeteckning || null,
-  rot_amount: o?.rot_amount || 0,
-  include_rut: o?.include_rut || false,
-  rut_personnummer: o?.rut_personnummer || null,
-  rut_amount: o?.rut_amount || 0,
-});
 
 // ============================================================================
 // Component
@@ -182,14 +129,8 @@ function OrderDetailModal({
 
   // UI state
   const [activeTab, setActiveTab] = useState<TabType>('details');
-  const [isEditing, setIsEditing] = useState(false);
-  const [editFormData, setEditFormData] = useState<EditFormState>(buildEditForm(null));
-  const [formLoading, setFormLoading] = useState(false);
-
-  // Line items editing state
-  type EditLineItem = { name: string; description: string; quantity: number; unit_price: number; unit: string; };
-  const [editLineItems, setEditLineItems] = useState<EditLineItem[]>([{ name: '', description: '', quantity: 1, unit_price: 0, unit: '' }]);
-  const [products, setProducts] = useState<ProductLibraryItem[]>([]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [leads, setLeads] = useState<Lead[]>([]);
 
   // Notes
   const [newNote, setNewNote] = useState('');
@@ -197,11 +138,6 @@ function OrderDetailModal({
 
   // Attachments
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
-
-  // Inline customer edit
-  const [isEditingCustomer, setIsEditingCustomer] = useState(false);
-  const [customerEditForm, setCustomerEditForm] = useState<Partial<Customer>>({});
-  const [savingCustomer, setSavingCustomer] = useState(false);
 
   // Modals
   const [showCommissionModal, setShowCommissionModal] = useState(false);
@@ -262,60 +198,36 @@ function OrderDetailModal({
     }
     // Reset UI state when (re)opening
     setActiveTab('details');
-    setIsEditing(false);
-    setIsEditingCustomer(false);
+    setShowEditModal(false);
     setNewNote('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, orderId, orderProp?.id]);
 
-  // Whenever the underlying order changes, refresh related data & edit form
+  // Whenever the underlying order changes, refresh related data
   useEffect(() => {
     if (order?.id) {
       loadRelated(order.id);
-      setEditFormData(buildEditForm(order));
-
-      // Initialise line items from the order's linked quote
-      const rawQuote = (order as any).quote;
-      const quote = Array.isArray(rawQuote) ? rawQuote[0] : rawQuote;
-      const existingItems = quote?.quote_line_items;
-      if (existingItems && existingItems.length > 0) {
-        setEditLineItems(existingItems.map((item: any) => ({
-          name: item.name || item.description || '',
-          description: item.description || '',
-          quantity: item.quantity || 1,
-          unit_price: item.unit_price || 0,
-          unit: item.unit || '',
-        })));
-      } else {
-        setEditLineItems([{ name: '', description: '', quantity: 1, unit_price: 0, unit: '' }]);
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id]);
 
-  // Load product library for the line-item picker
-  useEffect(() => {
-    if (!isOpen || !organisationId) return;
-    getProductLibrary(organisationId).then(({ data }) => {
-      if (data) setProducts(data);
-    }).catch(() => undefined);
-  }, [isOpen, organisationId]);
-
-  // Load team members/teams/customers once (needed for edit dropdowns)
+  // Load team members/teams/customers/leads once (needed for edit modal dropdowns)
   useEffect(() => {
     if (!isOpen || !organisationId) return;
     let cancelled = false;
     (async () => {
       try {
-        const [membersRes, teamsRes, customersRes] = await Promise.all([
+        const [membersRes, teamsRes, customersRes, leadsRes] = await Promise.all([
           getTeamMembers(organisationId),
           getTeams(organisationId),
           getCustomers(organisationId),
+          getLeads(organisationId),
         ]);
         if (cancelled) return;
         if (membersRes.data) setTeamMembers(membersRes.data);
         if (teamsRes.data) setTeams(teamsRes.data);
         if (customersRes.data) setCustomers(customersRes.data);
+        if (leadsRes.data) setLeads(leadsRes.data);
       } catch (err) {
         console.error('Error loading edit data:', err);
       }
@@ -325,106 +237,36 @@ function OrderDetailModal({
     };
   }, [isOpen, organisationId]);
 
-  // Sync customerEditForm whenever selected customer changes
-  useEffect(() => {
-    const selected = customers.find(c => c.id === editFormData.customer_id);
-    if (selected) setCustomerEditForm({ ...selected });
-    setIsEditingCustomer(false);
-  }, [editFormData.customer_id, customers]);
-
   // ---------------------------------------------------------------
   // Mutations
   // ---------------------------------------------------------------
 
-  const handleUpdateOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleOrderSave = async (formData: any) => {
     if (!order) return;
-
-    if (!editFormData.title.trim() || !editFormData.job_description.trim()) {
-      showError(kanban.MESSAGES.ERROR_TITLE, kanban.MESSAGES.MISSING_FIELDS);
-      return;
-    }
-
     try {
-      setFormLoading(true);
-      const updates = {
-        title: editFormData.title.trim(),
-        description: editFormData.description.trim() || null,
-        job_description: editFormData.job_description.trim(),
-        job_type: editFormData.job_type,
-        value: editFormData.value ? parseFloat(editFormData.value) : null,
-        estimated_hours: editFormData.estimated_hours
-          ? parseFloat(editFormData.estimated_hours)
-          : null,
-        complexity_level: parseInt(editFormData.complexity_level),
-        assignment_type: editFormData.assignment_type,
-        assigned_to_user_id:
-          editFormData.assignment_type === 'individual'
-            ? editFormData.assigned_to_user_id
-            : null,
-        assigned_to_team_id:
-          editFormData.assignment_type === 'team'
-            ? editFormData.assigned_to_team_id
-            : null,
-        customer_id: editFormData.customer_id || null,
-        region: editFormData.region.trim() || null,
-        include_rot: editFormData.include_rot,
-        rot_personnummer: editFormData.rot_personnummer,
-        rot_organisationsnummer: editFormData.rot_organisationsnummer,
-        rot_fastighetsbeteckning: editFormData.rot_fastighetsbeteckning,
-        rot_amount: editFormData.rot_amount,
-        include_rut: editFormData.include_rut,
-        rut_personnummer: editFormData.rut_personnummer,
-        rut_amount: editFormData.rut_amount,
-      };
+      const { line_items, notes: _notes, ...orderFields } = formData;
 
-      // Only include line items that have a name
-      const validLineItems = editLineItems.filter(item => item.name.trim() !== '');
-      const result = await updateOrderAndQuote(order.id, updates, validLineItems);
+      // Convert empty strings to null for FK fields
+      if (orderFields.assigned_to_user_id === '') orderFields.assigned_to_user_id = null;
+      if (orderFields.assigned_to_team_id === '') orderFields.assigned_to_team_id = null;
+      if (orderFields.lead_id === '') orderFields.lead_id = null;
+      if (orderFields.primary_salesperson_id === '') orderFields.primary_salesperson_id = null;
+      if (orderFields.secondary_salesperson_id === '') orderFields.secondary_salesperson_id = null;
+
+      const result = await updateOrderAndQuote(order.id, orderFields, line_items || []);
       if (result.error) {
         showError('Fel', result.error.message);
         return;
       }
 
       success(kanban.MESSAGES.SUCCESS_TITLE, kanban.MESSAGES.ORDER_UPDATED);
-      setIsEditing(false);
+      setShowEditModal(false);
       createOrderActivity(order.id, user?.id ?? null, 'order_updated', 'Orderdetaljer uppdaterade').catch(() => undefined);
       await loadOrder();
       onOrderUpdated?.();
     } catch (err) {
       console.error('Error updating order:', err);
       showError(kanban.MESSAGES.ERROR_TITLE, kanban.MESSAGES.ERROR_UPDATE);
-    } finally {
-      setFormLoading(false);
-    }
-  };
-
-  const handleUpdateExistingCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customerEditForm.id) return;
-    setSavingCustomer(true);
-    try {
-      const { error } = await updateCustomer(customerEditForm.id, {
-        name: customerEditForm.name,
-        email: customerEditForm.email,
-        phone_number: customerEditForm.phone_number,
-        org_number: customerEditForm.org_number,
-        address: customerEditForm.address,
-        postal_code: customerEditForm.postal_code,
-        city: customerEditForm.city,
-        sales_area: (customerEditForm as any).sales_area || null,
-        vat_handling: (customerEditForm as any).vat_handling as any,
-        invoice_delivery_method: (customerEditForm as any).invoice_delivery_method as any,
-        e_invoice_address: (customerEditForm as any).e_invoice_address || null,
-      });
-      if (error) { showError('Fel', error.message); return; }
-      success('Klart', 'Kunduppgifter sparade.');
-      setIsEditingCustomer(false);
-      await loadOrder();
-    } catch (err: any) {
-      showError('Fel', 'Kunde inte spara kunduppgifter.');
-    } finally {
-      setSavingCustomer(false);
     }
   };
 
@@ -599,15 +441,13 @@ function OrderDetailModal({
                   Kontakta
                 </button>
               )}
-              {!isEditing && (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="text-gray-400 hover:text-primary-600"
-                  title="Redigera"
-                >
-                  <Edit className="w-5 h-5" />
-                </button>
-              )}
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="text-gray-400 hover:text-primary-600"
+                title="Redigera"
+              >
+                <Edit className="w-5 h-5" />
+              </button>
               <button
                 onClick={() => setShowDeleteDialog(true)}
                 className="text-gray-400 hover:text-error-600"
@@ -621,563 +461,6 @@ function OrderDetailModal({
             </div>
           </div>
 
-          {/* ============ EDIT MODE ============ */}
-          {isEditing ? (
-            <form onSubmit={handleUpdateOrder} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {forms.TITLE} *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editFormData.title}
-                  onChange={(e) =>
-                    setEditFormData((prev) => ({ ...prev, title: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
-
-              {/* Customer Section */}
-              <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">Kund</label>
-                  {editFormData.customer_id && !isEditingCustomer && (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingCustomer(true)}
-                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                      Redigera kunduppgifter
-                    </button>
-                  )}
-                </div>
-                <select
-                  value={editFormData.customer_id}
-                  onChange={(e) =>
-                    setEditFormData((prev) => ({ ...prev, customer_id: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                >
-                  <option value="">— Välj kund —</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-
-                {/* Inline customer edit */}
-                {editFormData.customer_id && isEditingCustomer && (
-                  <form onSubmit={handleUpdateExistingCustomer} className="space-y-3 pt-2 border-t border-gray-100">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Redigera kund</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Namn</label>
-                        <input
-                          type="text"
-                          value={customerEditForm.name || ''}
-                          onChange={e => setCustomerEditForm(p => ({ ...p, name: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">E-post</label>
-                        <input
-                          type="email"
-                          value={customerEditForm.email || ''}
-                          onChange={e => setCustomerEditForm(p => ({ ...p, email: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Telefon</label>
-                        <input
-                          type="text"
-                          value={customerEditForm.phone_number || ''}
-                          onChange={e => setCustomerEditForm(p => ({ ...p, phone_number: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">
-                          {customerEditForm.customer_type === 'company' ? 'Org.nummer' : 'Personnummer'}
-                        </label>
-                        <input
-                          type="text"
-                          value={customerEditForm.org_number || ''}
-                          onChange={e => setCustomerEditForm(p => ({ ...p, org_number: e.target.value }))}
-                          placeholder={customerEditForm.customer_type === 'company' ? '556xxx-xxxx' : 'ÅÅMMDD-XXXX'}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Adress</label>
-                        <input
-                          type="text"
-                          value={customerEditForm.address || ''}
-                          onChange={e => setCustomerEditForm(p => ({ ...p, address: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Postnr</label>
-                          <input
-                            type="text"
-                            value={customerEditForm.postal_code || ''}
-                            onChange={e => setCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))}
-                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Stad</label>
-                          <input
-                            type="text"
-                            value={customerEditForm.city || ''}
-                            onChange={e => setCustomerEditForm(p => ({ ...p, city: e.target.value }))}
-                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Försäljningsområde</label>
-                          <input
-                            type="text"
-                            value={(customerEditForm as any).sales_area || ''}
-                            onChange={e => setCustomerEditForm(p => ({ ...p, sales_area: e.target.value }))}
-                            placeholder="t.ex. Stockholm"
-                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Momshantering</label>
-                          <select
-                            value={(customerEditForm as any).vat_handling || '25%'}
-                            onChange={e => setCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}
-                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                          >
-                            <option value="25%">25% moms</option>
-                            <option value="12%">12% moms</option>
-                            <option value="6%">6% moms</option>
-                            <option value="0%">Momsfri (0%)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Fakturaleverans</label>
-                          <select
-                            value={(customerEditForm as any).invoice_delivery_method || 'e-post'}
-                            onChange={e => setCustomerEditForm(p => ({ ...p, invoice_delivery_method: e.target.value }))}
-                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                          >
-                            <option value="e-post">E-post</option>
-                            <option value="e-faktura">E-faktura</option>
-                            <option value="post">Post</option>
-                          </select>
-                        </div>
-                        {(customerEditForm as any).invoice_delivery_method === 'e-faktura' && (
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">E-fakturaadress</label>
-                            <input
-                              type="text"
-                              value={(customerEditForm as any).e_invoice_address || ''}
-                              onChange={e => setCustomerEditForm(p => ({ ...p, e_invoice_address: e.target.value }))}
-                              placeholder="GLN / PEPPOL-ID"
-                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const original = customers.find(c => c.id === editFormData.customer_id);
-                          if (original) setCustomerEditForm({ ...original });
-                          setIsEditingCustomer(false);
-                        }}
-                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-md"
-                      >
-                        Avbryt
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={savingCustomer}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        {savingCustomer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                        Spara kund
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
-
-              {/* Region */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Område</label>
-                <input
-                  type="text"
-                  placeholder="t.ex. Stockholm, Göteborg"
-                  value={editFormData.region}
-                  onChange={(e) =>
-                    setEditFormData((prev) => ({ ...prev, region: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {forms.DESCRIPTION}
-                </label>
-                <textarea
-                  value={editFormData.description}
-                  onChange={(e) =>
-                    setEditFormData((prev) => ({ ...prev, description: e.target.value }))
-                  }
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {forms.JOB_DESCRIPTION} *
-                </label>
-                <textarea
-                  required
-                  value={editFormData.job_description}
-                  onChange={(e) =>
-                    setEditFormData((prev) => ({
-                      ...prev,
-                      job_description: e.target.value,
-                    }))
-                  }
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {forms.VALUE}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={editFormData.value}
-                    onChange={(e) =>
-                      setEditFormData((prev) => ({ ...prev, value: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {forms.JOB_TYPE}
-                  </label>
-                  <select
-                    value={editFormData.job_type}
-                    onChange={(e) =>
-                      setEditFormData((prev) => ({
-                        ...prev,
-                        job_type: e.target.value as JobType,
-                      }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  >
-                    {Object.entries(JOB_TYPE_LABELS).map(([k, label]) => (
-                      <option key={k} value={k}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {forms.ESTIMATED_HOURS}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    value={editFormData.estimated_hours}
-                    onChange={(e) =>
-                      setEditFormData((prev) => ({
-                        ...prev,
-                        estimated_hours: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {forms.COMPLEXITY}
-                  </label>
-                  <select
-                    value={editFormData.complexity_level}
-                    onChange={(e) =>
-                      setEditFormData((prev) => ({
-                        ...prev,
-                        complexity_level: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  >
-                    <option value="1">1 - Mycket enkelt</option>
-                    <option value="2">2 - Enkelt</option>
-                    <option value="3">3 - Medel</option>
-                    <option value="4">4 - Svårt</option>
-                    <option value="5">5 - Mycket svårt</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Line Items */}
-              <div className="border-t border-gray-200 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Orderrader</h4>
-                <div className="space-y-2">
-                  {editLineItems.map((item, idx) => {
-                    const lineTotal = (item.quantity || 0) * (item.unit_price || 0);
-                    return (
-                      <div key={idx} className="grid grid-cols-12 gap-2 items-start">
-                        {/* Product picker (optional) */}
-                        <select
-                          className="col-span-3 px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                          value=""
-                          onChange={e => {
-                            const prod = products.find(p => p.id === e.target.value);
-                            if (!prod) return;
-                            const updated = [...editLineItems];
-                            updated[idx] = { ...updated[idx], name: prod.name, description: prod.description || '', unit_price: prod.unit_price || 0, unit: prod.unit || '' };
-                            setEditLineItems(updated);
-                          }}
-                        >
-                          <option value="">Välj från bibliotek…</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        {/* Name (required) */}
-                        <input
-                          type="text"
-                          placeholder="Namn *"
-                          value={item.name}
-                          onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], name: e.target.value }; setEditLineItems(u); }}
-                          className="col-span-3 px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                        />
-                        {/* Quantity */}
-                        <input
-                          type="number"
-                          placeholder="Antal"
-                          value={item.quantity}
-                          min={0}
-                          step={0.5}
-                          onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], quantity: parseFloat(e.target.value) || 0 }; setEditLineItems(u); }}
-                          className="col-span-1 px-2 py-1.5 text-xs border border-gray-300 rounded-md text-right"
-                        />
-                        {/* Unit */}
-                        <select
-                          value={item.unit}
-                          onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], unit: e.target.value }; setEditLineItems(u); }}
-                          className="col-span-2 px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                        >
-                          {Object.entries(UNIT_DESCRIPTIONS).map(([val, label]) => (
-                            <option key={val} value={val}>{label}</option>
-                          ))}
-                        </select>
-                        {/* Unit price */}
-                        <input
-                          type="number"
-                          placeholder="À-pris"
-                          value={item.unit_price}
-                          min={0}
-                          step={0.01}
-                          onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], unit_price: parseFloat(e.target.value) || 0 }; setEditLineItems(u); }}
-                          className="col-span-2 px-2 py-1.5 text-xs border border-gray-300 rounded-md text-right"
-                        />
-                        {/* Row total */}
-                        <div className="col-span-1 py-1.5 text-xs text-right text-gray-600 font-medium">
-                          {formatCurrency(lineTotal)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditLineItems(prev => [...prev, { name: '', description: '', quantity: 1, unit_price: 0, unit: '' }])}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> Lägg till rad
-                  </button>
-                  {editLineItems.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setEditLineItems(prev => prev.slice(0, -1))}
-                      className="text-xs text-red-500 hover:text-red-700"
-                    >
-                      Ta bort sista
-                    </button>
-                  )}
-                  <div className="text-sm font-semibold text-gray-900">
-                    Totalt: {formatCurrency(editLineItems.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0))}
-                  </div>
-                </div>
-              </div>
-
-              {/* ROT / RUT Fields */}
-              <div className="border-t border-gray-200 pt-4 space-y-4">
-                <ROTFields
-                  data={{
-                    include_rot: editFormData.include_rot,
-                    rot_personnummer: editFormData.rot_personnummer,
-                    rot_organisationsnummer: editFormData.rot_organisationsnummer,
-                    rot_fastighetsbeteckning: editFormData.rot_fastighetsbeteckning,
-                    rot_amount: editFormData.rot_amount,
-                  }}
-                  onChange={(rotData) =>
-                    setEditFormData((prev) => ({
-                      ...prev,
-                      ...rotData,
-                      rot_amount: rotData.rot_amount || 0,
-                      // Mutual exclusion: disable RUT when ROT is enabled
-                      ...(rotData.include_rot ? { include_rut: false, rut_personnummer: null, rut_amount: 0 } : {}),
-                    }))
-                  }
-                  totalAmount={parseFloat(editFormData.value) || 0}
-                />
-                <RUTFields
-                  data={{
-                    include_rut: editFormData.include_rut,
-                    rut_personnummer: editFormData.rut_personnummer,
-                    rut_amount: editFormData.rut_amount,
-                  }}
-                  onChange={(rutData) =>
-                    setEditFormData((prev) => ({
-                      ...prev,
-                      ...rutData,
-                      rut_amount: rutData.rut_amount || 0,
-                      // Mutual exclusion: disable ROT when RUT is enabled
-                      ...(rutData.include_rut ? { include_rot: false, rot_personnummer: null, rot_organisationsnummer: null, rot_fastighetsbeteckning: null, rot_amount: 0 } : {}),
-                    }))
-                  }
-                  totalAmount={parseFloat(editFormData.value) || 0}
-                />
-              </div>
-
-              {/* Assignment */}
-              <div className="border-t border-gray-200 pt-4">
-                <h4 className="font-medium text-gray-900 mb-4">{forms.ASSIGNMENT}</h4>
-                <div className="space-y-4">
-                  <div className="flex space-x-4">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        value="individual"
-                        checked={editFormData.assignment_type === 'individual'}
-                        onChange={(e) =>
-                          setEditFormData((prev) => ({
-                            ...prev,
-                            assignment_type: e.target.value as AssignmentType,
-                            assigned_to_team_id: '',
-                          }))
-                        }
-                        className="h-4 w-4 text-primary-600"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">{forms.INDIVIDUAL}</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        value="team"
-                        checked={editFormData.assignment_type === 'team'}
-                        onChange={(e) =>
-                          setEditFormData((prev) => ({
-                            ...prev,
-                            assignment_type: e.target.value as AssignmentType,
-                            assigned_to_user_id: '',
-                          }))
-                        }
-                        className="h-4 w-4 text-primary-600"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">{forms.TEAM}</span>
-                    </label>
-                  </div>
-                  <div>
-                    {editFormData.assignment_type === 'individual' ? (
-                      <select
-                        value={editFormData.assigned_to_user_id || ''}
-                        onChange={(e) =>
-                          setEditFormData((prev) => ({
-                            ...prev,
-                            assigned_to_user_id: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      >
-                        <option value="">{forms.SELECT_PERSON}</option>
-                        {teamMembers.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.full_name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <select
-                        value={editFormData.assigned_to_team_id || ''}
-                        onChange={(e) =>
-                          setEditFormData((prev) => ({
-                            ...prev,
-                            assigned_to_team_id: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      >
-                        <option value="">{forms.SELECT_TEAM}</option>
-                        {teams.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsEditing(false);
-                    setEditFormData(buildEditForm(order));
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium"
-                >
-                  {actions.CANCEL}
-                </button>
-                <button
-                  type="submit"
-                  disabled={formLoading}
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
-                >
-                  {formLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  ) : (
-                    <Save className="w-4 h-4 mr-2" />
-                  )}
-                  {forms.SAVE_CHANGES}
-                </button>
-              </div>
-            </form>
-          ) : (
             <>
               {/* Tabs */}
               <div className="border-b border-gray-200">
@@ -1713,9 +996,21 @@ function OrderDetailModal({
                 </div>
               )}
             </>
-          )}
         </div>
       </div>
+
+      {/* =========== EDIT MODAL =========== */}
+      {showEditModal && order && (
+        <OrderEditModal
+          order={order}
+          customers={customers}
+          users={teamMembers}
+          teams={teams}
+          leads={leads}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleOrderSave}
+        />
+      )}
 
       {/* =========== SUB-MODALS =========== */}
       {isEmailComposerOpen && order.customer && (

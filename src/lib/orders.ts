@@ -311,7 +311,8 @@ export const createOrder = async (
 
     // Log activity
     if (data) {
-      await createOrderActivity(data.id, null, 'created', 'Order skapad');
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      await createOrderActivity(data.id, authUser?.id || null, 'created', 'Order skapad');
     }
 
     return { data, error: null };
@@ -378,7 +379,8 @@ export const createOrderWithQuote = async (
       if (itemsError) throw itemsError;
     }
 
-    await createOrderActivity(newOrderData.id, null, 'created', 'Order skapad');
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    await createOrderActivity(newOrderData.id, authUser?.id || null, 'created', 'Order skapad');
     const { data: finalOrder, error: refetchError } = await getOrder(newOrderData.id);
     if (refetchError) throw refetchError;
 
@@ -524,6 +526,9 @@ export const updateOrder = async (
 
     // Log activities for significant changes
     if (data && currentOrder) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const actorId = authUser?.id || null;
+
       if (updates.status && updates.status !== currentOrder.status) {
         // Send notification to assigned user about status change
         if (data.assigned_to_user_id) {
@@ -538,7 +543,7 @@ export const updateOrder = async (
 
         await createOrderActivity(
           id,
-          null,
+          actorId,
           'status_changed',
           `Status ändrad från ${ORDER_STATUS_LABELS[currentOrder.status]} till ${ORDER_STATUS_LABELS[updates.status]}`,
           currentOrder.status,
@@ -559,7 +564,7 @@ export const updateOrder = async (
 
         await createOrderActivity(
           id,
-          null,
+          actorId,
           'assigned',
           updates.assigned_to_user_id
             ? 'Order tilldelad'
@@ -582,7 +587,7 @@ export const updateOrder = async (
 
         await createOrderActivity(
           id,
-          null,
+          actorId,
           'team_assigned',
           updates.assigned_to_team_id
             ? `Order tilldelad till team: ${data.assigned_team?.name}`
