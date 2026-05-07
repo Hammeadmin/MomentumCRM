@@ -10,6 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { createOrder, createOrderWithQuote } from '../lib/orders';
 import { getCustomers, getTeamMembers, createCustomer, updateCustomer, getLeads } from '../lib/database';
+import { updateLead } from '../lib/leads';
 import { supabase } from '../lib/supabase';
 import ROTFields from './ROTFields';
 import RUTFields from './RUTFields';
@@ -242,6 +243,11 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
 
       if (result.error) { showError('Fel', result.error.message); return; }
       success('Order skapad', `${formData.title} har skapats`);
+      if (formData.lead_id) {
+        updateLead(formData.lead_id, { status: 'won' }).catch(err =>
+          console.error('Failed to mark lead as won after order creation:', err)
+        );
+      }
       onOrderCreated?.();
       onClose();
       resetForm();

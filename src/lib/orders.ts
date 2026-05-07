@@ -343,33 +343,72 @@ export const createOrderWithQuote = async (
     if (orderError) throw new Error(`Failed to create order: ${orderError.message}`);
     if (!newOrderData) throw new Error('Order creation did not return data.');
 
-    const { data: quoteNumber } = await supabase.rpc('generate_quote_number', {
-      org_id: organisationId
-    });
     const totalAmount = lineItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0);
 
-    const { data: quoteData, error: quoteError } = await supabase
-      .from('quotes')
-      .insert({
-        organisation_id: organisationId,
-        customer_id: orderData.customer_id,
-        order_id: newOrderData.id,
-        status: 'draft',
-        title: `Quote for ${orderData.title}`,
-        total_amount: totalAmount,
-        quote_number: quoteNumber
+    // If this order is linked to a lead, check for an existing unlinked draft quote for
+    // that lead and repurpose it rather than creating a phantom duplicate.
+    let quoteId: string | null = null;
 
-      })
-      .select('id')
-      .single();
+    if (orderData.lead_id) {
+      const { data: existingDraftQuote } = await supabase
+        .from('quotes')
+        .select('id')
+        .eq('lead_id', orderData.lead_id)
+        .eq('status', 'draft')
+        .is('order_id', null)       // not already linked to another order
+        .maybeSingle();
 
-    if (quoteError) throw new Error(`Failed to create quote: ${quoteError.message}`);
+      if (existingDraftQuote) {
+        // Repurpose the existing customer-facing draft quote: link it to the new
+        // order, update its total, and mark it accepted (the deal is now closed).
+        const { error: repurposeError } = await supabase
+          .from('quotes')
+          .update({
+            order_id: newOrderData.id,
+            total_amount: totalAmount,
+            status: 'accepted',
+          })
+          .eq('id', existingDraftQuote.id);
+
+        if (repurposeError) throw new Error(`Failed to repurpose existing quote: ${repurposeError.message}`);
+
+        // Replace its line items with the ones from this order.
+        await supabase.from('quote_line_items').delete().eq('quote_id', existingDraftQuote.id);
+
+        quoteId = existingDraftQuote.id;
+      }
+    }
+
+    // No existing draft quote found (or no lead linked) — create a fresh backing quote.
+    // Status is 'accepted' immediately: this quote was never customer-facing.
+    if (!quoteId) {
+      const { data: quoteNumber } = await supabase.rpc('generate_quote_number', {
+        org_id: organisationId
+      });
+
+      const { data: newQuote, error: quoteError } = await supabase
+        .from('quotes')
+        .insert({
+          organisation_id: organisationId,
+          customer_id: orderData.customer_id,
+          lead_id: orderData.lead_id || null,
+          order_id: newOrderData.id,
+          status: 'accepted',
+          title: `Quote for ${orderData.title}`,
+          total_amount: totalAmount,
+          quote_number: quoteNumber,
+        })
+        .select('id')
+        .single();
+
+      if (quoteError) throw new Error(`Failed to create quote: ${quoteError.message}`);
+      quoteId = newQuote!.id;
+    }
 
     if (lineItems && lineItems.length > 0) {
-      // This now matches the database schema perfectly.
       const lineItemsToInsert = lineItems.map((item, index) => ({
         ...item,
-        quote_id: quoteData!.id,
+        quote_id: quoteId,
         organisation_id: organisationId,
         is_library_item: false,
         total: (item.quantity || 0) * (item.unit_price || 0),
@@ -432,7 +471,7 @@ export const updateOrderAndQuote = async (
         .insert({
           order_id: orderId, quote_number: quoteNumber,
           organisation_id: order!.organisation_id, customer_id: order!.customer_id,
-          title: `Quote for ${order!.title}`, status: 'draft',
+          title: `Quote for ${order!.title}`, status: 'accepted',
           total_amount: totalAmount,
         }).select('id').single();
       quote = newQuote;

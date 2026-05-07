@@ -7,6 +7,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { getOrders, updateOrder, createOrder, createOrderWithQuote, updateOrderAndQuote, deleteOrder, type OrderWithRelations } from '../lib/orders';
 import { getUserProfiles, getCustomers, updateCustomer, getLeads } from '../lib/database';
+import { updateLead } from '../lib/leads';
 import type { UserProfile, Customer, OrderStatus, Lead } from '../types/database';
 import LineItemsEditor, { type LineItem } from './LineItemsEditor';
 import EmptyState from './EmptyState';
@@ -235,6 +236,11 @@ export function Ordermanagement() {
         if (error) throw error;
         setOrders(prev => [data!, ...prev]);
         addToast("Ny order skapad!", 'success');
+        if (orderData.lead_id) {
+          updateLead(orderData.lead_id, { status: 'won' }).catch(err =>
+            console.error('Failed to mark lead as won after order creation:', err)
+          );
+        }
       }
       setIsEditModalOpen(false);
       setSelectedOrder(null);
