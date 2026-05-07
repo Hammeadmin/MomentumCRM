@@ -99,10 +99,11 @@ export function ProductConfigurator({ item, isOpen, onClose, onConfirm }: Produc
             quantity: 1,
             unit_price: displayPrice,
             total: displayPrice,
+            unit: meta.unit || '',
             category: meta.category,
             is_library_item: true,
         });
-    }, [onConfirm, item, displayPrice, meta.category]);
+    }, [onConfirm, item, displayPrice, meta.unit, meta.category]);
 
     if (!isOpen) return null;
 

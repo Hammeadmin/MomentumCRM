@@ -21,6 +21,7 @@ export interface LineItem {
     quantity: number;
     unit_price: number;
     total: number;
+    unit?: string;
     name?: string;
     category?: string;
     is_library_item?: boolean;
@@ -71,7 +72,8 @@ export function LineItemsEditor({
             description: '',
             quantity: 1,
             unit_price: 0,
-            total: 0
+            total: 0,
+            unit: '',
         };
         onChange([...lineItems, newItem]);
     };
@@ -93,6 +95,7 @@ export function LineItemsEditor({
                 quantity: 1,
                 unit_price: savedItem.unit_price,
                 total: savedItem.unit_price,
+                unit: savedItem.metadata?.unit || '',
                 is_library_item: true,
             };
             onChange([...lineItems, newItem]);
@@ -239,8 +242,9 @@ export function LineItemsEditor({
                         {/* Table Header */}
                         {!compact && (
                             <div className="grid grid-cols-12 gap-2 px-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                <div className="col-span-5">Beskrivning</div>
+                                <div className="col-span-4">Beskrivning</div>
                                 <div className="col-span-2 text-right">Antal</div>
+                                <div className="col-span-1 text-center">Enhet</div>
                                 <div className="col-span-2 text-right">Pris</div>
                                 <div className="col-span-2 text-right">Summa</div>
                                 <div className="col-span-1"></div>
@@ -254,7 +258,7 @@ export function LineItemsEditor({
                                 className="grid grid-cols-12 gap-2 items-center bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700"
                             >
                                 {/* Description */}
-                                <div className="col-span-5">
+                                <div className="col-span-4">
                                     <input
                                         type="text"
                                         value={item.description}
@@ -276,6 +280,26 @@ export function LineItemsEditor({
                                         disabled={readOnly}
                                         className="w-full px-2 py-1.5 text-sm text-right border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 disabled:opacity-50"
                                     />
+                                </div>
+
+                                {/* Unit */}
+                                <div className="col-span-1">
+                                    <select
+                                        value={item.unit || ''}
+                                        onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                                        disabled={readOnly}
+                                        className="w-full px-1 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 disabled:opacity-50"
+                                    >
+                                        <option value="">-</option>
+                                        <option value="st">st</option>
+                                        <option value="tim">tim</option>
+                                        <option value="m">m</option>
+                                        <option value="m2">m²</option>
+                                        <option value="m3">m³</option>
+                                        <option value="kg">kg</option>
+                                        <option value="l">l</option>
+                                        <option value="paket">paket</option>
+                                    </select>
                                 </div>
 
                                 {/* Unit Price */}

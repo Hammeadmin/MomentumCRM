@@ -6,9 +6,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getOrders, updateOrder, createOrder, createOrderWithQuote, updateOrderAndQuote, deleteOrder, type OrderWithRelations } from '../lib/orders';
-import { getUserProfiles, getCustomers, updateCustomer, getSavedLineItems, getLeads } from '../lib/database';
-import { UNIT_DESCRIPTIONS } from '../lib/quoteTemplates';
-import type { UserProfile, Customer, OrderStatus, Lead, RichSavedLineItem } from '../types/database';
+import { getUserProfiles, getCustomers, updateCustomer, getLeads } from '../lib/database';
+import type { UserProfile, Customer, OrderStatus, Lead } from '../types/database';
+import LineItemsEditor, { type LineItem } from './LineItemsEditor';
 import EmptyState from './EmptyState';
 import ConfirmDialog from './ConfirmDialog';
 import { useToast } from '../hooks/useToast';
@@ -49,7 +49,6 @@ export function Ordermanagement() {
   const [orders, setOrders] = useState<OrderWithRelations[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [products, setProducts] = useState<RichSavedLineItem[]>([]);
   const [teams, setTeams] = useState<TeamWithRelations[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
 
@@ -84,11 +83,10 @@ export function Ordermanagement() {
       setError(null);
       if (!profile.organisation_id) throw new Error("Organisation not found");
 
-      const [ordersResult, usersResult, customersResult, productsResult, teamsResult, leadsResult] = await Promise.all([
+      const [ordersResult, usersResult, customersResult, teamsResult, leadsResult] = await Promise.all([
         getOrders(profile.organisation_id),
         getUserProfiles(profile.organisation_id),
         getCustomers(profile.organisation_id),
-        getSavedLineItems(profile.organisation_id),
         getTeams(profile.organisation_id),
         getLeads(profile.organisation_id),
       ]);
@@ -96,13 +94,11 @@ export function Ordermanagement() {
       if (ordersResult.error) throw ordersResult.error;
       if (usersResult.error) throw usersResult.error;
       if (customersResult.error) throw customersResult.error;
-      if (productsResult.error) throw productsResult.error;
       if (teamsResult.error) throw teamsResult.error;
 
       setOrders(ordersResult.data || []);
       setUsers(usersResult.data || []);
       setCustomers(customersResult.data || []);
-      setProducts(productsResult.data || []);
       setTeams(teamsResult.data || []);
       setLeads(leadsResult.data || []);
 
@@ -347,7 +343,7 @@ export function Ordermanagement() {
       )}
 
       {isDetailModalOpen && selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setIsDetailModalOpen(false)} onOpenEdit={handleOpenEditModal} onOpenDelete={handleOpenDeleteConfirm} />}
-      {isEditModalOpen && <OrderEditModal order={selectedOrder} customers={customers} users={users} teams={teams} products={products} leads={leads} onClose={() => { setIsEditModalOpen(false); setSelectedOrder(null); }} onSave={handleSaveOrder} />}
+      {isEditModalOpen && <OrderEditModal order={selectedOrder} customers={customers} users={users} teams={teams} leads={leads} onClose={() => { setIsEditModalOpen(false); setSelectedOrder(null); }} onSave={handleSaveOrder} />}
       {isConfirmDeleteOpen && selectedOrder && <ConfirmDialog isOpen={true} title="Ta bort order?" message={`Är du säker på att du vill ta bort ordern "${selectedOrder.title}"? Denna åtgärd kan inte ångras.`} onConfirm={handleDeleteOrder} onClose={() => setIsConfirmDeleteOpen(false)} confirmText="Ja, ta bort" />}
     </div>
   );
@@ -614,12 +610,11 @@ function InfoItem({ icon: Icon, label, value }: { icon: React.ElementType, label
   );
 }
 
-function OrderEditModal({ order, customers, users, teams, products, leads, onClose, onSave }: {
+function OrderEditModal({ order, customers, users, teams, leads, onClose, onSave }: {
   order: OrderWithRelations | null;
   customers: Customer[];
   users: UserProfile[];
   teams: TeamWithRelations[];
-  products: RichSavedLineItem[];
   leads: Lead[];
   onClose: () => void;
   onSave: (data: any) => void;
@@ -657,15 +652,17 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
   });
 
   // Line items
-  const [lineItems, setLineItems] = useState(
+  const [lineItems, setLineItems] = useState<LineItem[]>(
     quote?.quote_line_items?.map((item: any) => ({
-      product_id: item.product_library_id || '',
+      id: item.id,
       name: item.name || item.description || '',
       description: item.description || '',
       quantity: item.quantity || 1,
       unit_price: item.unit_price || 0,
+      total: (item.quantity || 1) * (item.unit_price || 0),
       unit: item.unit || '',
-    })) || [{ product_id: '', name: '', description: '', quantity: 1, unit_price: 0, unit: '' }]
+      is_library_item: item.is_library_item || false,
+    })) || []
   );
 
   // Inline customer editing
@@ -682,27 +679,8 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value }));
   };
 
-  const handleLineItemChange = (index: number, field: string, value: any) => {
-    const updated = [...lineItems];
-    const currentItem = { ...updated[index], [field]: value };
-    if (field === 'product_id' && value) {
-      const product = products.find(p => p.id === value);
-      if (product) {
-        currentItem.name = product.name || '';
-        currentItem.description = product.description || '';
-        currentItem.unit_price = product.unit_price || 0;
-        currentItem.unit = product.metadata?.unit || '';
-      }
-    }
-    updated[index] = currentItem;
-    setLineItems(updated);
-  };
-
-  const addLineItem = () => setLineItems([...lineItems, { product_id: '', name: '', description: '', quantity: 1, unit_price: 0, unit: '' }]);
-  const removeLineItem = (index: number) => setLineItems(lineItems.filter((_, i) => i !== index));
-
   const totalValue = useMemo(() =>
-    lineItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0),
+    lineItems.reduce((sum, item) => sum + (item.total || 0), 0),
     [lineItems]);
 
   const startEditCustomer = () => {
@@ -748,8 +726,19 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const validLineItems = lineItems.filter(item => item.name && item.name.trim() !== '');
-    const finalTotalValue = validLineItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0);
+    // Manual validation — native `required` doesn't fire for unmounted tab content
+    if (!formData.title.trim()) {
+      addToast('Titel är obligatoriskt', 'error');
+      setActiveTab('info');
+      return;
+    }
+    if (!formData.customer_id) {
+      addToast('Välj en kund', 'error');
+      setActiveTab('kund');
+      return;
+    }
+    const validLineItems = lineItems.filter(item => item.description.trim() !== '');
+    const finalTotalValue = validLineItems.reduce((sum, item) => sum + (item.total || 0), 0);
     onSave({
       ...formData,
       value: finalTotalValue,
@@ -763,12 +752,13 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
       source: formData.source || null,
       region: formData.region || null,
       line_items: validLineItems.map(item => ({
-        name: item.name,
+        name: item.name || item.description,
         description: item.description,
         quantity: item.quantity,
         unit_price: item.unit_price,
-        unit: item.unit,
-        is_library_item: !!item.product_id,
+        unit: item.unit || '',
+        is_library_item: item.is_library_item || false,
+        total: item.total,
       })),
       notes: [],
     });
@@ -776,7 +766,7 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
 
   const formatCurrency = (value: number) => `${value.toLocaleString('sv-SE')} SEK`;
   const selectedCustomer = customers.find(c => c.id === formData.customer_id);
-  const validLineItemCount = lineItems.filter(i => i.name.trim() !== '').length;
+  const validLineItemCount = lineItems.filter(i => i.description.trim() !== '').length;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
@@ -826,7 +816,7 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField label="Titel" required>
-                    <input type="text" name="title" value={formData.title} onChange={handleFormChange} required
+                    <input type="text" name="title" value={formData.title} onChange={handleFormChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
                   </FormField>
                   <FormField label="Status">
@@ -926,7 +916,7 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
                   </div>
                   <select name="customer_id" value={formData.customer_id}
                     onChange={e => { handleFormChange(e); setIsEditingCustomer(false); }}
-                    required className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                     <option value="" disabled>Välj kund</option>
                     {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -1048,74 +1038,11 @@ function OrderEditModal({ order, customers, users, teams, products, leads, onClo
 
             {/* ════ TAB: Orderrader ════ */}
             {activeTab === 'rader' && (
-              <div className="space-y-3">
-                {products.length > 0 ? (
-                  <p className="text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-md px-3 py-2">
-                    Välj en produkt i "Bibliotek"-kolumnen för att autofylla raden, eller skriv fritt.
-                  </p>
-                ) : (
-                  <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
-                    Produktbiblioteket är tomt. Lägg till produkter via Produktbibliotek-sidan, eller skriv orderrader fritt nedan.
-                  </p>
-                )}
-
-                {/* Column headers */}
-                <div className="grid grid-cols-12 gap-x-2 text-xs font-medium text-gray-500 pb-1 border-b border-gray-200">
-                  <div className="col-span-4">Namn / Produkt</div>
-                  <div className="col-span-2">Bibliotek</div>
-                  <div className="col-span-2 text-right">Antal</div>
-                  <div className="col-span-1 text-center">Enhet</div>
-                  <div className="col-span-2 text-right">Á-pris (kr)</div>
-                  <div className="col-span-1" />
-                </div>
-
-                {lineItems.map((item, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-x-2 items-center">
-                    <input
-                      type="text" placeholder="Namn / beskrivning" value={item.name}
-                      onChange={e => handleLineItemChange(index, 'name', e.target.value)}
-                      className="col-span-4 px-2 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    <select
-                      value={item.product_id}
-                      onChange={e => handleLineItemChange(index, 'product_id', e.target.value)}
-                      className="col-span-2 px-2 py-2 text-xs border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">{products.length === 0 ? '—' : 'Välj…'}</option>
-                      {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                    <input
-                      type="number" value={item.quantity}
-                      onChange={e => handleLineItemChange(index, 'quantity', parseFloat(e.target.value) || 1)}
-                      className="col-span-2 px-2 py-2 text-sm border border-gray-300 rounded-md text-right"
-                      min={0} step="0.1"
-                    />
-                    <select value={item.unit} onChange={e => handleLineItemChange(index, 'unit', e.target.value)}
-                      className="col-span-1 px-1 py-2 text-xs border border-gray-300 rounded-md">
-                      {Object.entries(UNIT_DESCRIPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
-                    <input
-                      type="number" value={item.unit_price}
-                      onChange={e => handleLineItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                      className="col-span-2 px-2 py-2 text-sm border border-gray-300 rounded-md text-right"
-                      min={0} step="0.01"
-                    />
-                    <div className="col-span-1 flex justify-center">
-                      <button type="button" onClick={() => removeLineItem(index)}
-                        className="text-red-400 hover:text-red-600 p-1">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                  <button type="button" onClick={addLineItem}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1">
-                    <Plus size={16} /> Lägg till rad
-                  </button>
-                  <div className="text-sm font-bold text-gray-800">Totalt: {formatCurrency(totalValue)}</div>
-                </div>
+              <div className="space-y-4">
+                <LineItemsEditor
+                  lineItems={lineItems}
+                  onChange={setLineItems}
+                />
               </div>
             )}
 
