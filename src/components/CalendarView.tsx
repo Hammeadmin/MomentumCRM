@@ -402,7 +402,7 @@ ${currentUserProfile.organisation?.name || 'Oss'}`;
   const handleQuoteCreated = async () => {
     if (leadForQuote) {
       try {
-        await updateLead(leadForQuote.id, { status: 'won' });
+        await updateLead(leadForQuote.id, { status: 'qualified' });
       } catch (err) {
         console.error('Error updating lead status:', err);
       }

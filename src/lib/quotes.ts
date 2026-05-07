@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { Quote, Customer, Lead, QuoteLineItem, QuoteStatus, Order } from '../types/database';
 import { createOrder } from './orders'; // Import createOrder
+import { updateLead } from './leads';
 import { getSavedLineItemById } from './database';
 import { evaluate } from 'mathjs';
 import { getROTEmailText } from './rot';
@@ -150,6 +151,13 @@ export const acceptQuoteAndCreateOrder = async (
     // 4. Link the new order back to the quote
     await supabase.from('quotes').update({ order_id: newOrder!.id }).eq('id', quoteId);
 
+    // 5. Mark the originating lead as won — the deal has closed.
+    //    Runs fire-and-forget so a lead-update failure never blocks the order.
+    if (quote.lead_id) {
+      updateLead(quote.lead_id, { status: 'won' }).catch(err =>
+        console.error('Failed to mark lead as won after quote acceptance:', err)
+      );
+    }
 
     return { data: newOrder, error: null };
 
