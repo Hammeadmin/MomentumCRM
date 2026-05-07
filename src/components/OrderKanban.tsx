@@ -166,7 +166,7 @@ const OrderKanbanRow = ({
       >
         {/* Row 1: Title + Value */}
         <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium text-gray-900 truncate leading-tight">{order.title}</p>
+          <p className="text-sm font-medium text-gray-900 leading-tight break-words min-w-0">{order.title}</p>
           <div className="flex items-center gap-1 flex-shrink-0">
             {order.value ? (
               <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
@@ -305,7 +305,7 @@ const LeadKanbanRow = ({
       >
         {/* Row 1: Title + Value */}
         <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium text-gray-900 truncate leading-tight">{lead.title}</p>
+          <p className="text-sm font-medium text-gray-900 leading-tight break-words min-w-0">{lead.title}</p>
           {lead.estimated_value ? (
             <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded whitespace-nowrap flex-shrink-0">
               {formatCurrency(lead.estimated_value)}
@@ -439,7 +439,7 @@ const QuoteKanbanRow = ({
   >
     {/* Row 1: Title + Amount */}
     <div className="flex items-start justify-between gap-2">
-      <p className="text-sm font-medium text-gray-900 truncate leading-tight">{quote.title}</p>
+      <p className="text-sm font-medium text-gray-900 leading-tight break-words min-w-0">{quote.title}</p>
       {quote.total_amount ? (
         <span className="text-xs font-semibold text-gray-700 whitespace-nowrap flex-shrink-0">
           {formatCurrency(quote.total_amount)}
