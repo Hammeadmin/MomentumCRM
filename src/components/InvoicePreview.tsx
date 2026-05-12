@@ -291,8 +291,8 @@ function InvoicePreview({
               {organisation?.postal_code && organisation?.city && (
                 <p>{`${organisation.postal_code} ${organisation.city}`}</p>
               )}
-              {organisation?.phone && <div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 flex-shrink-0" />{organisation.phone}</div>}
-              {organisation?.email && <div className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 flex-shrink-0" />{organisation.email}</div>}
+              {organisation?.phone && <div className="flex items-center gap-1.5">< className="w-3.5 h-3.5 flex-shrink-0" />{organisation.phone}</div>}
+              {organisation?.email && <div className="flex items-center gap-1.5">< className="w-3.5 h-3.5 flex-shrink-0" />{organisation.email}</div>}
             </div>
           </div>
 
