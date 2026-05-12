@@ -14,6 +14,7 @@ import { getAttachmentPublicUrl, type OrderAttachment } from '../../../lib/order
 import { getCustomerCommunications, type CommunicationWithRelations } from '../../../lib/communications';
 import { formatDateTime } from '../../../lib/database';
 import { type QuoteTemplate } from '../../../lib/quoteTemplates';
+import { useTranslation } from '../../../locales/sv';
 import {
     INVOICE_STATUS_LABELS,
     getInvoiceStatusColor,
@@ -67,6 +68,7 @@ export default function InvoiceDetailsModal({
     onSyncToFortnox,
 }: InvoiceDetailsModalProps) {
     const manualSigningInputRef = useRef<HTMLInputElement>(null);
+    const { invoices: t } = useTranslation();
 
     // Local state for assignment editing
     const [isEditingAssignment, setIsEditingAssignment] = useState(false);
@@ -516,10 +518,10 @@ export default function InvoiceDetailsModal({
                         {/* Template selector — own section for clarity */}
                         <div className="mb-4 bg-white p-4 rounded-lg border print:hidden">
                             <div className="flex items-center justify-between mb-2">
-                                <label className="block text-sm font-medium text-gray-700">Designmall</label>
+                                <label className="block text-sm font-medium text-gray-700">{t.DETAILS.TEMPLATE_LABEL}</label>
                                 {templates.length === 0 && (
                                     <Link to="/settings" className="text-xs text-blue-600 hover:text-blue-800 hover:underline">
-                                        + Skapa fakturamall
+                                        {t.DETAILS.TEMPLATE_CREATE_LINK}
                                     </Link>
                                 )}
                             </div>
@@ -527,18 +529,18 @@ export default function InvoiceDetailsModal({
                                 className="block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2"
                                 value={selectedTemplate?.id || ''}
                                 onChange={(e) => {
-                                    const tmpl = templates.find((t) => t.id === e.target.value);
+                                    const tmpl = templates.find((tmpl) => tmpl.id === e.target.value);
                                     setSelectedTemplate(tmpl || null);
                                 }}
                             >
-                                <option value="">Standard design</option>
-                                {templates.map((t) => (
-                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                <option value="">{t.DETAILS.TEMPLATE_DEFAULT}</option>
+                                {templates.map((tmpl) => (
+                                    <option key={tmpl.id} value={tmpl.id}>{tmpl.name}</option>
                                 ))}
                             </select>
                             {templates.length === 0 && (
                                 <p className="mt-1.5 text-xs text-gray-400">
-                                    Inga fakturamallar hittades. Gå till Inställningar → Mallar för att skapa en.
+                                    {t.DETAILS.TEMPLATE_EMPTY_HINT}
                                 </p>
                             )}
                         </div>

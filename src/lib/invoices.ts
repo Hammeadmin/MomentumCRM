@@ -81,7 +81,7 @@ export const getInvoices = async (
       .from('invoices')
       .select(`
         *,
-        customer:customers(id, name, email, phone_number, address, postal_code, city),
+        customer:customers(id, name, email, phone_number, org_number, address, postal_code, city),
         order:orders(id, title, description, job_description),
         invoice_line_items(*),
         assigned_team:teams(
@@ -148,8 +148,8 @@ export const getInvoice = async (
       .from('invoices')
       .select(`
         *,
-        customer:customers(id, name, email, phone_number, address, postal_code, city),
-        order:orders(id, title, description, job_description), 
+        customer:customers(id, name, email, phone_number, org_number, address, postal_code, city),
+        order:orders(id, title, description, job_description),
         invoice_line_items(*),
         assigned_team:teams(
           id, name, specialty, hourly_rate,
