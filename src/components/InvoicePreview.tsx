@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Building, Mail, Phone, MapPin } from 'lucide-react';
+import { Building } from 'lucide-react';
 import type { InvoiceWithRelations } from '../lib/invoices';
 import { formatCurrency, formatDate } from '../lib/database';
 import type { Organisation } from '../types/database';
@@ -291,8 +291,8 @@ function InvoicePreview({
               {organisation?.postal_code && organisation?.city && (
                 <p>{`${organisation.postal_code} ${organisation.city}`}</p>
               )}
-              {organisation?.phone && <div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 flex-shrink-0" />{organisation.phone}</div>}
-              {organisation?.email && <div className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 flex-shrink-0" />{organisation.email}</div>}
+              {organisation?.phone && <p>{organisation.phone}</p>}
+              {organisation?.email && <p>{organisation.email}</p>}
             </div>
           </div>
 
@@ -315,12 +315,13 @@ function InvoicePreview({
           <div>
             <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2" style={{ color: primary_color }}>Fakturera till</h3>
             <p className="font-bold">{invoice.customer?.name}</p>
+            {invoice.customer?.org_number && <p className="text-gray-600">Org.nr: {invoice.customer.org_number}</p>}
             {invoice.customer?.address && <p>{invoice.customer.address}</p>}
             {invoice.customer?.postal_code && invoice.customer?.city && (
               <p>{`${invoice.customer.postal_code} ${invoice.customer.city}`}</p>
             )}
-            {invoice.customer?.email && <p className="mt-1 flex items-center text-gray-600"><Mail className="w-3 h-3 mr-1" /> {invoice.customer.email}</p>}
-            {invoice.customer?.phone_number && <p className="flex items-center text-gray-600"><Phone className="w-3 h-3 mr-1" /> {invoice.customer.phone_number}</p>}
+            {invoice.customer?.email && <p className="mt-1 text-gray-600">{invoice.customer.email}</p>}
+            {invoice.customer?.phone_number && <p className="text-gray-600">{invoice.customer.phone_number}</p>}
           </div>
 
           <div>
