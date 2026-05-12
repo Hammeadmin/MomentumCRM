@@ -6,6 +6,7 @@ import { X, Send, Loader2 } from 'lucide-react';
 import InvoicePreview from '../../InvoicePreview';
 import { sendInvoiceEmail, generateInvoiceEmailTemplate, type InvoiceWithRelations } from '../../../lib/invoices';
 import { type Organisation, type SystemSettings } from '../../../types/database';
+import { type QuoteTemplate } from '../../../lib/quoteTemplates';
 import { useTranslation } from '../../../locales/sv';
 
 interface EmailInvoiceModalProps {
@@ -16,6 +17,7 @@ interface EmailInvoiceModalProps {
     systemSettings: SystemSettings | null;
     user: User | null;
     onEmailSent: () => void;
+    template?: QuoteTemplate;
 }
 
 export default function EmailInvoiceModal({
@@ -26,6 +28,7 @@ export default function EmailInvoiceModal({
     systemSettings,
     user,
     onEmailSent,
+    template,
 }: EmailInvoiceModalProps) {
     const { invoices: t } = useTranslation();
     const emailPdfRef = useRef<HTMLDivElement>(null);
@@ -259,6 +262,7 @@ export default function EmailInvoiceModal({
                                     logoUrl={systemSettings?.logo_url}
                                     systemSettings={systemSettings}
                                     organisation={organisation}
+                                    template={template}
                                 />
                             </div>
                         </div>
@@ -283,6 +287,7 @@ export default function EmailInvoiceModal({
                             logoUrl={systemSettings?.logo_url}
                             systemSettings={systemSettings}
                             organisation={organisation}
+                            template={template}
                         />
                     </div>
                 </div>
