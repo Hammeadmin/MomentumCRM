@@ -1,0 +1,415 @@
+object_type,object_name,details,definition
+Function,accept_quote_simple,"Args: p_token text, p_client_ip text DEFAULT NULL::text | Returns: json",
+Function,accept_quote_with_rot,"Args: p_token text, p_rot_type text, p_rot_identifier text, p_fastighetsbeteckning text, p_client_ip text DEFAULT NULL::text | Returns: json",
+Function,calculate_invoice_net_amount,Args:  | Returns: trigger,
+Function,calculate_order_commission,Args:  | Returns: trigger,
+Function,calculate_rot_amount,"Args: total_amount numeric, labor_percentage numeric DEFAULT 0.7, rot_percentage numeric DEFAULT 0.5, max_rot_per_person numeric DEFAULT 50000 | Returns: numeric",
+Function,calculate_time_log_amount,Args:  | Returns: trigger,
+Function,complete_organization_signup,"Args: org_name text, org_number text, user_full_name text, user_phone_number text DEFAULT NULL::text | Returns: uuid",
+Function,create_invoice_history_on_insert,Args:  | Returns: trigger,
+Function,create_invoice_history_on_status_change,Args:  | Returns: trigger,
+Function,create_library_item,"Args: p_name text, p_unit measurement_unit, p_category text, p_organisation_id uuid, p_quantity numeric, p_price numeric | Returns: uuid",
+Function,generate_acceptance_token,Args:  | Returns: text,
+Function,generate_credit_note_number,Args: org_id uuid | Returns: text,
+Function,generate_invoice_number,Args: org_id uuid | Returns: text,
+Function,generate_job_number,Args: org_id uuid | Returns: text,
+Function,generate_quote_number,Args: org_id uuid | Returns: text,
+Function,get_activity_summary,"Args: org_id uuid, days_back integer DEFAULT 7 | Returns: jsonb",
+Function,get_dashboard_stats,Args: org_id uuid | Returns: jsonb,
+Function,get_document_stats,Args: org_id uuid | Returns: jsonb,
+Function,get_my_org,Args:  | Returns: uuid,
+Function,get_my_role,Args:  | Returns: user_role,
+Function,get_payroll_summary,"Args: org_id uuid, start_date date, end_date date | Returns: jsonb",
+Function,get_sales_leaderboard,"Args:  | Returns: TABLE(name text, sales numeric, avatar text)",
+Function,get_unassigned_users,Args: org_id uuid | Returns: SETOF user_profiles,
+Function,gin_extract_query_trgm,"Args: text, internal, smallint, internal, internal, internal, internal | Returns: internal",
+Function,gin_extract_value_trgm,"Args: text, internal | Returns: internal",
+Function,gin_trgm_consistent,"Args: internal, smallint, text, integer, internal, internal, internal, internal | Returns: boolean",
+Function,gin_trgm_triconsistent,"Args: internal, smallint, text, integer, internal, internal, internal | Returns: ""char""",
+Function,gtrgm_compress,Args: internal | Returns: internal,
+Function,gtrgm_consistent,"Args: internal, text, smallint, oid, internal | Returns: boolean",
+Function,gtrgm_decompress,Args: internal | Returns: internal,
+Function,gtrgm_distance,"Args: internal, text, smallint, oid, internal | Returns: double precision",
+Function,gtrgm_in,Args: cstring | Returns: gtrgm,
+Function,gtrgm_options,Args: internal | Returns: void,
+Function,gtrgm_out,Args: gtrgm | Returns: cstring,
+Function,gtrgm_penalty,"Args: internal, internal, internal | Returns: internal",
+Function,gtrgm_picksplit,"Args: internal, internal | Returns: internal",
+Function,gtrgm_same,"Args: gtrgm, gtrgm, internal | Returns: internal",
+Function,gtrgm_union,"Args: internal, internal | Returns: gtrgm",
+Function,populate_invoice_from_order,Args:  | Returns: trigger,
+Function,set_limit,Args: real | Returns: real,
+Function,set_quote_acceptance_token,"Args: quote_id uuid, expires_in_days integer DEFAULT 30 | Returns: text",
+Function,show_limit,Args:  | Returns: real,
+Function,show_trgm,Args: text | Returns: text[],
+Function,similarity,"Args: text, text | Returns: real",
+Function,similarity_dist,"Args: text, text | Returns: real",
+Function,similarity_op,"Args: text, text | Returns: boolean",
+Function,strict_word_similarity,"Args: text, text | Returns: real",
+Function,strict_word_similarity_commutator_op,"Args: text, text | Returns: boolean",
+Function,strict_word_similarity_dist_commutator_op,"Args: text, text | Returns: real",
+Function,strict_word_similarity_dist_op,"Args: text, text | Returns: real",
+Function,strict_word_similarity_op,"Args: text, text | Returns: boolean",
+Function,sync_org_to_user_metadata,Args:  | Returns: trigger,
+Function,update_document_download_count,Args:  | Returns: trigger,
+Function,update_documents_updated_at,Args:  | Returns: trigger,
+Function,update_intranet_post_counters,Args:  | Returns: trigger,
+Function,update_intranet_updated_at,Args:  | Returns: trigger,
+Function,update_invoice_rot_amount,Args:  | Returns: trigger,
+Function,update_message_templates_updated_at,Args:  | Returns: trigger,
+Function,update_order_rot_amount,Args:  | Returns: trigger,
+Function,update_original_invoice_on_credit,Args:  | Returns: trigger,
+Function,update_overdue_invoices,Args:  | Returns: void,
+Function,update_quote_rot_amount,Args:  | Returns: trigger,
+Function,update_team_settings_updated_at,Args:  | Returns: trigger,
+Function,update_updated_at_column,Args:  | Returns: trigger,
+Function,validate_swedish_organisationsnummer,Args: orgnummer text | Returns: boolean,
+Function,validate_swedish_personnummer,Args: personnummer text | Returns: boolean,
+Function,word_similarity,"Args: text, text | Returns: real",
+Function,word_similarity_commutator_op,"Args: text, text | Returns: boolean",
+Function,word_similarity_dist_commutator_op,"Args: text, text | Returns: real",
+Function,word_similarity_dist_op,"Args: text, text | Returns: real",
+Function,word_similarity_op,"Args: text, text | Returns: boolean",
+RLS Policy,Admin and sales can create templates,Table: message_templates | Command: INSERT | Roles: authenticated,"USING: N/A | WITH CHECK: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND (user_profiles.role = ANY (ARRAY['admin'::user_role, 'sales'::user_role])))))"
+RLS Policy,Admin and sales can delete non-default templates,Table: message_templates | Command: DELETE | Roles: authenticated,"USING: ((is_default = false) AND (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND (user_profiles.role = ANY (ARRAY['admin'::user_role, 'sales'::user_role])))))) | WITH CHECK: N/A"
+RLS Policy,Admin and sales can update templates,Table: message_templates | Command: UPDATE | Roles: authenticated,"USING: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND (user_profiles.role = ANY (ARRAY['admin'::user_role, 'sales'::user_role]))))) | WITH CHECK: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND (user_profiles.role = ANY (ARRAY['admin'::user_role, 'sales'::user_role])))))"
+RLS Policy,Admins can delete webhooks,Table: webhooks | Command: DELETE | Roles: public,"USING: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND (user_profiles.role = 'admin'::user_role)))) | WITH CHECK: N/A"
+RLS Policy,Admins can insert webhooks,Table: webhooks | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND (user_profiles.role = 'admin'::user_role))))"
+RLS Policy,Admins can update webhooks,Table: webhooks | Command: UPDATE | Roles: public,"USING: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND (user_profiles.role = 'admin'::user_role)))) | WITH CHECK: N/A"
+RLS Policy,Allow INSERT on attachments for assigned workers,Table: order_attachments | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: (order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.assigned_to_user_id = auth.uid())))"
+RLS Policy,Allow SELECT on attachments for assigned workers,Table: order_attachments | Command: SELECT | Roles: public,"USING: (order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.assigned_to_user_id = auth.uid()))) | WITH CHECK: N/A"
+RLS Policy,Anyone can insert quote views,Table: quote_views | Command: INSERT | Roles: anon,USING: N/A | WITH CHECK: true
+RLS Policy,Authenticated can insert quote views,Table: quote_views | Command: INSERT | Roles: authenticated,USING: N/A | WITH CHECK: true
+RLS Policy,Org members can select their quote views,Table: quote_views | Command: SELECT | Roles: authenticated,"USING: (EXISTS ( SELECT 1
+   FROM (quotes q
+     JOIN user_profiles up ON ((up.organisation_id = q.organisation_id)))
+  WHERE ((q.id = quote_views.quote_id) AND (up.id = auth.uid())))) | WITH CHECK: N/A"
+RLS Policy,Users can create invoice history in their organisation,Table: invoice_history | Command: INSERT | Roles: authenticated,"USING: N/A | WITH CHECK: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE (user_profiles.id = auth.uid())))"
+RLS Policy,Users can view invoice history in their organisation,Table: invoice_history | Command: SELECT | Roles: authenticated,"USING: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE (user_profiles.id = auth.uid()))) | WITH CHECK: N/A"
+RLS Policy,Users can view organisation templates,Table: message_templates | Command: SELECT | Roles: authenticated,"USING: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE (user_profiles.id = auth.uid()))) | WITH CHECK: N/A"
+RLS Policy,Users can view their organisation's webhook logs,Table: webhook_logs | Command: SELECT | Roles: public,"USING: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE (user_profiles.id = auth.uid()))) | WITH CHECK: N/A"
+RLS Policy,Users can view their organisation's webhooks,Table: webhooks | Command: SELECT | Roles: public,"USING: (organisation_id IN ( SELECT user_profiles.organisation_id
+   FROM user_profiles
+  WHERE (user_profiles.id = auth.uid()))) | WITH CHECK: N/A"
+RLS Policy,Users manage their own SMTP,Table: user_smtp_settings | Command: ALL | Roles: public,USING: (auth.uid() = user_id) | WITH CHECK: N/A
+RLS Policy,admins_delete_attendance,Table: attendance | Command: DELETE | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: N/A
+RLS Policy,admins_delete_customers,Table: customers | Command: DELETE | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: N/A
+RLS Policy,admins_delete_documents,Table: documents | Command: DELETE | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: N/A
+RLS Policy,admins_delete_jobs,Table: jobs | Command: DELETE | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: N/A
+RLS Policy,admins_delete_leads,Table: leads | Command: DELETE | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: N/A
+RLS Policy,admins_delete_orders,Table: orders | Command: DELETE | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: N/A
+RLS Policy,admins_delete_quotes,Table: quotes | Command: DELETE | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: N/A
+RLS Policy,admins_insert_role_change_logs,Table: role_change_logs | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+RLS Policy,admins_manage_all_posts,Table: intranet_posts | Command: ALL | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+RLS Policy,admins_manage_org_profiles,Table: user_profiles | Command: ALL | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+RLS Policy,admins_manage_settings,Table: system_settings | Command: ALL | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+RLS Policy,admins_manage_team_job_participation,Table: team_job_participation | Command: ALL | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+RLS Policy,admins_manage_team_members,Table: team_members | Command: ALL | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+RLS Policy,admins_manage_team_settings,Table: team_settings | Command: ALL | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+RLS Policy,admins_manage_teams,Table: teams | Command: ALL | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = 'admin'::user_role))
+RLS Policy,admins_moderate_comments,Table: intranet_comments | Command: ALL | Roles: public,"USING: ((post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE (intranet_posts.organisation_id = get_my_org()))) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: (post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE (intranet_posts.organisation_id = get_my_org())))"
+RLS Policy,admins_sales_finance_view_all_orders,Table: orders | Command: SELECT | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'sales'::user_role, 'finance'::user_role]))) | WITH CHECK: N/A"
+RLS Policy,admins_sales_manage_workload,Table: workload_assignments | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'sales'::user_role])))"
+RLS Policy,admins_sales_view_all_leads,Table: leads | Command: SELECT | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'sales'::user_role, 'finance'::user_role]))) | WITH CHECK: N/A"
+RLS Policy,admins_update_org,Table: organisations | Command: UPDATE | Roles: public,USING: ((id = get_my_org()) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: (id = get_my_org())
+RLS Policy,admins_update_org_time_logs,Table: time_logs | Command: UPDATE | Roles: public,"USING: ((get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])) AND (user_id IN ( SELECT user_profiles.id
+   FROM user_profiles
+  WHERE (user_profiles.organisation_id = get_my_org())))) | WITH CHECK: ((get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])) AND (user_id IN ( SELECT user_profiles.id
+   FROM user_profiles
+  WHERE (user_profiles.organisation_id = get_my_org()))))"
+RLS Policy,admins_view_all_views,Table: intranet_post_views | Command: SELECT | Roles: public,"USING: ((post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE (intranet_posts.organisation_id = get_my_org()))) AND (get_my_role() = 'admin'::user_role)) | WITH CHECK: N/A"
+RLS Policy,admins_view_org_time_logs,Table: time_logs | Command: SELECT | Roles: public,"USING: ((get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role, 'sales'::user_role])) AND (user_id IN ( SELECT user_profiles.id
+   FROM user_profiles
+  WHERE (user_profiles.organisation_id = get_my_org())))) | WITH CHECK: N/A"
+RLS Policy,authors_manage_own_posts,Table: intranet_posts | Command: ALL | Roles: public,USING: (author_user_id = auth.uid()) | WITH CHECK: (author_user_id = auth.uid())
+RLS Policy,calendar_event_notes_delete,Table: calendar_event_notes | Command: DELETE | Roles: public,"USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1
+   FROM user_profiles up
+  WHERE ((up.id = auth.uid()) AND (up.role = 'admin'::user_role) AND (up.organisation_id = ( SELECT ce.organisation_id
+           FROM calendar_events ce
+          WHERE (ce.id = calendar_event_notes.event_id))))))) | WITH CHECK: N/A"
+RLS Policy,calendar_event_notes_insert,Table: calendar_event_notes | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: ((user_id = auth.uid()) AND ((EXISTS ( SELECT 1
+   FROM user_profiles up
+  WHERE ((up.id = auth.uid()) AND (up.role = 'admin'::user_role) AND (up.organisation_id = ( SELECT ce.organisation_id
+           FROM calendar_events ce
+          WHERE (ce.id = calendar_event_notes.event_id)))))) OR (EXISTS ( SELECT 1
+   FROM calendar_events ce
+  WHERE ((ce.id = calendar_event_notes.event_id) AND (ce.assigned_to_user_id = auth.uid()))))))"
+RLS Policy,calendar_event_notes_select,Table: calendar_event_notes | Command: SELECT | Roles: public,"USING: ((EXISTS ( SELECT 1
+   FROM user_profiles up
+  WHERE ((up.id = auth.uid()) AND (up.role = 'admin'::user_role) AND (up.organisation_id = ( SELECT ce.organisation_id
+           FROM calendar_events ce
+          WHERE (ce.id = calendar_event_notes.event_id)))))) OR (EXISTS ( SELECT 1
+   FROM calendar_events ce
+  WHERE ((ce.id = calendar_event_notes.event_id) AND (ce.assigned_to_user_id = auth.uid()))))) | WITH CHECK: N/A"
+RLS Policy,finance_delete_invoices,Table: invoices | Command: DELETE | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role]))) | WITH CHECK: N/A"
+RLS Policy,finance_delete_payroll_adjustments,Table: payroll_adjustments | Command: DELETE | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role]))) | WITH CHECK: N/A"
+RLS Policy,finance_insert_invoices,Table: invoices | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+RLS Policy,finance_insert_payroll_adjustments,Table: payroll_adjustments | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+RLS Policy,finance_manage_invoice_line_items,Table: invoice_line_items | Command: ALL | Roles: public,"USING: ((invoice_id IN ( SELECT invoices.id
+   FROM invoices
+  WHERE (invoices.organisation_id = get_my_org()))) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role]))) | WITH CHECK: ((invoice_id IN ( SELECT invoices.id
+   FROM invoices
+  WHERE (invoices.organisation_id = get_my_org()))) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+RLS Policy,finance_manage_payroll_status,Table: payroll_status | Command: ALL | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role]))) | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+RLS Policy,finance_update_invoices,Table: invoices | Command: UPDATE | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role]))) | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+RLS Policy,finance_update_payroll_adjustments,Table: payroll_adjustments | Command: UPDATE | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role]))) | WITH CHECK: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role])))"
+RLS Policy,finance_view_invoices,Table: invoices | Command: SELECT | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role, 'sales'::user_role]))) | WITH CHECK: N/A"
+RLS Policy,finance_view_payroll_adjustments,Table: payroll_adjustments | Command: SELECT | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role, 'sales'::user_role]))) | WITH CHECK: N/A"
+RLS Policy,finance_view_payroll_status,Table: payroll_status | Command: SELECT | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role]))) | WITH CHECK: N/A"
+RLS Policy,org_isolation,Table: lead_forms | Command: ALL | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,public_accept_quotes_with_token,Table: quotes | Command: UPDATE | Roles: public,USING: ((acceptance_token IS NOT NULL) AND (token_expires_at > now()) AND (status = 'sent'::quote_status)) | WITH CHECK: ((acceptance_token IS NOT NULL) AND (token_expires_at > now()) AND (status = 'accepted'::quote_status))
+RLS Policy,public_read_active_forms,Table: lead_forms | Command: SELECT | Roles: public,USING: (is_active = true) | WITH CHECK: N/A
+RLS Policy,public_view_quotes_with_token,Table: quotes | Command: SELECT | Roles: public,USING: ((acceptance_token IS NOT NULL) AND (token_expires_at > now())) | WITH CHECK: N/A
+RLS Policy,system_insert_downloads,Table: document_downloads | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: (user_id = auth.uid())
+RLS Policy,system_insert_lead_activities,Table: lead_activities | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: true
+RLS Policy,system_manage_reminder_logs,Table: reminder_logs | Command: ALL | Roles: public,USING: true | WITH CHECK: true
+RLS Policy,users_delete_calendar_events,Table: calendar_events | Command: DELETE | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_delete_own_communications,Table: communications | Command: DELETE | Roles: public,USING: (created_by_user_id = auth.uid()) | WITH CHECK: N/A
+RLS Policy,users_delete_own_lead_notes,Table: lead_notes | Command: DELETE | Roles: public,USING: (user_id = auth.uid()) | WITH CHECK: N/A
+RLS Policy,users_delete_own_order_notes,Table: order_notes | Command: DELETE | Roles: public,USING: (user_id = auth.uid()) | WITH CHECK: N/A
+RLS Policy,users_insert_attendance,Table: attendance | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_insert_calendar_events,Table: calendar_events | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_insert_comments,Table: intranet_comments | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: ((author_user_id = auth.uid()) AND (post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE ((intranet_posts.organisation_id = get_my_org()) AND (intranet_posts.is_published = true)))))"
+RLS Policy,users_insert_communications,Table: communications | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: ((organisation_id = get_my_org()) AND (created_by_user_id = auth.uid()))
+RLS Policy,users_insert_customers,Table: customers | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_insert_documents,Table: documents | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: ((organisation_id = get_my_org()) AND (uploaded_by_user_id = auth.uid()))
+RLS Policy,users_insert_job_activities,Table: job_activities | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: (job_id IN ( SELECT jobs.id
+   FROM jobs
+  WHERE (jobs.organisation_id = get_my_org())))"
+RLS Policy,users_insert_jobs,Table: jobs | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_insert_lead_notes,Table: lead_notes | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: ((lead_id IN ( SELECT leads.id
+   FROM leads
+  WHERE (leads.organisation_id = get_my_org()))) AND (user_id = auth.uid()))"
+RLS Policy,users_insert_leads,Table: leads | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_insert_notifications,Table: notifications | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: (user_id = auth.uid())
+RLS Policy,users_insert_order_activities,Table: order_activities | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: (order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org())))"
+RLS Policy,users_insert_order_attachments,Table: order_attachments | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: ((order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org()))) AND (uploaded_by_user_id = auth.uid()))"
+RLS Policy,users_insert_order_notes,Table: order_notes | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: ((order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org()))) AND (user_id = auth.uid()))"
+RLS Policy,users_insert_orders,Table: orders | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_insert_own_views,Table: intranet_post_views | Command: INSERT | Roles: public,"USING: N/A | WITH CHECK: ((user_id = auth.uid()) AND (post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE (intranet_posts.organisation_id = get_my_org()))))"
+RLS Policy,users_insert_quotes,Table: quotes | Command: INSERT | Roles: public,USING: N/A | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_manage_invoice_emails,Table: invoice_emails | Command: ALL | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_manage_own_likes,Table: intranet_post_likes | Command: ALL | Roles: public,USING: (user_id = auth.uid()) | WITH CHECK: (user_id = auth.uid())
+RLS Policy,users_manage_quote_line_items,Table: quote_line_items | Command: ALL | Roles: public,"USING: ((organisation_id = get_my_org()) OR (quote_id IN ( SELECT quotes.id
+   FROM quotes
+  WHERE (quotes.organisation_id = get_my_org())))) | WITH CHECK: ((organisation_id = get_my_org()) OR (quote_id IN ( SELECT quotes.id
+   FROM quotes
+  WHERE (quotes.organisation_id = get_my_org()))))"
+RLS Policy,users_manage_quote_templates,Table: quote_templates | Command: ALL | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_manage_rss_feeds,Table: rss_feeds | Command: ALL | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_manage_sales_tasks,Table: sales_tasks | Command: ALL | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_manage_saved_line_items,Table: saved_line_items | Command: ALL | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_manage_task_notes,Table: task_notes | Command: ALL | Roles: public,"USING: (task_id IN ( SELECT sales_tasks.id
+   FROM sales_tasks
+  WHERE (sales_tasks.organisation_id = get_my_org()))) | WITH CHECK: (task_id IN ( SELECT sales_tasks.id
+   FROM sales_tasks
+  WHERE (sales_tasks.organisation_id = get_my_org())))"
+RLS Policy,users_select_own_profile,Table: user_profiles | Command: SELECT | Roles: public,USING: ((id = auth.uid()) OR (organisation_id = get_my_org())) | WITH CHECK: N/A
+RLS Policy,users_update_attendance,Table: attendance | Command: UPDATE | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_update_calendar_events,Table: calendar_events | Command: UPDATE | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_update_customers,Table: customers | Command: UPDATE | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_update_jobs,Table: jobs | Command: UPDATE | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_update_leads,Table: leads | Command: UPDATE | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_update_orders,Table: orders | Command: UPDATE | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_update_own_comments,Table: intranet_comments | Command: UPDATE | Roles: public,USING: (author_user_id = auth.uid()) | WITH CHECK: (author_user_id = auth.uid())
+RLS Policy,users_update_own_communications,Table: communications | Command: UPDATE | Roles: public,USING: (created_by_user_id = auth.uid()) | WITH CHECK: (created_by_user_id = auth.uid())
+RLS Policy,users_update_own_documents,Table: documents | Command: UPDATE | Roles: public,USING: ((organisation_id = get_my_org()) AND ((uploaded_by_user_id = auth.uid()) OR (get_my_role() = 'admin'::user_role))) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_update_own_lead_notes,Table: lead_notes | Command: UPDATE | Roles: public,USING: (user_id = auth.uid()) | WITH CHECK: (user_id = auth.uid())
+RLS Policy,users_update_own_notifications,Table: notifications | Command: UPDATE | Roles: public,USING: (user_id = auth.uid()) | WITH CHECK: (user_id = auth.uid())
+RLS Policy,users_update_own_order_notes,Table: order_notes | Command: UPDATE | Roles: public,USING: (user_id = auth.uid()) | WITH CHECK: (user_id = auth.uid())
+RLS Policy,users_update_own_profile,Table: user_profiles | Command: UPDATE | Roles: public,USING: (id = auth.uid()) | WITH CHECK: (id = auth.uid())
+RLS Policy,users_update_quotes,Table: quotes | Command: UPDATE | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: (organisation_id = get_my_org())
+RLS Policy,users_view_approved_comments,Table: intranet_comments | Command: SELECT | Roles: public,"USING: ((is_approved = true) AND (post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE ((intranet_posts.organisation_id = get_my_org()) AND (intranet_posts.is_published = true))))) | WITH CHECK: N/A"
+RLS Policy,users_view_attendance,Table: attendance | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_calendar_events,Table: calendar_events | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_communications,Table: communications | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_customers,Table: customers | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_documents,Table: documents | Command: SELECT | Roles: public,USING: ((organisation_id = get_my_org()) AND ((get_my_role())::text IN ( SELECT jsonb_array_elements_text(documents.view_permissions) AS jsonb_array_elements_text))) | WITH CHECK: N/A
+RLS Policy,users_view_invoice_emails,Table: invoice_emails | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_invoice_line_items,Table: invoice_line_items | Command: SELECT | Roles: public,"USING: ((invoice_id IN ( SELECT invoices.id
+   FROM invoices
+  WHERE (invoices.organisation_id = get_my_org()))) AND (get_my_role() = ANY (ARRAY['admin'::user_role, 'finance'::user_role, 'sales'::user_role]))) | WITH CHECK: N/A"
+RLS Policy,users_view_job_activities,Table: job_activities | Command: SELECT | Roles: public,"USING: (job_id IN ( SELECT jobs.id
+   FROM jobs
+  WHERE (jobs.organisation_id = get_my_org()))) | WITH CHECK: N/A"
+RLS Policy,users_view_jobs,Table: jobs | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_lead_activities,Table: lead_activities | Command: SELECT | Roles: public,"USING: (lead_id IN ( SELECT leads.id
+   FROM leads
+  WHERE (leads.organisation_id = get_my_org()))) | WITH CHECK: N/A"
+RLS Policy,users_view_lead_notes,Table: lead_notes | Command: SELECT | Roles: public,"USING: (lead_id IN ( SELECT leads.id
+   FROM leads
+  WHERE (leads.organisation_id = get_my_org()))) | WITH CHECK: N/A"
+RLS Policy,users_view_likes,Table: intranet_post_likes | Command: SELECT | Roles: public,"USING: (post_id IN ( SELECT intranet_posts.id
+   FROM intranet_posts
+  WHERE (intranet_posts.organisation_id = get_my_org()))) | WITH CHECK: N/A"
+RLS Policy,users_view_order_activities,Table: order_activities | Command: SELECT | Roles: public,"USING: (order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org()))) | WITH CHECK: N/A"
+RLS Policy,users_view_order_attachments,Table: order_attachments | Command: SELECT | Roles: public,"USING: (order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org()))) | WITH CHECK: N/A"
+RLS Policy,users_view_order_notes,Table: order_notes | Command: SELECT | Roles: public,"USING: (order_id IN ( SELECT orders.id
+   FROM orders
+  WHERE (orders.organisation_id = get_my_org()))) | WITH CHECK: N/A"
+RLS Policy,users_view_own_downloads,Table: document_downloads | Command: SELECT | Roles: public,USING: (user_id = auth.uid()) | WITH CHECK: N/A
+RLS Policy,users_view_own_notifications,Table: notifications | Command: SELECT | Roles: public,USING: (user_id = auth.uid()) | WITH CHECK: N/A
+RLS Policy,users_view_own_org,Table: organisations | Command: SELECT | Roles: public,USING: (id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_own_views,Table: intranet_post_views | Command: SELECT | Roles: public,USING: (user_id = auth.uid()) | WITH CHECK: N/A
+RLS Policy,users_view_published_posts,Table: intranet_posts | Command: SELECT | Roles: public,USING: ((organisation_id = get_my_org()) AND (is_published = true)) | WITH CHECK: N/A
+RLS Policy,users_view_quote_templates,Table: quote_templates | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_quotes,Table: quotes | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_reminder_logs,Table: reminder_logs | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_role_change_logs,Table: role_change_logs | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_sales_tasks,Table: sales_tasks | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_settings,Table: system_settings | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_team_job_participation,Table: team_job_participation | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_team_members,Table: team_members | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_team_settings,Table: team_settings | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_teams,Table: teams | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,users_view_workload_assignments,Table: workload_assignments | Command: SELECT | Roles: public,USING: (organisation_id = get_my_org()) | WITH CHECK: N/A
+RLS Policy,workers_manage_own_time_logs,Table: time_logs | Command: ALL | Roles: public,USING: (user_id = auth.uid()) | WITH CHECK: (user_id = auth.uid())
+RLS Policy,workers_view_assigned_leads,Table: leads | Command: SELECT | Roles: public,USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'worker'::user_role) AND (assigned_to_user_id = auth.uid())) | WITH CHECK: N/A
+RLS Policy,workers_view_assigned_orders,Table: orders | Command: SELECT | Roles: public,"USING: ((organisation_id = get_my_org()) AND (get_my_role() = 'worker'::user_role) AND ((assigned_to_user_id = auth.uid()) OR (assigned_to_team_id IN ( SELECT team_members.team_id
+   FROM team_members
+  WHERE ((team_members.user_id = auth.uid()) AND (team_members.is_active = true)))))) | WITH CHECK: N/A"
+Storage Bucket,avatars,Public: true | File size limit: None,
+Storage Bucket,company-logos,Public: true | File size limit: None,
+Storage Bucket,documents,Public: true | File size limit: None,
+Storage Bucket,intranet-images,Public: true | File size limit: None,
+Storage Bucket,order-attachments,Public: true | File size limit: None,
+Table,activity_log,"id (uuid), organisation_id (uuid), action_type (text), entity_type (text), entity_id (uuid), metadata (jsonb), created_at (timestamp with time zone)",
+Table,attendance,"id (uuid), organisation_id (uuid), user_id (uuid), date (date), status (text), hours (numeric), notes (text), created_at (timestamp with time zone), updated_at (timestamp with time zone)",
+Table,calendar_event_notes,"id (uuid), event_id (uuid), user_id (uuid), content (text), created_at (timestamp with time zone)",
+Table,calendar_events,"id (uuid), organisation_id (uuid), assigned_to_user_id (uuid), title (text), type (USER-DEFINED), start_time (timestamp with time zone), end_time (timestamp with time zone), related_lead_id (uuid), related_job_id (uuid), created_at (timestamp with time zone), description (text), location (text), related_order_id (uuid), assigned_to_team_id (uuid), customer_email_sent (boolean), meeting_link (text), google_event_id (text)",
+Table,chat_channels,"id (uuid), organisation_id (uuid), name (text), type (text), created_at (timestamp with time zone)",
+Table,chat_messages,"id (uuid), channel_id (uuid), sender_user_id (uuid), content (text), created_at (timestamp with time zone)",
+Table,communications,"id (uuid), organisation_id (uuid), order_id (uuid), type (USER-DEFINED), recipient (text), subject (text), content (text), status (USER-DEFINED), sent_at (timestamp with time zone), delivered_at (timestamp with time zone), read_at (timestamp with time zone), created_by_user_id (uuid), created_at (timestamp with time zone), error_message (text), customer_id (uuid)",
+Table,credit_notes,"id (uuid), organisation_id (uuid), job_id (uuid), customer_id (uuid), invoice_number (text), status (USER-DEFINED), due_date (date), amount (numeric), created_at (timestamp with time zone), order_id (uuid), assigned_team_id (uuid), assigned_user_id (uuid), job_description (text), job_type (USER-DEFINED), team_members_involved (jsonb), work_summary (text), email_sent (boolean), email_sent_at (timestamp with time zone), email_recipient (text), assignment_type (USER-DEFINED), is_credit_note (boolean), original_invoice_id (uuid), credit_reason (text), credit_note_number (text), credited_amount (numeric), net_amount (numeric), original_invoice_number (text), original_amount (numeric), original_invoice_date (timestamp with time zone), customer_name (text), customer_email (text)",
+Table,customers,"id (uuid), organisation_id (uuid), name (text), email (text), phone_number (text), address (text), postal_code (text), city (text), created_at (timestamp with time zone), include_rot (boolean), rot_personnummer (text), rot_organisationsnummer (text), rot_fastighetsbeteckning (text), rot_amount (numeric), sales_area (text), vat_handling (text), e_invoice_address (text), invoice_delivery_method (text), org_number (text), customer_type (text), fortnox_customer_number (text), include_rut (boolean), rut_personnummer (character varying), rut_amount (numeric)",
+Table,document_downloads,"id (uuid), document_id (uuid), user_id (uuid), downloaded_at (timestamp with time zone), ip_address (text), user_agent (text)",
+Table,documents,"id (uuid), organisation_id (uuid), filename (text), file_path (text), file_size (bigint), file_type (text), category (text), description (text), uploaded_by_user_id (uuid), view_permissions (jsonb), download_count (integer), is_active (boolean), created_at (timestamp with time zone), updated_at (timestamp with time zone)",
+Table,intranet_comments,"id (uuid), post_id (uuid), author_user_id (uuid), content (text), parent_comment_id (uuid), is_approved (boolean), created_at (timestamp with time zone), updated_at (timestamp with time zone)",
+Table,intranet_post_likes,"id (uuid), post_id (uuid), user_id (uuid), created_at (timestamp with time zone)",
+Table,intranet_post_views,"id (uuid), post_id (uuid), user_id (uuid), viewed_at (timestamp with time zone), ip_address (text), user_agent (text)",
+Table,intranet_posts,"id (uuid), organisation_id (uuid), title (text), content (text), excerpt (text), author_user_id (uuid), featured_image_url (text), category (text), is_pinned (boolean), is_published (boolean), is_urgent (boolean), scheduled_publish_at (timestamp with time zone), view_count (integer), like_count (integer), comment_count (integer), created_at (timestamp with time zone), updated_at (timestamp with time zone)",
+Table,invoice_emails,"id (uuid), organisation_id (uuid), invoice_id (uuid), recipient_email (text), subject (text), email_body (text), attachments (jsonb), status (text), sent_at (timestamp with time zone), delivered_at (timestamp with time zone), opened_at (timestamp with time zone), error_message (text), created_at (timestamp with time zone)",
+Table,invoice_history,"id (uuid), organisation_id (uuid), invoice_id (uuid), action_type (text), performed_by_user_id (uuid), details (jsonb), created_at (timestamp with time zone)",
+Table,invoice_line_items,"id (uuid), invoice_id (uuid), description (text), quantity (numeric), unit_price (numeric), total (numeric), created_at (timestamp with time zone), unit (text)",
+Table,invoices,"id (uuid), organisation_id (uuid), job_id (uuid), customer_id (uuid), invoice_number (text), status (USER-DEFINED), due_date (date), amount (numeric), created_at (timestamp with time zone), order_id (uuid), assigned_team_id (uuid), assigned_user_id (uuid), job_description (text), job_type (USER-DEFINED), team_members_involved (jsonb), work_summary (text), email_sent (boolean), email_sent_at (timestamp with time zone), email_recipient (text), assignment_type (USER-DEFINED), is_credit_note (boolean), original_invoice_id (uuid), credit_reason (text), credit_note_number (text), credited_amount (numeric), net_amount (numeric), include_rot (boolean), rot_personnummer (text), rot_organisationsnummer (text), rot_fastighetsbeteckning (text), rot_amount (numeric), ocr_number (text), guest_info (jsonb), fortnox_invoice_number (text), fortnox_synced_at (timestamp with time zone), sent_count (integer), last_sent_at (timestamp with time zone), reminder_count (integer), last_reminder_at (timestamp with time zone), viewed_at (timestamp with time zone), sent_by_user_id (uuid), created_by_user_id (uuid), include_rut (boolean), rut_personnummer (character varying), rut_amount (numeric)",
+Table,job_activities,"id (uuid), job_id (uuid), user_id (uuid), activity_type (text), description (text), old_value (text), new_value (text), created_at (timestamp with time zone)",
+Table,jobs,"id (uuid), organisation_id (uuid), customer_id (uuid), quote_id (uuid), assigned_to_user_id (uuid), title (text), description (text), status (USER-DEFINED), value (numeric), created_at (timestamp with time zone), job_number (text), priority (text), deadline (date), progress (integer)",
+Table,lead_activities,"id (uuid), lead_id (uuid), user_id (uuid), activity_type (text), description (text), created_at (timestamp with time zone)",
+Table,lead_forms,"id (uuid), organisation_id (uuid), name (text), description (text), form_config (jsonb), is_active (boolean), submission_count (integer), created_at (timestamp with time zone), updated_at (timestamp with time zone)",
+Table,lead_notes,"id (uuid), lead_id (uuid), user_id (uuid), content (text), created_at (timestamp with time zone)",
+Table,leads,"id (uuid), organisation_id (uuid), customer_id (uuid), assigned_to_user_id (uuid), title (text), description (text), source (text), status (USER-DEFINED), estimated_value (numeric), created_at (timestamp with time zone), lead_score (integer), last_activity_at (timestamp with time zone), city (text), form_id (uuid), form_data (jsonb)",
+Table,message_templates,"id (uuid), organisation_id (uuid), name (text), channel (text), type (text), subject (text), content (text), variables (jsonb), is_default (boolean), is_active (boolean), created_by (uuid), created_at (timestamp with time zone), updated_at (timestamp with time zone)",
+Table,notifications,"id (uuid), user_id (uuid), type (USER-DEFINED), title (text), message (text), is_read (boolean), action_url (text), created_at (timestamp with time zone)",
+Table,order_activities,"id (uuid), order_id (uuid), user_id (uuid), activity_type (text), description (text), old_value (text), new_value (text), created_at (timestamp with time zone)",
+Table,order_attachments,"id (uuid), order_id (uuid), uploaded_by_user_id (uuid), file_path (text), file_name (text), file_type (text), description (text), created_at (timestamp with time zone), include_in_invoice (boolean)",
+Table,order_notes,"id (uuid), order_id (uuid), user_id (uuid), content (text), created_at (timestamp with time zone), include_in_invoice (boolean)",
+Table,orders,"id (uuid), organisation_id (uuid), customer_id (uuid), title (text), description (text), value (numeric), assigned_to_user_id (uuid), status (USER-DEFINED), source (text), created_at (timestamp with time zone), assigned_to_team_id (uuid), assignment_type (USER-DEFINED), job_description (text), job_type (USER-DEFINED), estimated_hours (numeric), complexity_level (integer), include_rot (boolean), rot_personnummer (text), rot_organisationsnummer (text), rot_fastighetsbeteckning (text), rot_amount (numeric), primary_salesperson_id (uuid), secondary_salesperson_id (uuid), commission_split_percentage (numeric), commission_amount (numeric), commission_paid (boolean), region (text), include_rut (boolean), rut_personnummer (character varying), rut_amount (numeric)",
+Table,organisations,"id (uuid), name (text), org_number (text), created_at (timestamp with time zone), email (text), phone (text), address (text), postal_code (text), city (text), website (text), logo_url (text), bank_account (text), bank_name (text), vat_number (text), description (text), fortnox_access_token (text), fortnox_refresh_token (text), fortnox_token_expires_at (timestamp with time zone), fortnox_client_id (text), fortnox_client_secret (text), sms_provider (text), sms_api_username (text), sms_api_password (text), sms_sender_name (text), iban (text), bic (text), f_skatt_approved (boolean)",
+Table,payroll_adjustments,"id (uuid), organisation_id (uuid), user_id (uuid), amount (numeric), description (text), date (date), type (text), created_at (timestamp with time zone), created_by (uuid)",
+Table,payroll_status,"id (uuid), organisation_id (uuid), user_id (uuid), month (character varying), status (text), paid_at (timestamp with time zone), updated_at (timestamp with time zone), updated_by (uuid)",
+Table,quick_texts,"id (uuid), organisation_id (uuid), title (text), content (text), shortcut (text), category (text), created_at (timestamp with time zone)",
+Table,quote_line_items,"id (uuid), quote_id (uuid), description (text), quantity (numeric), unit_price (numeric), total (numeric), sort_order (integer), created_at (timestamp with time zone), name (text), unit (USER-DEFINED), category (text), is_library_item (boolean), organisation_id (uuid), vat_rate (integer)",
+Table,quote_templates,"id (uuid), organisation_id (uuid), name (text), description (text), default_line_items (jsonb), settings (jsonb), created_at (timestamp with time zone), sort_order (integer), content_structure (jsonb)",
+Table,quote_view_analytics,"quote_id (uuid), quote_number (text), title (text), status (USER-DEFINED), customer_id (uuid), organisation_id (uuid), total_views (bigint), unique_visitors (bigint), first_viewed_at (timestamp with time zone), last_viewed_at (timestamp with time zone)",
+Table,quote_views,"id (uuid), quote_id (uuid), viewed_at (timestamp with time zone), ip_address (text), user_agent (text), referrer (text)",
+Table,quotes,"id (uuid), organisation_id (uuid), customer_id (uuid), lead_id (uuid), title (text), description (text), total_amount (numeric), status (USER-DEFINED), valid_until (date), created_at (timestamp with time zone), quote_number (text), subtotal (numeric), vat_amount (numeric), order_id (uuid), include_rot (boolean), rot_personnummer (text), rot_organisationsnummer (text), rot_fastighetsbeteckning (text), rot_amount (numeric), acceptance_token (text), token_expires_at (timestamp with time zone), accepted_at (timestamp with time zone), accepted_by_ip (text), signing_details (jsonb), include_rut (boolean), rut_personnummer (character varying), rut_amount (numeric), template_id (uuid), template_snapshot (jsonb)",
+Table,reminder_logs,"id (uuid), organisation_id (uuid), quote_id (uuid), invoice_id (uuid), reminder_type (text), days_offset (integer), email_sent (boolean), email_error (text), sent_at (timestamp with time zone), created_at (timestamp with time zone)",
+Table,role_change_logs,"id (uuid), organisation_id (uuid), user_id (uuid), old_role (USER-DEFINED), new_role (USER-DEFINED), changed_by_user_id (uuid), reason (text), created_at (timestamp with time zone)",
+Table,rot_report,"id (uuid), invoice_number (text), amount (numeric), rot_amount (numeric), rot_personnummer (text), rot_organisationsnummer (text), rot_fastighetsbeteckning (text), customer_name (text), address (text), postal_code (text), city (text), created_at (timestamp with time zone), tax_year (numeric), organisation_id (uuid)",
+Table,rss_feeds,"id (uuid), organisation_id (uuid), name (text), url (text), is_active (boolean), last_fetched_at (timestamp with time zone), created_at (timestamp with time zone)",
+Table,rut_report,"id (uuid), invoice_number (text), amount (numeric), rut_amount (numeric), rut_personnummer (character varying), customer_name (text), address (text), postal_code (text), city (text), created_at (timestamp with time zone), tax_year (numeric), organisation_id (uuid)",
+Table,sales_tasks,"id (uuid), organisation_id (uuid), user_id (uuid), title (text), description (text), due_date (date), is_completed (boolean), created_at (timestamp with time zone), completed_at (timestamp with time zone), notes (text), status (text), created_by (uuid), order_id (uuid)",
+Table,saved_line_items,"id (uuid), organisation_id (uuid), name (text), description (text), unit_price (numeric), created_at (timestamp with time zone), item_type (text), metadata (jsonb)",
+Table,system_settings,"id (uuid), organisation_id (uuid), logo_url (text), default_payment_terms (integer), late_fee (numeric), invoice_footer_text (text), invoice_number_format (text), invoice_number_prefix (text), invoice_number_start (integer), quote_number_format (text), quote_number_prefix (text), quote_number_start (integer), default_vat_rate (numeric), currency (text), date_format (text), time_format (text), fiscal_year_start (text), created_at (timestamp with time zone), updated_at (timestamp with time zone)",
+Table,task_notes,"id (uuid), task_id (uuid), user_id (uuid), content (text), created_at (timestamp with time zone)",
+Table,team_job_participation,"id (uuid), organisation_id (uuid), invoice_id (uuid), user_id (uuid), hours_worked (numeric), role_in_job (text), commission_percentage (numeric), work_description (text), quality_rating (integer), created_at (timestamp with time zone)",
+Table,team_members,"id (uuid), organisation_id (uuid), team_id (uuid), user_id (uuid), role_in_team (USER-DEFINED), joined_date (date), is_active (boolean), created_at (timestamp with time zone)",
+Table,team_settings,"id (uuid), organisation_id (uuid), max_leads_per_person (integer), max_jobs_per_person (integer), auto_reassign_enabled (boolean), workload_threshold_warning (integer), workload_threshold_critical (integer), performance_review_frequency (integer), created_at (timestamp with time zone), updated_at (timestamp with time zone)",
+Table,teams,"id (uuid), organisation_id (uuid), name (text), description (text), specialty (USER-DEFINED), team_leader_id (uuid), is_active (boolean), hourly_rate (numeric), created_at (timestamp with time zone), cities (ARRAY)",
+Table,time_logs,"id (uuid), order_id (uuid), user_id (uuid), start_time (timestamp with time zone), end_time (timestamp with time zone), break_duration (integer), notes (text), is_approved (boolean), hourly_rate (numeric), total_amount (numeric), location_lat (numeric), location_lng (numeric), photo_urls (jsonb), materials_used (jsonb), travel_time_minutes (integer), work_type (text), weather_conditions (text), created_at (timestamp with time zone), updated_at (timestamp with time zone)",
+Table,user_profiles,"id (uuid), organisation_id (uuid), full_name (text), phone_number (text), role (USER-DEFINED), is_active (boolean), created_at (timestamp with time zone), email (text), address (text), postal_code (text), city (text), avatar_url (text), base_hourly_rate (numeric), base_monthly_salary (numeric), commission_rate (numeric), employment_type (USER-DEFINED), has_commission (boolean), personnummer (text), bank_account_number (text), cities (ARRAY), weekly_hours (integer), work_days (ARRAY), google_calendar_sync_enabled (boolean), google_calendar_id (text), dashboard_settings (jsonb)",
+Table,user_smtp_settings,"user_id (uuid), smtp_host (text), smtp_port (integer), smtp_user (text), smtp_pass (text), created_at (timestamp with time zone), provider (text)",
+Table,view_dashboard_kpis,"organisation_id (uuid), total_sales (numeric), active_leads (bigint), active_jobs (bigint), overdue_invoices (bigint)",
+Table,view_recent_activity,"id (uuid), created_at (timestamp with time zone), activity_type (text), title (text), user_id (uuid), organisation_id (uuid), status (text)",
+Table,webhook_logs,"id (uuid), webhook_id (uuid), organisation_id (uuid), event_type (text), payload (jsonb), response_status (integer), response_body (text), success (boolean), error_message (text), duration_ms (integer), created_at (timestamp with time zone)",
+Table,webhooks,"id (uuid), organisation_id (uuid), name (text), event_type (text), target_url (text), secret (text), is_active (boolean), headers (jsonb), created_at (timestamp with time zone), updated_at (timestamp with time zone), created_by_user_id (uuid)",
+Table,workload_assignments,"id (uuid), organisation_id (uuid), from_user_id (uuid), to_user_id (uuid), lead_id (uuid), job_id (uuid), assignment_type (text), reason (text), assigned_by_user_id (uuid), created_at (timestamp with time zone)",
+Trigger,invoice_history_insert_trigger,Table: invoices | Timing: AFTER | Event: INSERT,EXECUTE FUNCTION create_invoice_history_on_insert()
+Trigger,invoice_history_update_trigger,Table: invoices | Timing: AFTER | Event: UPDATE,EXECUTE FUNCTION create_invoice_history_on_status_change()
+Trigger,message_templates_updated_at,Table: message_templates | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION update_message_templates_updated_at()
+Trigger,set_lead_forms_updated_at,Table: lead_forms | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION update_updated_at_column()
+Trigger,trigger_calculate_net_amount,Table: invoices | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION calculate_invoice_net_amount()
+Trigger,trigger_calculate_net_amount,Table: invoices | Timing: BEFORE | Event: INSERT,EXECUTE FUNCTION calculate_invoice_net_amount()
+Trigger,trigger_calculate_order_commission,Table: orders | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION calculate_order_commission()
+Trigger,trigger_calculate_order_commission,Table: orders | Timing: BEFORE | Event: INSERT,EXECUTE FUNCTION calculate_order_commission()
+Trigger,trigger_calculate_time_log_amount,Table: time_logs | Timing: BEFORE | Event: INSERT,EXECUTE FUNCTION calculate_time_log_amount()
+Trigger,trigger_calculate_time_log_amount,Table: time_logs | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION calculate_time_log_amount()
+Trigger,trigger_populate_invoice_from_order,Table: invoices | Timing: AFTER | Event: INSERT,EXECUTE FUNCTION populate_invoice_from_order()
+Trigger,trigger_sync_org_metadata,Table: user_profiles | Timing: AFTER | Event: UPDATE,EXECUTE FUNCTION sync_org_to_user_metadata()
+Trigger,trigger_sync_org_metadata,Table: user_profiles | Timing: AFTER | Event: INSERT,EXECUTE FUNCTION sync_org_to_user_metadata()
+Trigger,trigger_update_comment_count,Table: intranet_comments | Timing: AFTER | Event: INSERT,EXECUTE FUNCTION update_intranet_post_counters()
+Trigger,trigger_update_comment_count,Table: intranet_comments | Timing: AFTER | Event: UPDATE,EXECUTE FUNCTION update_intranet_post_counters()
+Trigger,trigger_update_comment_count,Table: intranet_comments | Timing: AFTER | Event: DELETE,EXECUTE FUNCTION update_intranet_post_counters()
+Trigger,trigger_update_documents_updated_at,Table: documents | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION update_documents_updated_at()
+Trigger,trigger_update_download_count,Table: document_downloads | Timing: AFTER | Event: INSERT,EXECUTE FUNCTION update_document_download_count()
+Trigger,trigger_update_intranet_comments_updated_at,Table: intranet_comments | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION update_intranet_updated_at()
+Trigger,trigger_update_intranet_posts_updated_at,Table: intranet_posts | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION update_intranet_updated_at()
+Trigger,trigger_update_invoice_rot_amount,Table: invoices | Timing: BEFORE | Event: INSERT,EXECUTE FUNCTION update_invoice_rot_amount()
+Trigger,trigger_update_invoice_rot_amount,Table: invoices | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION update_invoice_rot_amount()
+Trigger,trigger_update_like_count,Table: intranet_post_likes | Timing: AFTER | Event: INSERT,EXECUTE FUNCTION update_intranet_post_counters()
+Trigger,trigger_update_like_count,Table: intranet_post_likes | Timing: AFTER | Event: DELETE,EXECUTE FUNCTION update_intranet_post_counters()
+Trigger,trigger_update_order_rot_amount,Table: orders | Timing: BEFORE | Event: INSERT,EXECUTE FUNCTION update_order_rot_amount()
+Trigger,trigger_update_order_rot_amount,Table: orders | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION update_order_rot_amount()
+Trigger,trigger_update_original_invoice,Table: invoices | Timing: AFTER | Event: INSERT,EXECUTE FUNCTION update_original_invoice_on_credit()
+Trigger,trigger_update_quote_rot_amount,Table: quotes | Timing: BEFORE | Event: INSERT,EXECUTE FUNCTION update_quote_rot_amount()
+Trigger,trigger_update_quote_rot_amount,Table: quotes | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION update_quote_rot_amount()
+Trigger,trigger_update_view_count,Table: intranet_post_views | Timing: AFTER | Event: INSERT,EXECUTE FUNCTION update_intranet_post_counters()
+Trigger,update_team_settings_updated_at,Table: team_settings | Timing: BEFORE | Event: UPDATE,EXECUTE FUNCTION update_team_settings_updated_at()
