@@ -464,6 +464,12 @@ export const INVOICES = {
         ALL_CUSTOMERS: 'Alla kunder',
         CLEAR: 'Rensa filter',
     },
+    DETAILS: {
+        TEMPLATE_LABEL: 'Designmall',
+        TEMPLATE_DEFAULT: 'Standard design',
+        TEMPLATE_CREATE_LINK: '+ Skapa fakturamall',
+        TEMPLATE_EMPTY_HINT: 'Inga fakturamallar hittades. Gå till Inställningar → Mallar för att skapa en.',
+    },
 } as const;
 
 export const TABS = {
