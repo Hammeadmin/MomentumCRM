@@ -15,6 +15,7 @@ import { useTranslation } from '../locales/sv';
 import {
   type InvoiceWithRelations, type InvoiceFilters,
 } from '../lib/invoices';
+import { type QuoteTemplate } from '../lib/quoteTemplates';
 
 import { canCreateCreditNote } from '../lib/creditNotes';
 import {
@@ -58,6 +59,7 @@ function InvoiceManagement() {
   const [showUnifiedModal, setShowUnifiedModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailTemplate, setEmailTemplate] = useState<QuoteTemplate | null>(null);
   const [showCreditNoteModal, setShowCreditNoteModal] = useState<InvoiceWithRelations | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceWithRelations | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<InvoiceWithRelations | null>(null);
@@ -551,7 +553,7 @@ function InvoiceManagement() {
           invoice={selectedInvoice}
           onClose={() => { setShowDetailsModal(false); setSelectedInvoice(null); }}
           onEdit={(inv) => { setShowDetailsModal(false); handleEditInvoiceClick(inv); }}
-          onSend={() => { setShowDetailsModal(false); setShowEmailModal(true); }}
+          onSend={(_inv, tmpl) => { setEmailTemplate(tmpl || null); setShowDetailsModal(false); setShowEmailModal(true); }}
           onManualSigning={handleManualSigning}
           onSaveAssignment={handleSaveAssignment}
           templates={templates}
@@ -628,11 +630,12 @@ function InvoiceManagement() {
         <EmailInvoiceModal
           isOpen={showEmailModal}
           invoice={selectedInvoice}
-          onClose={() => { setShowEmailModal(false); setSelectedInvoice(null); }}
+          onClose={() => { setShowEmailModal(false); setSelectedInvoice(null); setEmailTemplate(null); }}
           organisation={organisation}
           systemSettings={systemSettings}
           user={user}
           onEmailSent={() => { loadData(); success(t.MESSAGES.SUCCESS_TITLE, t.MESSAGES.EMAIL_SENT(selectedInvoice.customer?.email || '')); }}
+          template={emailTemplate || undefined}
         />
       )}
 
