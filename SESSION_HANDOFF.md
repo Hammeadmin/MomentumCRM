@@ -1,7 +1,7 @@
 # MomentumCRM — Session Handoff Document
 
 **Branch:** `claude/sad-darwin-731708`  
-**Latest commit:** `f4f9b45`  
+**Latest commit:** `35935cd`  
 **Status:** All changes committed and pushed. Ready for PR review and merge into `main`.  
 **Worktree path:** `C:\Users\Elhar\Desktop\MomentumCRM\MomentumCRM\.claude\worktrees\sad-darwin-731708`  
 **Main repo path:** `C:\Users\Elhar\Desktop\MomentumCRM\MomentumCRM`
@@ -127,6 +127,8 @@ if (someLeadId) {
 | `src/lib/quotes.ts` | acceptQuoteAndCreateOrder: mark lead as won |
 | `src/lib/invoices.ts` | Added `org_number` to customer relation in getInvoices + getInvoice select queries |
 | `src/locales/sv.ts` | Added `INVOICES.DETAILS` section (template picker i18n strings) |
+| `src/lib/quoteTemplates.ts` | Added distinct `design_options` to all 3 default invoice templates (color + logo position) |
+| `src/components/settings/TemplateBuilder.tsx` | Template dropdown uses `<optgroup>` by type; colored type badge (toggle) added to header |
 
 ---
 
@@ -151,13 +153,16 @@ The `QuoteTemplate` type defines `design_options` at both the top level and nest
 
 ## Known Issues / What's Left To Do
 
-### 1. Invoice templates lack visual differentiation out of the box
-The default invoice templates (`createDefaultInvoiceTemplates` in `src/lib/quoteTemplates.ts`) don't set any `design_options` (no custom colors, fonts, logo position). Users switching between templates see structural layout changes (e.g. "Enkel Faktura" is more minimal than "Professionell Faktura") but no color/branding changes unless they configure design options in the TemplateBuilder.
+### ~~1. Invoice templates lack visual differentiation out of the box~~ ✅ FIXED (commit `35935cd`)
+Default invoice templates now ship with distinct `design_options` inside `settings`:
+- **Professionell Faktura**: navy `#1e40af`, logo right
+- **Enkel Faktura**: teal `#0f766e`, logo left
+- **ROT/RUT Faktura**: amber `#92400e`, logo left, amber-tinted ROT block
 
-**To fix:** Either populate the default templates with distinct `design_options`, or ensure the TemplateBuilder prominently exposes color/font/logo options when editing invoice templates.
+Users switching between templates will see immediate visual differences in color scheme and logo placement without any extra configuration.
 
-### 2. TemplateBuilder — invoice vs quote filter
-New templates created in TemplateBuilder default to `template_type: 'quote'`. Users must explicitly switch to "Faktura" type. The UI should make this clearer, ideally defaulting to the correct type based on where the user navigated from.
+### ~~2. TemplateBuilder — invoice vs quote filter~~ ✅ FIXED (commit `35935cd`)
+The template selector dropdown now groups templates with `<optgroup>` labels ("📋 Fakturor" / "📄 Offerter"). A colored pill badge appears next to the selector showing the currently active template type ("💰 Faktura" in green, "📄 Offert" in blue). The badge doubles as a click-to-toggle button so type can be changed without digging into the sidebar.
 
 ### 3. No new tests were written
 All fixes were surgical changes to existing logic. The test suite (if any) has not been expanded to cover the new behaviour.
