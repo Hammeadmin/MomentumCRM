@@ -384,19 +384,49 @@ function TemplateBuilder() {
                 <div className="flex flex-wrap gap-2 items-center">
                     {/* Template Selector */}
                     {templates.length > 0 && (
-                        <select
-                            value={selectedTemplate?.id || ''}
-                            onChange={(e) => {
-                                const t = templates.find(t => t.id === e.target.value);
-                                if (t) { setSelectedTemplate(t); setSelectedBlockId(null); }
-                            }}
-                            className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white"
-                        >
-                            <option value="">Välj mall...</option>
-                            {templates.map(t => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                        </select>
+                        <div className="flex items-center gap-2">
+                            <select
+                                value={selectedTemplate?.id || ''}
+                                onChange={(e) => {
+                                    const tmpl = templates.find(t => t.id === e.target.value);
+                                    if (tmpl) { setSelectedTemplate(tmpl); setSelectedBlockId(null); }
+                                }}
+                                className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white"
+                            >
+                                <option value="">Välj mall...</option>
+                                {templates.filter(t => t.settings?.template_type === 'invoice').length > 0 && (
+                                    <optgroup label="📋 Fakturor">
+                                        {templates
+                                            .filter(t => t.settings?.template_type === 'invoice')
+                                            .map(t => (
+                                                <option key={t.id} value={t.id}>{t.name}</option>
+                                            ))}
+                                    </optgroup>
+                                )}
+                                {templates.filter(t => t.settings?.template_type !== 'invoice').length > 0 && (
+                                    <optgroup label="📄 Offerter">
+                                        {templates
+                                            .filter(t => t.settings?.template_type !== 'invoice')
+                                            .map(t => (
+                                                <option key={t.id} value={t.id}>{t.name}</option>
+                                            ))}
+                                    </optgroup>
+                                )}
+                            </select>
+                            {selectedTemplate && (
+                                <button
+                                    onClick={() => handleTemplateTypeChange(templateType === 'invoice' ? 'quote' : 'invoice')}
+                                    title="Klicka för att byta malltyp"
+                                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                                        templateType === 'invoice'
+                                            ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                            : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                    }`}
+                                >
+                                    {templateType === 'invoice' ? '💰 Faktura' : '📄 Offert'}
+                                </button>
+                            )}
+                        </div>
                     )}
 
                     {/* Preview toggle */}

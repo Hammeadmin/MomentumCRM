@@ -719,37 +719,29 @@ export const createDefaultInvoiceTemplates = async (
         name: 'Professionell Faktura',
         description: 'Komplett fakturamall med alla obligatoriska element',
         content_structure: [
-          // Company & Document Header Row
           { id: '1', type: 'header_row', content: null },
-          // Customer Information
           { id: '2', type: 'customer_info', content: null },
-          // Spacer
           { id: '3', type: 'spacer', content: null, settings: { spacerHeight: 20 } },
-          // Invoice Header (number, date, due date)
           { id: '4', type: 'invoice_header', content: null },
-          // Line Items Table
-          {
-            id: '5',
-            type: 'line_items_table',
-            content: [] // Empty - products come from invoice
-          },
-          // Totals
+          { id: '5', type: 'line_items_table', content: [] },
           { id: '6', type: 'totals', content: null },
-          // Divider
           { id: '7', type: 'divider', content: null },
-          // Payment Information (OCR, bank details, due date)
           { id: '8', type: 'payment_info', content: null },
-          // Terms Section
           { id: '9', type: 'terms', content: 'Betalningsvillkor: 30 dagar netto.\nDröjsmålsränta: Vid försenad betalning debiteras dröjsmålsränta enligt räntelagen.\nFakturering sker enligt Sveriges lagar.' },
-          // F-skatt Text
           { id: '10', type: 'f_skatt_text', content: null },
-          // Page Footer
           { id: '11', type: 'page_footer', content: null }
         ],
         settings: {
           default_vat_rate: 25,
           default_payment_terms: 30,
-          template_type: 'invoice'
+          template_type: 'invoice',
+          design_options: {
+            primary_color: '#1e40af',   // Dark navy blue — corporate/professional
+            font_family: 'Inter',
+            logo_position: 'right',
+            show_signature_area: false,
+            show_product_images: false
+          }
         }
       },
       {
@@ -761,11 +753,7 @@ export const createDefaultInvoiceTemplates = async (
           { id: '2', type: 'customer_info', content: null },
           { id: '3', type: 'spacer', content: null, settings: { spacerHeight: 16 } },
           { id: '4', type: 'header', content: 'Faktura', settings: { fontSize: 'xl', fontWeight: 'bold' } },
-          {
-            id: '5',
-            type: 'line_items_table',
-            content: []
-          },
+          { id: '5', type: 'line_items_table', content: [] },
           { id: '6', type: 'totals', content: null },
           { id: '7', type: 'payment_info', content: null },
           { id: '8', type: 'f_skatt_text', content: null }
@@ -773,7 +761,14 @@ export const createDefaultInvoiceTemplates = async (
         settings: {
           default_vat_rate: 25,
           default_payment_terms: 30,
-          template_type: 'invoice'
+          template_type: 'invoice',
+          design_options: {
+            primary_color: '#0f766e',   // Teal — clean and minimal
+            font_family: 'Inter',
+            logo_position: 'left',
+            show_signature_area: false,
+            show_product_images: false
+          }
         }
       },
       {
@@ -785,14 +780,9 @@ export const createDefaultInvoiceTemplates = async (
           { id: '2', type: 'customer_info', content: null },
           { id: '3', type: 'spacer', content: null, settings: { spacerHeight: 16 } },
           { id: '4', type: 'invoice_header', content: null },
-          {
-            id: '5',
-            type: 'line_items_table',
-            content: []
-          },
+          { id: '5', type: 'line_items_table', content: [] },
           { id: '6', type: 'totals', content: null },
-          // ROT/RUT info text block
-          { id: '7', type: 'text_block', content: '**ROT/RUT-avdrag**\nDenna faktura är underlag för ROT/RUT-avdrag. Avdraget hanteras via Skatteverket.\nArbetskostnad som berättigar till avdrag visas separat på raden.', settings: { backgroundColor: '#EBF5FF', paddingTop: 12, paddingBottom: 12, paddingLeft: 12, paddingRight: 12, borderRadius: 8 } },
+          { id: '7', type: 'text_block', content: 'ROT/RUT-avdrag\nDenna faktura är underlag för ROT/RUT-avdrag. Avdraget hanteras via Skatteverket.\nArbetskostnad som berättigar till avdrag visas separat på raden.', settings: { backgroundColor: '#fef3c7', paddingTop: 12, paddingBottom: 12, paddingLeft: 12, paddingRight: 12, borderRadius: 8 } },
           { id: '8', type: 'divider', content: null },
           { id: '9', type: 'payment_info', content: null },
           { id: '10', type: 'terms', content: 'Betalning: Efter ROT/RUT-avdrag ska resterande belopp betalas inom 30 dagar.\nObservera: ROT/RUT-avdrag kan endast göras av fysisk person för arbete i egen bostad.' },
@@ -802,7 +792,14 @@ export const createDefaultInvoiceTemplates = async (
         settings: {
           default_vat_rate: 25,
           default_payment_terms: 30,
-          template_type: 'invoice'
+          template_type: 'invoice',
+          design_options: {
+            primary_color: '#92400e',   // Amber/warm brown — stands out for ROT/RUT
+            font_family: 'Inter',
+            logo_position: 'left',
+            show_signature_area: false,
+            show_product_images: false
+          }
         }
       }
     ];
