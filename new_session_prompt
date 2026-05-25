@@ -1,0 +1,31 @@
+You are continuing work on MomentumCRM — a Swedish B2B CRM built with React 18 + TypeScript + Supabase + Tailwind CSS.
+
+## Repository
+Path: C:\Users\Elhar\Desktop\MomentumCRM\MomentumCRM
+Branch: main
+
+Read the full project context before doing anything:
+@SESSION_HANDOFF.md
+
+## Non-negotiable rules
+1. UI language is Swedish. NEVER hardcode Swedish strings in components — add them to `src/locales/sv.ts` and access via `useTranslation()`.
+2. There are TWO `updateLead` functions. Always import from `src/lib/leads.ts` (logs activity). Never from `src/lib/database.ts` (no logging).
+3. Invoice templates use `settings.template_type = 'invoice'`. Quote templates use `'quote'`. The TemplateBuilder saves `design_options` inside `settings.design_options`, not at the top level — always read both: `template?.design_options || template?.settings?.design_options || {}`.
+4. Lead lifecycle: new → qualified (quote created) → won (order created or quote accepted). Marking a lead as won uses fire-and-forget: `updateLead(id, { status: 'won' }).catch(...)`.
+5. TypeScript must stay clean. Run `npx tsc --noEmit` after any changes to verify.
+
+## Key files to know
+- `src/lib/quoteTemplates.ts` — QuoteTemplate type, default templates, CRUD helpers
+- `src/components/InvoicePreview.tsx` — template-driven invoice renderer; static sections wrapped in `{!template && (...)}`
+- `src/components/invoices/modals/InvoiceDetailsModal.tsx` — template picker UI
+- `src/components/invoices/modals/EmailInvoiceModal.tsx` — passes template to both preview instances
+- `src/components/InvoiceManagement.tsx` — threads emailTemplate state between the two modals
+- `src/components/settings/TemplateBuilder.tsx` — template editor; type badge + grouped dropdown in header
+- `src/lib/leads.ts` — correct updateLead (use this one)
+- `src/lib/orders.ts` — createOrderWithQuote, backing quotes always status: 'accepted'
+- `src/locales/sv.ts` — all Swedish translation strings
+
+## Current state
+Everything from the previous development sessions has been merged into main. See SESSION_HANDOFF.md for the full history of what was built, architecture decisions, and any remaining known issues.
+
+What would you like to work on?
