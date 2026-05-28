@@ -423,52 +423,51 @@ function FieldCard({ field, index, unitPrice, unit, onUpdate, onRemove, onUpdate
         {/* Select: option editor — the primary use case */}
         {field.type === 'select' && (
           <div className="space-y-2">
-            <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center text-xs font-medium text-gray-500 px-0.5 mb-1">
-              <span>Alternativnamn</span>
-              <span className="w-28 text-right">Pristillägg (kr)</span>
-              <span className="w-28 text-right pr-5">Totalpris</span>
-            </div>
-
             {selectOpts.length === 0 && (
               <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
                 Lägg till alternativ nedan.
               </p>
             )}
 
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {selectOpts.map((opt, oi) => (
-                <div key={oi} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={opt.label}
-                    onChange={e => updateOption(oi, { label: e.target.value })}
-                    className={`flex-1 ${smallInputCls}`}
-                    placeholder="T.ex. Brant (> 30°)"
-                  />
-                  <span className="text-xs text-gray-400 flex-shrink-0">+</span>
-                  <input
-                    type="number"
-                    value={opt.value}
-                    onChange={e => updateOption(oi, { value: parseFloat(e.target.value) || 0 })}
-                    className={`w-20 ${smallInputCls} text-right`}
-                    placeholder="0"
-                  />
-                  <span className="text-xs text-gray-400 flex-shrink-0">kr</span>
-                  {/* Live total price preview */}
-                  {unitPrice > 0 ? (
-                    <span className="w-28 text-right text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-200 rounded px-2 py-1 flex-shrink-0">
-                      = {(unitPrice + opt.value).toLocaleString('sv-SE')} kr/{unit || 'enhet'}
-                    </span>
-                  ) : (
-                    <span className="w-28" />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeOption(oi)}
-                    className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                <div key={oi} className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 space-y-2">
+                  {/* Row 1: label input + delete */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={opt.label}
+                      onChange={e => updateOption(oi, { label: e.target.value })}
+                      className={inputCls}
+                      placeholder="Alternativnamn (t.ex. Brant lutning > 30°)"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeOption(oi)}
+                      className="p-1 text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+                      title="Ta bort alternativ"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {/* Row 2: price addon + total */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 flex-shrink-0">Pristillägg:</span>
+                    <span className="text-xs text-gray-400 flex-shrink-0">+</span>
+                    <input
+                      type="number"
+                      value={opt.value}
+                      onChange={e => updateOption(oi, { value: parseFloat(e.target.value) || 0 })}
+                      className="w-24 px-2 py-1.5 border border-gray-200 rounded bg-white text-sm text-right focus:outline-none focus:ring-1 focus:ring-primary-400"
+                      placeholder="0"
+                    />
+                    <span className="text-xs text-gray-500 flex-shrink-0">kr</span>
+                    {unitPrice > 0 && (
+                      <span className="ml-auto text-xs font-semibold text-green-700 bg-green-50 border border-green-100 rounded px-2 py-1 flex-shrink-0">
+                        = {(unitPrice + opt.value).toLocaleString('sv-SE')} kr/{unit || 'enhet'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
