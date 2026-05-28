@@ -8,11 +8,13 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getCustomers, getOrganisation } from '../lib/database';
+import { getCustomers, getOrganisation, getTeamMembers } from '../lib/database';
 import { supabase } from '../lib/supabase';
 import QuoteEditModal from './QuoteEditModal';
-import type { Customer, Lead } from '../types/database';
+import type { Customer, Lead, UserProfile } from '../types/database';
 import type { QuoteTemplate } from '../lib/quoteTemplates';
+
+interface Team { id: string; name: string; specialty: string; }
 
 interface CreateQuoteModalProps {
     isOpen: boolean;
@@ -31,6 +33,8 @@ const CreateQuoteModal: React.FC<CreateQuoteModalProps> = ({
     const [leads, setLeads] = useState<Lead[]>([]);
     const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
     const [companyInfo, setCompanyInfo] = useState<any>(null);
+    const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
+    const [teams, setTeams] = useState<Team[]>([]);
     const [dataLoading, setDataLoading] = useState(true);
 
     useEffect(() => {
@@ -41,11 +45,15 @@ const CreateQuoteModal: React.FC<CreateQuoteModalProps> = ({
                 supabase.from('leads').select('*, customer:customers(*)').eq('organisation_id', organisationId).order('created_at', { ascending: false }),
                 supabase.from('quote_templates').select('*').eq('organisation_id', organisationId).order('name'),
                 getOrganisation(organisationId),
-            ]).then(([customersResult, leadsResult, templatesResult, orgResult]) => {
+                getTeamMembers(organisationId),
+                supabase.from('teams').select('id, name, specialty').eq('organisation_id', organisationId),
+            ]).then(([customersResult, leadsResult, templatesResult, orgResult, teamMembersResult, teamsResult]) => {
                 if (customersResult.data) setCustomers(customersResult.data);
                 if (leadsResult.data) setLeads(leadsResult.data as Lead[]);
                 if (templatesResult.data) setTemplates(templatesResult.data as QuoteTemplate[]);
                 if (orgResult.data) setCompanyInfo(orgResult.data);
+                if (teamMembersResult.data) setTeamMembers(teamMembersResult.data);
+                if (teamsResult.data) setTeams(teamsResult.data as Team[]);
                 setDataLoading(false);
             });
         }
@@ -74,6 +82,8 @@ const CreateQuoteModal: React.FC<CreateQuoteModalProps> = ({
             templates={templates}
             companyInfo={companyInfo}
             organisationId={organisationId!}
+            teamMembers={teamMembers}
+            teams={teams}
             onSave={async () => {
                 onQuoteCreated();
             }}

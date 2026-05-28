@@ -275,6 +275,8 @@ export interface Lead {
   organisation_id?: string | null;
   customer_id?: string | null;
   assigned_to_user_id?: string | null;
+  assigned_to_team_id?: string | null;
+  assignment_type?: AssignmentType | null;
   title: string;
   description?: string | null;
   source?: string | null;
@@ -288,6 +290,7 @@ export interface Lead {
   city?: string | null;
   customer?: Customer;
   assigned_to?: UserProfile;
+  assigned_team?: Team;
 }
 
 export type TaskStatus = 'pending' | 'completed' | 'denied';

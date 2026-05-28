@@ -21,6 +21,7 @@ import {
   getQuotes,
   getCustomers,
   getLeads,
+  getTeamMembers,
   updateQuote,
   deleteQuote,
   duplicateQuote,
@@ -32,8 +33,10 @@ import {
 import { sendOrderConfirmationEmail } from '../lib/quotes';
 import { uploadSignedDocument } from '../lib/storage';
 import { getQuoteTemplates, type QuoteTemplate } from '../lib/quoteTemplates';
-import type { Quote, Customer, Lead, QuoteStatus, QuoteLineItem } from '../types/database';
+import type { Quote, Customer, Lead, QuoteStatus, QuoteLineItem, UserProfile } from '../types/database';
 import { QUOTE_STATUS_LABELS, getQuoteStatusColor } from '../types/database';
+
+interface QMTeam { id: string; name: string; specialty: string; }
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import SendCustomerReminderModal from './SendCustomerReminderModal';
@@ -57,6 +60,8 @@ function QuoteManagement() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
   const [companyInfo, setCompanyInfo] = useState<any>(null);
+  const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
+  const [teams, setTeams] = useState<QMTeam[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -142,11 +147,13 @@ function QuoteManagement() {
         dateTo: dateTo || undefined
       };
 
-      const [quotesResult, customersResult, leadsResult, templatesResult] = await Promise.all([
+      const [quotesResult, customersResult, leadsResult, templatesResult, teamMembersResult, teamsResult] = await Promise.all([
         getQuotes(organisationId!, filters),
         getCustomers(organisationId!),
         getLeads(organisationId!),
-        getQuoteTemplates(organisationId!)
+        getQuoteTemplates(organisationId!),
+        getTeamMembers(organisationId!),
+        supabase.from('teams').select('id, name, specialty').eq('organisation_id', organisationId!),
       ]);
 
       if (quotesResult.error) {
@@ -175,6 +182,8 @@ function QuoteManagement() {
       setQuotes(quotesResult.data || []);
       setCustomers(customersResult.data || []);
       setLeads(leadsResult.data || []);
+      if (teamMembersResult.data) setTeamMembers(teamMembersResult.data);
+      if (teamsResult.data) setTeams(teamsResult.data as QMTeam[]);
 
       // Load company info for template preview
       const { data: orgData } = await supabase
@@ -683,6 +692,8 @@ function QuoteManagement() {
             templates={templates}
             companyInfo={companyInfo}
             organisationId={organisationId!}
+            teamMembers={teamMembers}
+            teams={teams}
             onSave={handleSaveQuote}
           />
         )

@@ -7,6 +7,7 @@ import { LEAD_STATUS_LABELS } from '../types/database';
 export interface LeadWithRelations extends Lead {
   customer?: Customer;
   assigned_to?: UserProfile;
+  assigned_team?: { id: string; name: string } | null;
   notes?: LeadNote[];
   activities?: LeadActivity[];
   lead_score?: number;
@@ -143,9 +144,10 @@ export const getLeads = async (
       return { data: [], count: count || 0, error: null };
     }
 
-    // Get unique customer and user IDs
+    // Get unique customer, user, and team IDs
     const customerIds = [...new Set(leads.map(l => l.customer_id).filter(Boolean))];
     const userIds = [...new Set(leads.map(l => l.assigned_to_user_id).filter(Boolean))];
+    const teamIds = [...new Set(leads.map(l => l.assigned_to_team_id).filter(Boolean))];
 
     // Fetch customers
     const { data: customers } = customerIds.length > 0
@@ -163,15 +165,25 @@ export const getLeads = async (
         .in('id', userIds)
       : { data: [] };
 
+    // Fetch teams
+    const { data: teamsData } = teamIds.length > 0
+      ? await supabase
+        .from('teams')
+        .select('id, name')
+        .in('id', teamIds)
+      : { data: [] };
+
     // Create lookup maps
     const customerMap = new Map((customers || []).map(c => [c.id, c]));
     const userMap = new Map((users || []).map(u => [u.id, u]));
+    const teamMap = new Map((teamsData || []).map(t => [t.id, t]));
 
     // Enrich leads with related data
     const enrichedLeads = leads.map(lead => ({
       ...lead,
       customer: customerMap.get(lead.customer_id) || null,
-      assigned_to: userMap.get(lead.assigned_to_user_id) || null
+      assigned_to: userMap.get(lead.assigned_to_user_id) || null,
+      assigned_team: teamMap.get(lead.assigned_to_team_id) || null
     }));
 
     return { data: enrichedLeads, count: count || 0, error: null };
@@ -240,7 +252,7 @@ export const updateLead = async (
     // Fetch current state for activity comparison
     const { data: currentLead } = await supabase
       .from('leads')
-      .select('status, assigned_to_user_id')
+      .select('status, assigned_to_user_id, assigned_to_team_id')
       .eq('id', id)
       .single();
 
@@ -272,10 +284,15 @@ export const updateLead = async (
           updates.assigned_to_user_id ? 'Förfrågan tilldelad' : 'Tilldelning borttagen'
         ).catch(() => undefined);
       }
+      if (updates.assigned_to_team_id !== undefined && updates.assigned_to_team_id !== currentLead.assigned_to_team_id) {
+        createLeadActivity(id, actingUserId ?? null, 'assigned',
+          updates.assigned_to_team_id ? 'Förfrågan tilldelad till team' : 'Teamtilldelning borttagen'
+        ).catch(() => undefined);
+      }
     }
 
-    // Enrich with customer and user data
-    let enrichedData: LeadWithRelations = { ...data, customer: null, assigned_to: null };
+    // Enrich with customer, user, and team data
+    let enrichedData: LeadWithRelations = { ...data, customer: null, assigned_to: null, assigned_team: null };
 
     if (data.customer_id) {
       const { data: customer } = await supabase
@@ -293,6 +310,15 @@ export const updateLead = async (
         .eq('id', data.assigned_to_user_id)
         .single();
       enrichedData.assigned_to = user || undefined;
+    }
+
+    if (data.assigned_to_team_id) {
+      const { data: team } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('id', data.assigned_to_team_id)
+        .single();
+      enrichedData.assigned_team = team || null;
     }
 
     return { data: enrichedData, error: null };

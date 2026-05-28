@@ -11,7 +11,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { createLead } from '../lib/leads';
 import { getCustomers, getTeamMembers, createCustomer, updateCustomer } from '../lib/database';
-import type { Customer, UserProfile, LeadStatus } from '../types/database';
+import { supabase } from '../lib/supabase';
+import type { Customer, UserProfile, LeadStatus, AssignmentType } from '../types/database';
+
+interface CLTeam { id: string; name: string; specialty: string; }
 
 interface CreateLeadModalProps {
     isOpen: boolean;
@@ -31,10 +34,14 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
         estimated_value: '',
         customer_id: '',
         assigned_to_user_id: '',
+        assigned_to_team_id: '',
+        assignment_type: '' as '' | AssignmentType,
+        city: '',
     });
 
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
+    const [teams, setTeams] = useState<CLTeam[]>([]);
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -69,6 +76,9 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                 estimated_value: '',
                 customer_id: '',
                 assigned_to_user_id: user?.id || '',
+                assigned_to_team_id: '',
+                assignment_type: user?.id ? 'individual' : '',
+                city: '',
             });
             setIsNewCustomer(false);
             setNewCustomerForm({
@@ -78,12 +88,14 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
             });
 
             const loadModalData = async () => {
-                const [customersResult, teamMembersResult] = await Promise.all([
+                const [customersResult, teamMembersResult, teamsResult] = await Promise.all([
                     getCustomers(organisationId),
                     getTeamMembers(organisationId),
+                    supabase.from('teams').select('id, name, specialty').eq('organisation_id', organisationId),
                 ]);
                 if (customersResult.data) setCustomers(customersResult.data);
                 if (teamMembersResult.data) setTeamMembers(teamMembersResult.data);
+                if (teamsResult.data) setTeams(teamsResult.data as CLTeam[]);
             };
             loadModalData();
         }
@@ -149,7 +161,10 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                 status: formData.status,
                 estimated_value: formData.estimated_value ? parseFloat(formData.estimated_value) : null,
                 customer_id: customerId || null,
-                assigned_to_user_id: formData.assigned_to_user_id || null,
+                assigned_to_user_id: formData.assignment_type === 'individual' ? formData.assigned_to_user_id || null : null,
+                assigned_to_team_id: formData.assignment_type === 'team' ? formData.assigned_to_team_id || null : null,
+                assignment_type: formData.assignment_type || null,
+                city: formData.city.trim() || null,
             };
 
             const { error } = await createLead(leadData as any);
@@ -514,20 +529,54 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                             )}
                         </div>
 
-                        {/* Salesperson Assignment */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Tilldela till Säljare</label>
-                            <select
-                                value={formData.assigned_to_user_id}
-                                onChange={(e) => setFormData({ ...formData, assigned_to_user_id: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                            >
-                                <option value="">Välj säljare...</option>
-                                {teamMembers.filter(tm => tm.role === 'sales' || tm.role === 'admin').map(tm => (
-                                    <option key={tm.id} value={tm.id}>{tm.full_name}</option>
-                                ))}
-                            </select>
-                        </div>
+                        {/* Assignment */}
+                        {(teamMembers.length > 0 || teams.length > 0) && (
+                            <div className="space-y-3">
+                                <label className="block text-sm font-medium text-gray-700">Tilldelning</label>
+                                <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+                                    <button type="button"
+                                        className={`flex-1 py-2 font-medium transition-colors ${formData.assignment_type === '' ? 'bg-gray-100 text-gray-900' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                                        onClick={() => setFormData(p => ({ ...p, assignment_type: '', assigned_to_user_id: '', assigned_to_team_id: '' }))}
+                                    >Ingen</button>
+                                    <button type="button"
+                                        className={`flex-1 py-2 font-medium border-l border-gray-200 transition-colors ${formData.assignment_type === 'individual' ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                                        onClick={() => setFormData(p => ({ ...p, assignment_type: 'individual', assigned_to_team_id: '' }))}
+                                    >Person</button>
+                                    <button type="button"
+                                        className={`flex-1 py-2 font-medium border-l border-gray-200 transition-colors ${formData.assignment_type === 'team' ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                                        onClick={() => setFormData(p => ({ ...p, assignment_type: 'team', assigned_to_user_id: '' }))}
+                                    >Team</button>
+                                </div>
+                                {formData.assignment_type === 'individual' && (
+                                    <select
+                                        value={formData.assigned_to_user_id}
+                                        onChange={e => setFormData(p => ({ ...p, assigned_to_user_id: e.target.value }))}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                    >
+                                        <option value="">Välj person...</option>
+                                        {teamMembers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                                    </select>
+                                )}
+                                {formData.assignment_type === 'team' && (
+                                    <select
+                                        value={formData.assigned_to_team_id}
+                                        onChange={e => setFormData(p => ({ ...p, assigned_to_team_id: e.target.value }))}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                    >
+                                        <option value="">Välj team...</option>
+                                        {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                )}
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Stad / Säljområde</label>
+                                    <input type="text" value={formData.city}
+                                        onChange={e => setFormData(p => ({ ...p, city: e.target.value }))}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                        placeholder="T.ex. Stockholm"
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Actions */}

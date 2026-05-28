@@ -136,7 +136,7 @@ const getInitialEditFormData = (order: OrderWithRelations | null) => {
 // ====== COMPACT KANBAN ROW COMPONENTS ====== //
 
 const OrderKanbanRow = ({
-  order, borderColor, onDragStart, onClick, onEdit, onDelete, teamMembers, onQuickAssign,
+  order, borderColor, onDragStart, onClick, onEdit, onDelete, teamMembers, teams, onQuickAssign,
 }: {
   order: OrderWithRelations;
   borderColor: string;
@@ -145,15 +145,17 @@ const OrderKanbanRow = ({
   onEdit: () => void;
   onDelete: () => void;
   teamMembers: UserProfile[];
-  onQuickAssign: (updates: { region?: string; assigned_to_user_id?: string }) => void;
+  teams: TeamWithRelations[];
+  onQuickAssign: (updates: { region?: string; assigned_to_user_id?: string; assigned_to_team_id?: string }) => void;
 }) => {
   const [showPopover, setShowPopover] = React.useState(false);
   const [assignUser, setAssignUser] = React.useState(order.assigned_to_user_id || '');
+  const [assignTeam, setAssignTeam] = React.useState(order.assigned_to_team_id || '');
   const [assignRegion, setAssignRegion] = React.useState(order.region || '');
 
   const handleAssign = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onQuickAssign({ region: assignRegion || undefined, assigned_to_user_id: assignUser || undefined });
+    onQuickAssign({ region: assignRegion || undefined, assigned_to_user_id: assignUser || undefined, assigned_to_team_id: assignTeam || undefined });
     setShowPopover(false);
   };
 
@@ -242,11 +244,21 @@ const OrderKanbanRow = ({
           <select
             className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
             value={assignUser}
-            onChange={(e) => setAssignUser(e.target.value)}
+            onChange={(e) => { setAssignUser(e.target.value); if (e.target.value) setAssignTeam(''); }}
           >
             <option value="">-- Välj säljare --</option>
             {teamMembers.map(m => (
               <option key={m.id} value={m.id}>{m.full_name}</option>
+            ))}
+          </select>
+          <select
+            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            value={assignTeam}
+            onChange={(e) => { setAssignTeam(e.target.value); if (e.target.value) setAssignUser(''); }}
+          >
+            <option value="">-- Välj team --</option>
+            {teams.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
           <input
@@ -276,7 +288,7 @@ const OrderKanbanRow = ({
 };
 
 const LeadKanbanRow = ({
-  lead, borderColor, onDragStart, onClick, onCreateQuote, teamMembers, onQuickAssign,
+  lead, borderColor, onDragStart, onClick, onCreateQuote, teamMembers, teams, onQuickAssign,
 }: {
   lead: LeadWithRelations;
   borderColor: string;
@@ -284,15 +296,17 @@ const LeadKanbanRow = ({
   onClick: () => void;
   onCreateQuote: () => void;
   teamMembers: UserProfile[];
-  onQuickAssign: (updates: { city?: string; assigned_to_user_id?: string }) => void;
+  teams: TeamWithRelations[];
+  onQuickAssign: (updates: { city?: string; assigned_to_user_id?: string; assigned_to_team_id?: string }) => void;
 }) => {
   const [showPopover, setShowPopover] = React.useState(false);
   const [assignUser, setAssignUser] = React.useState(lead.assigned_to_user_id || '');
+  const [assignTeam, setAssignTeam] = React.useState(lead.assigned_to_team_id || '');
   const [assignCity, setAssignCity] = React.useState(lead.city || '');
 
   const handleAssign = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onQuickAssign({ city: assignCity || undefined, assigned_to_user_id: assignUser || undefined });
+    onQuickAssign({ city: assignCity || undefined, assigned_to_user_id: assignUser || undefined, assigned_to_team_id: assignTeam || undefined });
     setShowPopover(false);
   };
 
@@ -345,6 +359,12 @@ const LeadKanbanRow = ({
               {lead.assigned_to.full_name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || '?'}
             </span>
           )}
+          {(lead as any).assigned_team && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+              <Users2 className="w-3 h-3" />
+              {(lead as any).assigned_team.name}
+            </span>
+          )}
           {typeof lead.lead_score === 'number' && (
             <span className={`inline-flex items-center gap-1 text-xs font-semibold rounded px-1.5 py-0.5 ${lead.lead_score >= 70 ? 'bg-green-100 text-green-700' :
               lead.lead_score >= 40 ? 'bg-amber-100 text-amber-700' :
@@ -389,11 +409,21 @@ const LeadKanbanRow = ({
           <select
             className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
             value={assignUser}
-            onChange={(e) => setAssignUser(e.target.value)}
+            onChange={(e) => { setAssignUser(e.target.value); if (e.target.value) setAssignTeam(''); }}
           >
             <option value="">-- Välj säljare --</option>
             {teamMembers.map(m => (
               <option key={m.id} value={m.id}>{m.full_name}</option>
+            ))}
+          </select>
+          <select
+            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            value={assignTeam}
+            onChange={(e) => { setAssignTeam(e.target.value); if (e.target.value) setAssignUser(''); }}
+          >
+            <option value="">-- Välj team --</option>
+            {teams.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
           <input
@@ -513,11 +543,11 @@ const QuoteKanbanRow = ({
         </div>
         {/* Row 4: Action buttons (visible on hover) */}
         <div className="flex items-center justify-between pt-0.5">
-          <div className="hidden group-hover:flex items-center gap-2">
+          <div className="flex items-center gap-2">
             {onPreview && (
               <button
                 onClick={(e) => { e.stopPropagation(); onPreview(); }}
-                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-0.5 rounded hover:bg-indigo-50 transition-colors"
+                className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-0.5 rounded hover:bg-indigo-50 transition-colors"
               >
                 <Eye className="w-3 h-3" />
                 Förhandsgranska
@@ -526,7 +556,7 @@ const QuoteKanbanRow = ({
             {onSend && (
               <button
                 onClick={(e) => { e.stopPropagation(); onSend(); }}
-                className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 font-medium px-2 py-0.5 rounded hover:bg-green-50 transition-colors"
+                className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs text-green-600 hover:text-green-800 font-medium px-2 py-0.5 rounded hover:bg-green-50 transition-colors"
               >
                 <Mail className="w-3 h-3" />
                 Skicka
@@ -534,7 +564,7 @@ const QuoteKanbanRow = ({
             )}
           </div>
           <button
-            className="opacity-0 group-hover:opacity-100 text-xs font-medium text-amber-600 border border-amber-300 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded transition-all ml-auto"
+            className="opacity-0 group-hover:opacity-100 text-xs font-medium text-amber-600 border border-amber-300 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded transition-all"
             onClick={(e: React.MouseEvent) => { e.stopPropagation(); setShowPopover(v => !v); }}
             title="Tilldela"
           >
@@ -1027,11 +1057,20 @@ function OrderKanban() {
     }
   };
 
-  const handleQuickAssignLead = async (lead: LeadWithRelations, updates: { city?: string; assigned_to_user_id?: string }) => {
+  const handleQuickAssignLead = async (lead: LeadWithRelations, updates: { city?: string; assigned_to_user_id?: string; assigned_to_team_id?: string }) => {
     try {
       const patch: Record<string, any> = {};
       if (updates.city !== undefined) patch.city = updates.city || null;
-      if (updates.assigned_to_user_id !== undefined) patch.assigned_to_user_id = updates.assigned_to_user_id || null;
+      if (updates.assigned_to_user_id !== undefined) {
+        patch.assigned_to_user_id = updates.assigned_to_user_id || null;
+        patch.assignment_type = updates.assigned_to_user_id ? 'individual' : null;
+        patch.assigned_to_team_id = null;
+      }
+      if (updates.assigned_to_team_id !== undefined && !updates.assigned_to_user_id) {
+        patch.assigned_to_team_id = updates.assigned_to_team_id || null;
+        patch.assignment_type = updates.assigned_to_team_id ? 'team' : null;
+        patch.assigned_to_user_id = null;
+      }
       await updateLead(lead.id, patch, user?.id);
       loadData();
     } catch (err) {
@@ -1059,11 +1098,20 @@ function OrderKanban() {
     }
   };
 
-  const handleQuickAssignOrder = async (order: OrderWithRelations, updates: { region?: string; assigned_to_user_id?: string }) => {
+  const handleQuickAssignOrder = async (order: OrderWithRelations, updates: { region?: string; assigned_to_user_id?: string; assigned_to_team_id?: string }) => {
     try {
       const patch: Record<string, any> = {};
       if (updates.region !== undefined) patch.region = updates.region || null;
-      if (updates.assigned_to_user_id !== undefined) patch.assigned_to_user_id = updates.assigned_to_user_id || null;
+      if (updates.assigned_to_user_id !== undefined) {
+        patch.assigned_to_user_id = updates.assigned_to_user_id || null;
+        patch.assignment_type = updates.assigned_to_user_id ? 'individual' : null;
+        patch.assigned_to_team_id = null;
+      }
+      if (updates.assigned_to_team_id !== undefined && !updates.assigned_to_user_id) {
+        patch.assigned_to_team_id = updates.assigned_to_team_id || null;
+        patch.assignment_type = updates.assigned_to_team_id ? 'team' : null;
+        patch.assigned_to_user_id = null;
+      }
       await updateOrder(order.id, patch);
       loadData();
     } catch (err) {
@@ -1442,6 +1490,7 @@ function OrderKanban() {
                             }}
                             onCreateQuote={() => handleCreateQuote(lead)}
                             teamMembers={teamMembers}
+                            teams={teams}
                             onQuickAssign={(updates) => handleQuickAssignLead(lead, updates)}
                           />
                         ))}
@@ -1488,6 +1537,7 @@ function OrderKanban() {
                               setShowDeleteDialog(true);
                             }}
                             teamMembers={teamMembers}
+                            teams={teams}
                             onQuickAssign={(updates) => handleQuickAssignOrder(order, updates)}
                           />
                         ))}
