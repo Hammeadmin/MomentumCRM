@@ -532,8 +532,8 @@ const QuoteKanbanRow = ({
             </span>
           )}
         </div>
-        {/* Row 4: Action buttons (visible on hover) */}
-        <div className="flex items-center justify-between pt-0.5">
+        {/* Row 4: Action footer — negative margins extend flush to card edges */}
+        <div className="flex items-center justify-between -mx-3 -mb-2 mt-1.5 px-3 pt-1.5 pb-2 border-t border-gray-100 rounded-b-lg">
           <div className="flex items-center gap-2">
             {onPreview && (
               <button
