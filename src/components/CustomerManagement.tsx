@@ -12,33 +12,8 @@ import { LEAD_STATUS_LABELS, QUOTE_STATUS_LABELS, JOB_STATUS_LABELS, INVOICE_STA
 import SendQuoteModal from './SendQuoteModal';
 import { useAuth } from '../contexts/AuthContext';
 import { Button, Badge } from './ui';
-
-
-
-const swedishCities = [
-  "Alingsås", "Arboga", "Arvika", "Askersund", "Avesta",
-  "Boden", "Bollnäs", "Borgholm", "Borlänge", "Borås", "Båstad",
-  "Eksjö", "Enköping", "Eskilstuna", "Eslöv",
-  "Fagersta", "Falkenberg", "Falköping", "Falsterbo", "Falun", "Filipstad", "Flen",
-  "Gränna", "Gävle", "Göteborg",
-  "Hagfors", "Halmstad", "Haparanda", "Hedemora", "Helsingborg", "Hjo", "Hudiksvall", "Huskvarna", "Härnösand", "Hässleholm", "Höganäs",
-  "Jönköping",
-  "Kalmar", "Karlshamn", "Karlskoga", "Karlskrona", "Karlstad", "Katrineholm", "Kiruna", "Kramfors", "Kristianstad", "Kristinehamn", "Kumla", "Kungsbacka", "Kungälv", "Köping",
-  "Laholm", "Landskrona", "Lidköping", "Lindesberg", "Linköping", "Ljungby", "Ludvika", "Luleå", "Lund", "Lycksele", "Lysekil",
-  "Malmö", "Mariefred", "Mariestad", "Marstrand", "Mjölby", "Motala", "Mölndal",
-  "Nora", "Norrköping", "Norrtälje", "Nybro", "Nyköping", "Nynäshamn", "Nässjö",
-  "Oskarshamn", "Oxelösund",
-  "Piteå",
-  "Ronneby",
-  "Sala", "Sandviken", "Sigtuna", "Simrishamn", "Skara", "Skellefteå", "Skänninge", "Skövde", "Sollefteå", "Stockholm", "Strängnäs", "Strömstad", "Sundsvall", "Säffle", "Säter", "Sävsjö", "Söderhamn", "Söderköping", "Södertälje", "Sölvesborg",
-  "Tidaholm", "Torshälla", "Tranås", "Trelleborg", "Trollhättan", "Trosa",
-  "Uddevalla", "Ulricehamn", "Umeå", "Uppsala",
-  "Vadstena", "Varberg", "Vetlanda", "Vimmerby", "Visby", "Vänersborg", "Värnamo", "Västervik", "Västerås", "Växjö",
-  "Ystad",
-  "Åhus", "Åmål",
-  "Ängelholm",
-  "Örebro", "Öregrund", "Örnsköldsvik", "Östersund", "Östhammar"
-];
+import CityAutocomplete from './CityAutocomplete';
+import { swedishCities } from '../data/swedishCities';
 
 interface CustomerWithStats extends Customer {
   total_leads?: number;
@@ -541,16 +516,13 @@ function CustomerManagement() {
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Ort</label>
-                  <input type="text" value={customerForm.city} onChange={(e) => setCustomerForm(prev => ({ ...prev, city: e.target.value }))} className="w-full px-3 py-2 border rounded-md" />
+                  <CityAutocomplete value={customerForm.city} onChange={v => setCustomerForm(prev => ({ ...prev, city: v }))} className="w-full" inputClassName="w-full px-3 py-2 border rounded-md" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Säljområde</label>
-                <select value={customerForm.sales_area} onChange={(e) => setCustomerForm(prev => ({ ...prev, sales_area: e.target.value }))} className="w-full px-3 py-2 border rounded-md bg-white">
-                  <option value="">Välj område...</option>
-                  {swedishCities.sort().map(city => <option key={city} value={city}>{city}</option>)}
-                </select>
+                <CityAutocomplete value={customerForm.sales_area} onChange={v => setCustomerForm(prev => ({ ...prev, sales_area: v }))} placeholder="Välj eller skriv område..." className="w-full" inputClassName="w-full px-3 py-2 border rounded-md" />
               </div>
               <div className="border-t pt-6">
                 <h4 className="text-md font-semibold text-gray-800 mb-4">Faktureringsinställningar</h4>

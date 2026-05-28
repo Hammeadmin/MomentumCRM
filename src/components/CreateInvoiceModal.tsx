@@ -17,6 +17,7 @@ import ROTFields from './ROTFields';
 import RUTFields from './RUTFields';
 import type { Customer } from '../types/database';
 import LineItemsEditor, { type LineItem } from './LineItemsEditor';
+import CityAutocomplete from './CityAutocomplete';
 
 interface LinkedOrder {
     id: string;
@@ -460,11 +461,7 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                                                     value={newCustomerForm.postal_code}
                                                     onChange={e => setNewCustomerForm(prev => ({ ...prev, postal_code: e.target.value }))}
                                                 />
-                                                <input type="text" placeholder="Ort"
-                                                    className="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500"
-                                                    value={newCustomerForm.city}
-                                                    onChange={e => setNewCustomerForm(prev => ({ ...prev, city: e.target.value }))}
-                                                />
+                                                <CityAutocomplete value={newCustomerForm.city} onChange={v => setNewCustomerForm(prev => ({ ...prev, city: v }))} placeholder="Ort" className="w-full" inputClassName="block w-full rounded-md border-gray-300 shadow-sm text-sm px-3 py-2 border focus:ring-blue-500 focus:border-blue-500" />
                                             </div>
                                             <div className="grid grid-cols-2 gap-2">
                                                 <input type="text" placeholder="Försäljningsområde"
@@ -555,7 +552,7 @@ const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
                                                                 <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Adress" value={existingCustomerEditForm.address} onChange={e => setExistingCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
                                                                 <div className="flex gap-1.5">
                                                                     <input className="w-20 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Postnr" value={existingCustomerEditForm.postal_code} onChange={e => setExistingCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
-                                                                    <input className="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Stad" value={existingCustomerEditForm.city} onChange={e => setExistingCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                                                                    <CityAutocomplete value={existingCustomerEditForm.city} onChange={v => setExistingCustomerEditForm(p => ({ ...p, city: v }))} placeholder="Stad" className="flex-1" inputClassName="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
                                                                 </div>
                                                                 <div className="grid grid-cols-2 gap-1.5">
                                                                     <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Försäljningsområde" value={existingCustomerEditForm.sales_area} onChange={e => setExistingCustomerEditForm(p => ({ ...p, sales_area: e.target.value }))} />

@@ -39,6 +39,7 @@ import RUTFields from '../components/RUTFields';
 import ProductLibraryModal from './ProductLibraryModal';
 import type { QuoteTemplate, ProductLibraryItem } from '../lib/quoteTemplates';
 import type { Quote, Customer, Lead, QuoteStatus, QuoteLineItem, UserProfile, Team, AssignmentType } from '../types/database';
+import CityAutocomplete from './CityAutocomplete';
 
 interface QuoteWithRelations extends Quote {
     customer?: Customer;
@@ -659,13 +660,7 @@ export default function QuoteEditModal({
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-gray-600 mb-1">Stad</label>
-                                            <input
-                                                type="text"
-                                                value={manualCustomerForm.city}
-                                                onChange={e => setManualCustomerForm(prev => ({ ...prev, city: e.target.value }))}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                                                placeholder="Stockholm"
-                                            />
+                                            <CityAutocomplete value={manualCustomerForm.city} onChange={v => setManualCustomerForm(prev => ({ ...prev, city: v }))} placeholder="Stockholm" className="w-full" inputClassName="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500" />
                                         </div>
                                     </div>
 
@@ -896,13 +891,7 @@ export default function QuoteEditModal({
                                                             </div>
                                                             <div>
                                                                 <label className="block text-xs font-medium text-slate-600 mb-1">Stad</label>
-                                                                <input
-                                                                    type="text"
-                                                                    value={existingCustomerForm.city || ''}
-                                                                    onChange={e => setExistingCustomerForm(prev => ({ ...prev, city: e.target.value }))}
-                                                                    placeholder="Stockholm"
-                                                                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                                                />
+                                                                <CityAutocomplete value={existingCustomerForm.city || ''} onChange={v => setExistingCustomerForm(prev => ({ ...prev, city: v }))} placeholder="Stockholm" className="w-full" inputClassName="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
                                                             </div>
                                                         </div>
                                                         {/* Footer buttons */}
@@ -1062,13 +1051,7 @@ export default function QuoteEditModal({
                                 {/* City */}
                                 <div>
                                     <label className="block text-xs font-medium text-gray-600 mb-1">Stad / Område</label>
-                                    <input
-                                        type="text"
-                                        value={quoteForm.city}
-                                        onChange={e => setQuoteForm(prev => ({ ...prev, city: e.target.value }))}
-                                        placeholder="t.ex. Stockholm"
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                    />
+                                    <CityAutocomplete value={quoteForm.city} onChange={v => setQuoteForm(prev => ({ ...prev, city: v }))} placeholder="t.ex. Stockholm" className="w-full" inputClassName="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
                                 </div>
                             </div>
                         </div>

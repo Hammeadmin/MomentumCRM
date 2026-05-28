@@ -22,6 +22,7 @@ import SendQuoteModal from './SendQuoteModal';
 import { updateLead, type LeadWithRelations } from '../lib/leads';
 import { getLeadNotes, createLeadNote, getLeadActivities, formatDate, formatDateTime, formatCurrency, updateCustomer } from '../lib/database';
 import { LEAD_STATUS_LABELS, type LeadStatus, type UserProfile, type LeadNote, type LeadActivity } from '../types/database';
+import CityAutocomplete from './CityAutocomplete';
 
 interface LeadEditModalProps {
   lead: LeadWithRelations;
@@ -324,13 +325,7 @@ export default function LeadEditModal({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Säljområde / Stad</label>
-                  <input
-                    type="text"
-                    value={formData.city}
-                    onChange={e => setFormData(p => ({ ...p, city: e.target.value }))}
-                    placeholder="t.ex. Stockholm"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                  />
+                  <CityAutocomplete value={formData.city} onChange={v => setFormData(p => ({ ...p, city: v }))} placeholder="t.ex. Stockholm" className="w-full" inputClassName="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
                 </div>
               </div>
 
@@ -456,7 +451,7 @@ export default function LeadEditModal({
                             <input className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Adress" value={customerEditForm.address} onChange={e => setCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
                             <div className="flex gap-2">
                               <input className="w-24 text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Postnr" value={customerEditForm.postal_code} onChange={e => setCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
-                              <input className="flex-1 text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Stad" value={customerEditForm.city} onChange={e => setCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                              <CityAutocomplete value={customerEditForm.city} onChange={v => setCustomerEditForm(p => ({ ...p, city: v }))} placeholder="Stad" className="flex-1" inputClassName="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <div>

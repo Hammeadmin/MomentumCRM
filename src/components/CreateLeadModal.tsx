@@ -13,6 +13,7 @@ import { createLead } from '../lib/leads';
 import { getCustomers, getTeamMembers, createCustomer, updateCustomer } from '../lib/database';
 import { supabase } from '../lib/supabase';
 import type { Customer, UserProfile, LeadStatus, AssignmentType } from '../types/database';
+import CityAutocomplete from './CityAutocomplete';
 
 interface CLTeam { id: string; name: string; specialty: string; }
 
@@ -384,13 +385,7 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-gray-600 mb-1">Ort</label>
-                                            <input
-                                                type="text"
-                                                value={newCustomerForm.city}
-                                                onChange={e => setNewCustomerForm(prev => ({ ...prev, city: e.target.value }))}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                                                placeholder="Stockholm"
-                                            />
+                                            <CityAutocomplete value={newCustomerForm.city} onChange={v => setNewCustomerForm(prev => ({ ...prev, city: v }))} placeholder="Stockholm" className="w-full" inputClassName="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" />
                                         </div>
                                     </div>
                                     {/* Sales area + VAT */}
@@ -494,7 +489,7 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                                                     <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Adress" value={existingCustomerEditForm.address} onChange={e => setExistingCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
                                                     <div className="flex gap-1.5">
                                                         <input className="w-20 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Postnr" value={existingCustomerEditForm.postal_code} onChange={e => setExistingCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
-                                                        <input className="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Stad" value={existingCustomerEditForm.city} onChange={e => setExistingCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                                                        <CityAutocomplete value={existingCustomerEditForm.city} onChange={v => setExistingCustomerEditForm(p => ({ ...p, city: v }))} placeholder="Stad" className="flex-1" inputClassName="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-1.5">
                                                         <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder="Försäljningsområde" value={existingCustomerEditForm.sales_area} onChange={e => setExistingCustomerEditForm(p => ({ ...p, sales_area: e.target.value }))} />
@@ -569,11 +564,7 @@ const CreateLeadModal: React.FC<CreateLeadModalProps> = ({ isOpen, onClose, onLe
                                 )}
                                 <div>
                                     <label className="block text-xs font-medium text-gray-600 mb-1">Stad / Säljområde</label>
-                                    <input type="text" value={formData.city}
-                                        onChange={e => setFormData(p => ({ ...p, city: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                                        placeholder="T.ex. Stockholm"
-                                    />
+                                    <CityAutocomplete value={formData.city} onChange={v => setFormData(p => ({ ...p, city: v }))} placeholder="T.ex. Stockholm" className="w-full" inputClassName="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" />
                                 </div>
                             </div>
                         )}

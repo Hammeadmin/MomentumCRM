@@ -67,6 +67,7 @@ import OrderStatusBadge from './OrderStatusBadge';
 import StatusChangeHistory from './StatusChangeHistory';
 import { useNavigate } from 'react-router-dom'; // Add this line
 import { getOrderCommunications } from "../lib/communications";
+import CityAutocomplete from './CityAutocomplete';
 
 // Lazy load heavy modal components to reduce initial bundle size
 const EmailComposer = lazy(() => import("./EmailComposer"));
@@ -261,12 +262,7 @@ const OrderKanbanRow = ({
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
-          <input
-            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-            placeholder="Säljområde (region)"
-            value={assignRegion}
-            onChange={(e) => setAssignRegion(e.target.value)}
-          />
+          <CityAutocomplete value={assignRegion} onChange={setAssignRegion} placeholder="Säljområde (region)" className="w-full" inputClassName="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
           <div className="flex gap-2 justify-end">
             <button
               className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
@@ -426,12 +422,7 @@ const LeadKanbanRow = ({
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
-          <input
-            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-            placeholder="Säljområde (stad)"
-            value={assignCity}
-            onChange={(e) => setAssignCity(e.target.value)}
-          />
+          <CityAutocomplete value={assignCity} onChange={setAssignCity} placeholder="Säljområde (stad)" className="w-full" inputClassName="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400" />
           <div className="flex gap-2 justify-end">
             <button
               className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
@@ -600,12 +591,7 @@ const QuoteKanbanRow = ({
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
-          <input
-            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
-            placeholder="Stad / Område"
-            value={assignCity}
-            onChange={(e) => setAssignCity(e.target.value)}
-          />
+          <CityAutocomplete value={assignCity} onChange={setAssignCity} placeholder="Stad / Område" className="w-full" inputClassName="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400" />
           <div className="flex gap-2 justify-end">
             <button
               className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"

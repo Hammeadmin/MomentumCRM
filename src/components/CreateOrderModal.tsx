@@ -23,6 +23,7 @@ import {
   type JobType,
   type AssignmentType,
 } from '../types/database';
+import CityAutocomplete from './CityAutocomplete';
 
 interface Team {
   id: string;
@@ -365,10 +366,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Säljområde / Region</label>
-                        <input type="text" value={formData.region}
-                          onChange={e => setFormData(p => ({ ...p, region: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-                          placeholder="T.ex. Stockholm, Göteborg..." />
+                        <CityAutocomplete value={formData.region} onChange={v => setFormData(p => ({ ...p, region: v }))} placeholder="T.ex. Stockholm, Göteborg..." className="w-full" inputClassName="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500" />
                       </div>
                     </div>
                     <div>
@@ -496,9 +494,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-gray-600 mb-1">Ort</label>
-                            <input type="text" value={newCustomerForm.city}
-                              onChange={e => setNewCustomerForm(p => ({ ...p, city: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="Stockholm" />
+                            <CityAutocomplete value={newCustomerForm.city} onChange={v => setNewCustomerForm(p => ({ ...p, city: v }))} placeholder="Stockholm" className="w-full" inputClassName="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
@@ -594,7 +590,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ isOpen, onClose, on
                                 <input className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Adress" value={existingCustomerEditForm.address} onChange={e => setExistingCustomerEditForm(p => ({ ...p, address: e.target.value }))} />
                                 <div className="flex gap-1.5">
                                   <input className="w-20 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Postnr" value={existingCustomerEditForm.postal_code} onChange={e => setExistingCustomerEditForm(p => ({ ...p, postal_code: e.target.value }))} />
-                                  <input className="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Stad" value={existingCustomerEditForm.city} onChange={e => setExistingCustomerEditForm(p => ({ ...p, city: e.target.value }))} />
+                                  <CityAutocomplete value={existingCustomerEditForm.city} onChange={v => setExistingCustomerEditForm(p => ({ ...p, city: v }))} placeholder="Stad" className="flex-1" inputClassName="w-full text-xs border border-gray-300 rounded px-2 py-1.5" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-1.5">
                                   <select className="w-full text-xs border border-gray-300 rounded px-2 py-1.5" value={existingCustomerEditForm.vat_handling} onChange={e => setExistingCustomerEditForm(p => ({ ...p, vat_handling: e.target.value }))}>

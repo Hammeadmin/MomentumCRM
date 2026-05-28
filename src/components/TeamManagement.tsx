@@ -72,6 +72,8 @@ import {
 import EmptyState from './EmptyState';
 import ConfirmDialog from './ConfirmDialog';
 import { supabase } from '../lib/supabase';
+import CityAutocomplete from './CityAutocomplete';
+import { swedishCities } from '../data/swedishCities';
 
 
 
@@ -80,6 +82,7 @@ import { supabase } from '../lib/supabase';
 const CreateUserModal = ({ isOpen, onClose, onCreate, isLoading, organisationId }: { isOpen: boolean; onClose: () => void; onCreate: (userData: any) => void; isLoading: boolean; organisationId: string | null }) => {
   const [employmentType, setEmploymentType] = useState<EmploymentType>('hourly');
   const [hasCommission, setHasCommission] = useState(false);
+  const [createCity, setCreateCity] = useState('');
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -118,7 +121,11 @@ const CreateUserModal = ({ isOpen, onClose, onCreate, isLoading, organisationId 
             <div><label className="block text-sm font-medium text-gray-700">Telefonnummer</label><input type="tel" name="phone_number" className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
             <div><label className="block text-sm font-medium text-gray-700">Roll*</label><select name="role" required className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"><option value="worker">Arbetare</option><option value="sales">Säljare</option><option value="admin">Administratör</option></select></div>
             <div><label className="block text-sm font-medium text-gray-700">Adress</label><input type="text" name="address" className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
-            <div><label className="block text-sm font-medium text-gray-700">Stad</label><input type="text" name="city" className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Stad</label>
+              <CityAutocomplete value={createCity} onChange={setCreateCity} className="mt-1" inputClassName="w-full px-3 py-2 border border-gray-300 rounded-md" />
+              <input type="hidden" name="city" value={createCity} />
+            </div>
             <div><label className="block text-sm font-medium text-gray-700">Postnummer</label><input type="text" name="postal_code" className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
             <div><label className="block text-sm font-medium text-gray-700">Personnummer</label><input type="text" name="personnummer" className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
             <div><label className="block text-sm font-medium text-gray-700">Bankkontonummer</label><input type="text" name="bank_account_number" className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
@@ -527,31 +534,6 @@ function TeamManagement() {
     }
     setFormLoading(false);
   };
-
-  const swedishCities = [
-    "Alingsås", "Arboga", "Arvika", "Askersund", "Avesta",
-    "Boden", "Bollnäs", "Borgholm", "Borlänge", "Borås", "Båstad",
-    "Eksjö", "Enköping", "Eskilstuna", "Eslöv",
-    "Fagersta", "Falkenberg", "Falköping", "Falsterbo", "Falun", "Filipstad", "Flen",
-    "Gränna", "Gävle", "Göteborg",
-    "Hagfors", "Halmstad", "Haparanda", "Hedemora", "Helsingborg", "Hjo", "Hudiksvall", "Huskvarna", "Härnösand", "Hässleholm", "Höganäs",
-    "Jönköping",
-    "Kalmar", "Karlshamn", "Karlskoga", "Karlskrona", "Karlstad", "Katrineholm", "Kiruna", "Kramfors", "Kristianstad", "Kristinehamn", "Kumla", "Kungsbacka", "Kungälv", "Köping",
-    "Laholm", "Landskrona", "Lidköping", "Lindesberg", "Linköping", "Ljungby", "Ludvika", "Luleå", "Lund", "Lycksele", "Lysekil",
-    "Malmö", "Mariefred", "Mariestad", "Marstrand", "Mjölby", "Motala", "Mölndal",
-    "Nora", "Norrköping", "Norrtälje", "Nybro", "Nyköping", "Nynäshamn", "Nässjö",
-    "Oskarshamn", "Oxelösund",
-    "Piteå",
-    "Ronneby",
-    "Sala", "Sandviken", "Sigtuna", "Simrishamn", "Skara", "Skellefteå", "Skänninge", "Skövde", "Sollefteå", "Stockholm", "Strängnäs", "Strömstad", "Sundsvall", "Säffle", "Säter", "Sävsjö", "Söderhamn", "Söderköping", "Södertälje", "Sölvesborg",
-    "Tidaholm", "Torshälla", "Tranås", "Trelleborg", "Trollhättan", "Trosa",
-    "Uddevalla", "Ulricehamn", "Umeå", "Uppsala",
-    "Vadstena", "Varberg", "Vetlanda", "Vimmerby", "Visby", "Vänersborg", "Värnamo", "Västervik", "Västerås", "Växjö",
-    "Ystad",
-    "Åhus", "Åmål",
-    "Ängelholm",
-    "Örebro", "Öregrund", "Örnsköldsvik", "Östersund", "Östhammar"
-  ];
 
   useEffect(() => {
     loadData();
@@ -1691,7 +1673,10 @@ function TeamManagement() {
                     <div><label className="block text-sm font-medium text-gray-700">Telefonnummer</label><input type="tel" value={userEditData.phone_number || ''} onChange={e => setUserEditData(p => ({ ...p, phone_number: e.target.value }))} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
                     <div><label className="block text-sm font-medium text-gray-700">Personnummer</label><input type="text" value={userEditData.personnummer || ''} onChange={e => setUserEditData(p => ({ ...p, personnummer: e.target.value }))} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
                     <div><label className="block text-sm font-medium text-gray-700">Adress</label><input type="text" value={userEditData.address || ''} onChange={e => setUserEditData(p => ({ ...p, address: e.target.value }))} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
-                    <div><label className="block text-sm font-medium text-gray-700">Stad</label><input type="text" value={userEditData.city || ''} onChange={e => setUserEditData(p => ({ ...p, city: e.target.value }))} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Stad</label>
+                      <CityAutocomplete value={userEditData.city || ''} onChange={city => setUserEditData(p => ({ ...p, city }))} className="mt-1" inputClassName="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                    </div>
                     <div><label className="block text-sm font-medium text-gray-700">Postnummer</label><input type="text" value={userEditData.postal_code || ''} onChange={e => setUserEditData(p => ({ ...p, postal_code: e.target.value }))} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
                   </div>
                   {/* City Assignment */}

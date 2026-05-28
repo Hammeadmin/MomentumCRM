@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import CityAutocomplete from '../CityAutocomplete';
 
 interface CompanyProfile {
   id: string;
@@ -500,13 +501,7 @@ function CompanyProfileSettings() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Stad
             </label>
-            <input
-              type="text"
-              value={profile.city}
-              onChange={(e) => setProfile(prev => ({ ...prev, city: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Stockholm"
-            />
+            <CityAutocomplete value={profile.city ?? ''} onChange={v => setProfile(prev => ({ ...prev, city: v }))} placeholder="Stockholm" className="w-full" inputClassName="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
           </div>
         </div>
       </div>
