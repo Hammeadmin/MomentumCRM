@@ -16,9 +16,8 @@ import {
   ListChecks,
   Calculator,
   ClipboardList,
-  ChevronDown,
-  ChevronUp,
   Info,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -65,6 +64,14 @@ const isFormulaValid = (formula: string, scope: Record<string, number>): boolean
   if (!formula?.trim()) return true;
   try { evaluate(formula, scope); return true; } catch { return false; }
 };
+
+/** Auto-formula = sum of all field keys, e.g. "lutning + material" */
+const computeAutoFormula = (fields: CustomField[]): string =>
+  fields.filter(f => f.key).map(f => f.key).join(' + ');
+
+/** Returns true if the current formula is auto-managed (empty or equals auto-formula) */
+const checkIsFormulaAuto = (formula: string, fields: CustomField[]): boolean =>
+  !formula || formula === computeAutoFormula(fields);
 
 // Select option helpers
 interface SelectOption { label: string; value: number; }
@@ -160,7 +167,7 @@ function TabBase({ editingItem, setEditingItem, editingMetadata, setEditingMetad
             className={inputCls}
           />
           <p className="text-xs text-gray-500 mt-1">
-            Används om artikeln saknar formel, eller som fallback om formeln ger 0
+            Baspriset per enhet. Eventuella tillägg läggs ovanpå detta.
           </p>
         </div>
         <div>
@@ -221,41 +228,57 @@ function TabBase({ editingItem, setEditingItem, editingMetadata, setEditingMetad
 // Tab: Tilläggsfält
 // ============================================================================
 
-function TabFields({ editingMetadata, setEditingMetadata }: Pick<TabBaseProps, 'editingMetadata' | 'setEditingMetadata'>) {
+interface TabFieldsProps extends Pick<TabBaseProps, 'editingMetadata' | 'setEditingMetadata'> {
+  unitPrice: number;
+  unit: string;
+}
+
+function TabFields({ editingMetadata, setEditingMetadata, unitPrice, unit }: TabFieldsProps) {
   const fields = editingMetadata.custom_fields || [];
+  const formula = editingMetadata.pricing_formula || '';
+  const autoFormula = computeAutoFormula(fields);
+  const isAuto = checkIsFormulaAuto(formula, fields);
+
+  /** Updates both fields and formula (auto-managed unless user customized) */
+  const applyFieldsUpdate = useCallback((updater: (prev: CustomField[]) => CustomField[]) => {
+    setEditingMetadata(prev => {
+      const oldFields = prev.custom_fields || [];
+      const newFields = updater(oldFields);
+      const oldAuto = computeAutoFormula(oldFields);
+      const currFormula = prev.pricing_formula || '';
+      const wasAuto = !currFormula || currFormula === oldAuto;
+      return {
+        ...prev,
+        custom_fields: newFields,
+        pricing_formula: wasAuto ? computeAutoFormula(newFields) : currFormula,
+      };
+    });
+  }, [setEditingMetadata]);
 
   const updateField = useCallback((index: number, updates: Partial<CustomField>) => {
-    setEditingMetadata(prev => {
-      const newFields = [...(prev.custom_fields || [])];
-      newFields[index] = { ...newFields[index], ...updates };
-      if (updates.label !== undefined) {
-        newFields[index].key = generateKey(updates.label);
-      }
-      return { ...prev, custom_fields: newFields };
+    applyFieldsUpdate(old => {
+      const next = [...old];
+      next[index] = { ...next[index], ...updates };
+      if (updates.label !== undefined) next[index].key = generateKey(updates.label);
+      return next;
     });
-  }, [setEditingMetadata]);
+  }, [applyFieldsUpdate]);
 
   const addField = useCallback(() => {
-    setEditingMetadata(prev => ({
-      ...prev,
-      custom_fields: [...(prev.custom_fields || []), { key: '', label: '', type: 'number', unit: '' }],
-    }));
-  }, [setEditingMetadata]);
+    applyFieldsUpdate(old => [...old, { key: '', label: '', type: 'number', unit: '' }]);
+  }, [applyFieldsUpdate]);
 
   const removeField = useCallback((index: number) => {
-    setEditingMetadata(prev => ({
-      ...prev,
-      custom_fields: (prev.custom_fields || []).filter((_, i) => i !== index),
-    }));
-  }, [setEditingMetadata]);
+    applyFieldsUpdate(old => old.filter((_, i) => i !== index));
+  }, [applyFieldsUpdate]);
 
   const updateSelectOptions = useCallback((index: number, opts: SelectOption[]) => {
-    setEditingMetadata(prev => {
-      const newFields = [...(prev.custom_fields || [])];
-      newFields[index] = { ...newFields[index], ...selectOptionsToField(opts) };
-      return { ...prev, custom_fields: newFields };
+    applyFieldsUpdate(old => {
+      const next = [...old];
+      next[index] = { ...next[index], ...selectOptionsToField(opts) };
+      return next;
     });
-  }, [setEditingMetadata]);
+  }, [applyFieldsUpdate]);
 
   return (
     <div className="space-y-4">
@@ -263,16 +286,27 @@ function TabFields({ editingMetadata, setEditingMetadata }: Pick<TabBaseProps, '
       <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-lg p-3">
         <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
         <div className="text-xs text-blue-700 space-y-1">
-          <p className="font-medium">Vad är tilläggsfält?</p>
-          <p>Fält som säljaren fyller i när de lägger till artikeln i en offert. Varje fält får ett <strong>variabelnamn</strong> (visas som <code className="bg-blue-100 px-1 rounded">variabel</code>) som du sedan kan använda i en prisformel på fliken Formel.</p>
+          <p className="font-medium">Tilläggsfält — prisval för säljaren</p>
+          <p>Lägg till de val säljaren ska kunna göra när de lägger till artikeln i en offert. Priset räknas ut automatiskt.</p>
         </div>
       </div>
+
+      {/* Base price context */}
+      {unitPrice > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-600">
+          <span className="font-medium">Grundpris:</span>
+          <span className="font-bold text-gray-900">{unitPrice.toLocaleString('sv-SE')} kr/{unit || 'enhet'}</span>
+          <span className="text-gray-400">— tillägg nedan läggs ovanpå detta</span>
+        </div>
+      )}
 
       {fields.length === 0 ? (
         <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-200">
           <ListChecks className="w-10 h-10 mx-auto mb-3 text-gray-300" />
           <p className="text-sm font-medium text-gray-600">Inga tilläggsfält definierade</p>
-          <p className="text-xs mt-1 text-gray-400">Lägg till fält nedan för att aktivera priskalkylatorn</p>
+          <p className="text-xs mt-1 text-gray-400">
+            Lägg till ett fält om artikelns pris beror på välj-alternativ, ett mätvärde, eller ett kryssval
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -281,6 +315,8 @@ function TabFields({ editingMetadata, setEditingMetadata }: Pick<TabBaseProps, '
               key={index}
               field={field}
               index={index}
+              unitPrice={unitPrice}
+              unit={unit}
               onUpdate={updateField}
               onRemove={removeField}
               onUpdateSelectOptions={updateSelectOptions}
@@ -297,6 +333,18 @@ function TabFields({ editingMetadata, setEditingMetadata }: Pick<TabBaseProps, '
         <Plus className="w-4 h-4 mr-1.5" />
         Lägg till tilläggsfält
       </button>
+
+      {/* Formula status */}
+      {fields.length > 0 && autoFormula && (
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${isAuto ? 'bg-green-50 border-green-100 text-green-700' : 'bg-amber-50 border-amber-100 text-amber-700'}`}>
+          <Zap className="w-3.5 h-3.5 flex-shrink-0" />
+          {isAuto ? (
+            <span>Prisformel <strong>hanteras automatiskt</strong>: <code className="bg-green-100 px-1 rounded font-mono">{autoFormula}</code></span>
+          ) : (
+            <span>Prisformel är <strong>anpassad</strong> — se fliken <em>Prisformel</em> för att ändra</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -308,12 +356,14 @@ function TabFields({ editingMetadata, setEditingMetadata }: Pick<TabBaseProps, '
 interface FieldCardProps {
   field: CustomField;
   index: number;
+  unitPrice: number;
+  unit: string;
   onUpdate: (i: number, u: Partial<CustomField>) => void;
   onRemove: (i: number) => void;
   onUpdateSelectOptions: (i: number, opts: SelectOption[]) => void;
 }
 
-function FieldCard({ field, index, onUpdate, onRemove, onUpdateSelectOptions }: FieldCardProps) {
+function FieldCard({ field, index, unitPrice, unit, onUpdate, onRemove, onUpdateSelectOptions }: FieldCardProps) {
   const selectOpts = getSelectOptions(field);
 
   const addOption = () => onUpdateSelectOptions(index, [...selectOpts, { label: '', value: 0 }]);
@@ -323,44 +373,38 @@ function FieldCard({ field, index, onUpdate, onRemove, onUpdateSelectOptions }: 
     onUpdateSelectOptions(index, next);
   };
 
-  const typeHelp: Record<string, string> = {
-    number: 'Säljaren anger ett tal (t.ex. antal m²). Värdet används direkt i formeln.',
-    select: 'Säljaren väljer ett alternativ. Varje alternativ har ett numeriskt värde för formeln.',
-    checkbox: 'Säljaren kryssar i eller lämnar tomt. Ger 1 om ikryssad, 0 om tom.',
-  };
-
   return (
     <div className="border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
       {/* Field header */}
       <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-start gap-3">
         <div className="flex-1 space-y-2">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Etikett (visas för säljaren)</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Fältnamn (visas för säljaren)</label>
             <input
               type="text"
               value={field.label}
               onChange={e => onUpdate(index, { label: e.target.value })}
               className={inputCls}
-              placeholder="T.ex. Antal kvadratmeter"
+              placeholder="T.ex. Lutning, Antal fönster, Svårtillgänglig yta..."
             />
           </div>
           {field.key && (
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-400">Variabelnamn i formeln:</span>
+              <span className="text-xs text-gray-400">Variabelnamn:</span>
               <code className="text-xs font-mono bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">{field.key}</code>
             </div>
           )}
         </div>
-        <div className="flex-shrink-0 w-36">
+        <div className="flex-shrink-0 w-40">
           <label className="block text-xs font-medium text-gray-500 mb-1">Fälttyp</label>
           <select
             value={field.type}
             onChange={e => onUpdate(index, { type: e.target.value as CustomField['type'] })}
             className={inputCls}
           >
-            <option value="number">Nummer</option>
             <option value="select">Välj alternativ</option>
-            <option value="checkbox">Kryssruta</option>
+            <option value="number">Ange ett tal</option>
+            <option value="checkbox">Ja/Nej (kryssruta)</option>
           </select>
         </div>
         <button
@@ -375,33 +419,19 @@ function FieldCard({ field, index, onUpdate, onRemove, onUpdateSelectOptions }: 
 
       {/* Field-type specific settings */}
       <div className="px-4 py-3 space-y-3">
-        <p className="text-xs text-gray-500 italic">{typeHelp[field.type]}</p>
 
-        {/* Number: unit */}
-        {field.type === 'number' && (
-          <div className="flex items-center gap-3">
-            <label className="text-xs font-medium text-gray-600 w-12 flex-shrink-0">Enhet</label>
-            <input
-              type="text"
-              value={field.unit || ''}
-              onChange={e => onUpdate(index, { unit: e.target.value })}
-              className={`${inputCls} max-w-28`}
-              placeholder="m², tim, kg…"
-            />
-          </div>
-        )}
-
-        {/* Select: option editor */}
+        {/* Select: option editor — the primary use case */}
         {field.type === 'select' && (
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-gray-600">Alternativ</p>
-              <p className="text-xs text-gray-400">Numeriskt värde → används i prisformeln</p>
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center text-xs font-medium text-gray-500 px-0.5 mb-1">
+              <span>Alternativnamn</span>
+              <span className="w-28 text-right">Pristillägg (kr)</span>
+              <span className="w-28 text-right pr-5">Totalpris</span>
             </div>
 
             {selectOpts.length === 0 && (
               <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
-                Lägg till minst ett alternativ nedan.
+                Lägg till alternativ nedan.
               </p>
             )}
 
@@ -413,22 +443,29 @@ function FieldCard({ field, index, onUpdate, onRemove, onUpdateSelectOptions }: 
                     value={opt.label}
                     onChange={e => updateOption(oi, { label: e.target.value })}
                     className={`flex-1 ${smallInputCls}`}
-                    placeholder="Alternativnamn (t.ex. Standard)"
+                    placeholder="T.ex. Brant (> 30°)"
                   />
-                  <span className="text-xs text-gray-400 flex-shrink-0">=</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">+</span>
                   <input
                     type="number"
                     value={opt.value}
                     onChange={e => updateOption(oi, { value: parseFloat(e.target.value) || 0 })}
-                    className={`w-24 ${smallInputCls} text-right`}
+                    className={`w-20 ${smallInputCls} text-right`}
                     placeholder="0"
-                    title="Numeriskt värde för formeln"
                   />
-                  <span className="text-xs text-gray-400 flex-shrink-0">kr/enhet</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">kr</span>
+                  {/* Live total price preview */}
+                  {unitPrice > 0 ? (
+                    <span className="w-28 text-right text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-200 rounded px-2 py-1 flex-shrink-0">
+                      = {(unitPrice + opt.value).toLocaleString('sv-SE')} kr/{unit || 'enhet'}
+                    </span>
+                  ) : (
+                    <span className="w-28" />
+                  )}
                   <button
                     type="button"
                     onClick={() => removeOption(oi)}
-                    className="text-gray-300 hover:text-red-500 transition-colors"
+                    className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -444,20 +481,34 @@ function FieldCard({ field, index, onUpdate, onRemove, onUpdateSelectOptions }: 
               <Plus className="w-3.5 h-3.5" />
               Lägg till alternativ
             </button>
-
-            {selectOpts.length > 0 && (
-              <p className="text-xs text-gray-400">
-                Exempel: om säljaren väljer "{selectOpts[0]?.label || '...'}", ger fältet <code className="bg-gray-100 px-1 rounded">{selectOpts[0]?.value ?? 0}</code> i formeln.
-              </p>
-            )}
           </div>
         )}
 
-        {/* Checkbox info */}
+        {/* Number: unit + explanation */}
+        {field.type === 'number' && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <label className="text-xs font-medium text-gray-600 w-12 flex-shrink-0">Enhet</label>
+              <input
+                type="text"
+                value={field.unit || ''}
+                onChange={e => onUpdate(index, { unit: e.target.value })}
+                className={`${inputCls} max-w-28`}
+                placeholder="m², tim, kg…"
+              />
+            </div>
+            <p className="text-xs text-gray-400 bg-gray-50 rounded px-3 py-2">
+              Säljaren matar in ett tal. Variabelnamnet <code className="bg-gray-200 px-1 rounded">{field.key || '...'}</code> används i prisformeln — t.ex. <code className="bg-gray-200 px-1 rounded">{field.key || 'antal'} * 50</code> för 50 kr per enhet.
+            </p>
+          </div>
+        )}
+
+        {/* Checkbox */}
         {field.type === 'checkbox' && (
           <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded px-3 py-2 space-y-1">
-            <p>I formeln: <code className="bg-gray-200 px-1 rounded">{field.key || 'variabelnamn'} = 1</code> om ikryssad, <code className="bg-gray-200 px-1 rounded">= 0</code> om ej ikryssad.</p>
-            <p>Exempel formel: <code className="bg-gray-200 px-1 rounded">area * 50 + {field.key || 'extra'} * 200</code></p>
+            <p>Säljaren kryssar i eller lämnar tomt.</p>
+            <p>I formeln: <code className="bg-gray-200 px-1 rounded">{field.key || 'variabel'} = 1</code> om ikryssad, <code className="bg-gray-200 px-1 rounded">= 0</code> om ej ikryssad.</p>
+            <p>Exempel: <code className="bg-gray-200 px-1 rounded">{field.key || 'extra'} * 500</code> ger 500 kr om ikryssad, annars 0.</p>
           </div>
         )}
       </div>
@@ -466,21 +517,24 @@ function FieldCard({ field, index, onUpdate, onRemove, onUpdateSelectOptions }: 
 }
 
 // ============================================================================
-// Tab: Formel
+// Tab: Formel (advanced / power users)
 // ============================================================================
 
-interface TabFormulaProps extends Pick<TabBaseProps, 'editingMetadata' | 'setEditingMetadata'> {}
+interface TabFormulaProps extends Pick<TabBaseProps, 'editingMetadata' | 'setEditingMetadata'> {
+  unitPrice: number;
+  unit: string;
+}
 
-function TabFormula({ editingMetadata, setEditingMetadata }: TabFormulaProps) {
+function TabFormula({ editingMetadata, setEditingMetadata, unitPrice, unit }: TabFormulaProps) {
   const fields = editingMetadata.custom_fields || [];
   const formula = editingMetadata.pricing_formula || '';
+  const autoFormula = computeAutoFormula(fields);
+  const isAuto = checkIsFormulaAuto(formula, fields);
 
-  // Test-value state
   const [testNumbers, setTestNumbers] = useState<Record<string, number>>({});
   const [testSelections, setTestSelections] = useState<Record<string, string>>({});
   const [testChecks, setTestChecks] = useState<Record<string, boolean>>({});
 
-  // Build scope from test inputs
   const testScope = useMemo<Record<string, number>>(() => {
     const scope: Record<string, number> = {};
     fields.forEach(f => {
@@ -495,11 +549,15 @@ function TabFormula({ editingMetadata, setEditingMetadata }: TabFormulaProps) {
   }, [fields, testNumbers, testSelections, testChecks]);
 
   const formulaOk = isFormulaValid(formula, testScope);
-  const testResult = formulaOk ? safeEvaluate(formula, testScope) + (editingMetadata.base_price || 0) : 0;
+  const testResult = formulaOk ? safeEvaluate(formula, testScope) + unitPrice : 0;
 
   const appendToFormula = (token: string) => {
     const sep = formula && !formula.endsWith(' ') ? ' ' : '';
     setEditingMetadata(prev => ({ ...prev, pricing_formula: formula + sep + token }));
+  };
+
+  const resetToAuto = () => {
+    setEditingMetadata(prev => ({ ...prev, pricing_formula: autoFormula }));
   };
 
   if (fields.length === 0) {
@@ -507,21 +565,44 @@ function TabFormula({ editingMetadata, setEditingMetadata }: TabFormulaProps) {
       <div className="text-center py-12 text-gray-400">
         <Calculator className="w-12 h-12 mx-auto mb-3 opacity-30" />
         <p className="text-sm font-medium text-gray-600 mb-1">Inga tilläggsfält ännu</p>
-        <p className="text-xs">Gå till fliken <strong>Tilläggsfält</strong> och lägg till fält — sedan kan du skriva en formel här.</p>
+        <p className="text-xs">Gå till fliken <strong>Tilläggsfält</strong> och lägg till fält — sedan kan du anpassa formeln här.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      {/* Guidance */}
-      <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-lg p-3">
-        <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-        <div className="text-xs text-blue-700 space-y-1">
-          <p className="font-medium">Hur formler fungerar</p>
-          <p>Skriv ett matematiskt uttryck med variabelnamnen från dina tilläggsfält. Operatorer: <code className="bg-blue-100 px-1 rounded">+ - * /</code> och parenteser. Klicka på variabelknapparna eller operatorerna för att infoga dem.</p>
-          <p className="text-blue-600">Exempel: <code className="bg-blue-100 px-1 rounded">yta * 45 + material_typ * yta</code></p>
+      {/* Status banner */}
+      {isAuto ? (
+        <div className="flex items-start gap-2 bg-green-50 border border-green-100 rounded-lg p-3">
+          <Zap className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+          <div className="text-xs text-green-700">
+            <p className="font-medium">Formeln hanteras automatiskt</p>
+            <p>Aktuell formel: <code className="bg-green-100 px-1.5 py-0.5 rounded font-mono">{autoFormula || '(inga fält)'}</code>. Du kan anpassa den nedan om du behöver ett mer komplext uttryck.</p>
+          </div>
         </div>
+      ) : (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-lg p-3">
+          <Info className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+          <div className="text-xs text-amber-700 flex-1">
+            <p className="font-medium">Anpassad formel</p>
+            <p>Du har skrivit en egen formel. Auto-formeln hade varit: <code className="bg-amber-100 px-1 rounded font-mono">{autoFormula}</code>.</p>
+          </div>
+          <button
+            type="button"
+            onClick={resetToAuto}
+            className="text-xs text-amber-700 underline hover:no-underline flex-shrink-0"
+          >
+            Återställ auto
+          </button>
+        </div>
+      )}
+
+      {/* Base price display */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-600">
+        <span className="font-medium">Grundpris:</span>
+        <span className="font-bold text-gray-900">{unitPrice.toLocaleString('sv-SE')} kr/{unit || 'enhet'}</span>
+        <span className="text-gray-400">— inställt på fliken Basinformation</span>
       </div>
 
       {/* Variable chips */}
@@ -569,15 +650,16 @@ function TabFormula({ editingMetadata, setEditingMetadata }: TabFormulaProps) {
 
       {/* Formula input */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Prisformel</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Prisformel (tillägg ovanpå grundpris)</label>
         <input
           type="text"
           value={formula}
           onChange={e => setEditingMetadata(prev => ({ ...prev, pricing_formula: e.target.value }))}
           className={`${inputCls} font-mono`}
-          placeholder="t.ex. yta * 45 + material_typ * yta"
+          placeholder={`t.ex. ${autoFormula || 'lutning + material'}`}
           spellCheck={false}
         />
+        <p className="text-xs text-gray-400 mt-1">Formeln beräknar <em>tillägget</em>. Totalpris = Grundpris + Formelresultat.</p>
         {formula && !formulaOk && (
           <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
             <AlertCircle className="w-3.5 h-3.5" /> Ogiltig formel — kontrollera variabelnamnen och syntaxen
@@ -590,25 +672,11 @@ function TabFormula({ editingMetadata, setEditingMetadata }: TabFormulaProps) {
         )}
       </div>
 
-      {/* Base price addition */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Fast grundtillägg (kr)</label>
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          value={editingMetadata.base_price || 0}
-          onChange={e => setEditingMetadata(prev => ({ ...prev, base_price: parseFloat(e.target.value) || 0 }))}
-          className={`${inputCls} max-w-40`}
-        />
-        <p className="text-xs text-gray-500 mt-1">Läggs alltid till formelresultatet (t.ex. fast startavgift)</p>
-      </div>
-
       {/* Live test section */}
       <div className="border border-gray-200 rounded-xl overflow-hidden">
         <div className="bg-gray-50 border-b border-gray-200 px-4 py-2.5 flex items-center gap-2">
           <Calculator className="w-4 h-4 text-gray-500" />
-          <p className="text-sm font-medium text-gray-700">Testa formeln med riktiga värden</p>
+          <p className="text-sm font-medium text-gray-700">Testa med riktiga värden</p>
         </div>
         <div className="px-4 py-4 space-y-3">
           {fields.filter(f => f.key).map(f => (
@@ -632,19 +700,17 @@ function TabFormula({ editingMetadata, setEditingMetadata }: TabFormulaProps) {
               )}
 
               {f.type === 'select' && (
-                <>
-                  <select
-                    value={testSelections[f.key] ?? f.options?.[0] ?? ''}
-                    onChange={e => setTestSelections(p => ({ ...p, [f.key]: e.target.value }))}
-                    className={`${smallInputCls} w-48`}
-                  >
-                    {(f.options || []).map(opt => (
-                      <option key={opt} value={opt}>
-                        {opt} (= {f.option_values?.[opt] ?? 0})
-                      </option>
-                    ))}
-                  </select>
-                </>
+                <select
+                  value={testSelections[f.key] ?? f.options?.[0] ?? ''}
+                  onChange={e => setTestSelections(p => ({ ...p, [f.key]: e.target.value }))}
+                  className={`${smallInputCls} w-52`}
+                >
+                  {(f.options || []).map(opt => (
+                    <option key={opt} value={opt}>
+                      {opt} (+{f.option_values?.[opt] ?? 0} kr)
+                    </option>
+                  ))}
+                </select>
               )}
 
               {f.type === 'checkbox' && (
@@ -660,25 +726,29 @@ function TabFormula({ editingMetadata, setEditingMetadata }: TabFormulaProps) {
               )}
 
               <span className="ml-auto text-xs text-gray-400 font-mono shrink-0">
-                → <strong className="text-gray-700">{testScope[f.key] ?? 0}</strong>
+                → tillägg <strong className="text-gray-700">{testScope[f.key] ?? 0}</strong> kr
               </span>
             </div>
           ))}
 
           {/* Result */}
-          <div className="border-t border-gray-200 pt-3 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-700">Beräknat pris</p>
-              {(editingMetadata.base_price ?? 0) > 0 && (
-                <p className="text-xs text-gray-400">Formel + {editingMetadata.base_price} kr grundtillägg</p>
-              )}
-            </div>
-            <div className="text-right">
-              {formula && !formulaOk ? (
-                <p className="text-sm font-bold text-red-500">Ogiltig formel</p>
-              ) : (
-                <p className="text-2xl font-bold text-gray-900">{testResult.toLocaleString('sv-SE')} <span className="text-base font-normal text-gray-400">kr</span></p>
-              )}
+          <div className="border-t border-gray-200 pt-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Totalpris</p>
+                <p className="text-xs text-gray-400">
+                  {unitPrice} kr grundpris + {formula && formulaOk ? safeEvaluate(formula, testScope) : 0} kr tillägg
+                </p>
+              </div>
+              <div className="text-right">
+                {formula && !formulaOk ? (
+                  <p className="text-sm font-bold text-red-500">Ogiltig formel</p>
+                ) : (
+                  <p className="text-2xl font-bold text-gray-900">
+                    {testResult.toLocaleString('sv-SE')} <span className="text-base font-normal text-gray-400">kr/{unit || 'enhet'}</span>
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -820,8 +890,8 @@ type TabKey = 'base' | 'fields' | 'formula' | 'included';
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType; hint: string }[] = [
   { key: 'base', label: 'Basinformation', icon: Settings2, hint: 'Namn, pris, typ' },
-  { key: 'fields', label: 'Tilläggsfält', icon: ListChecks, hint: 'Fält säljaren fyller i' },
-  { key: 'formula', label: 'Prisformel', icon: Calculator, hint: 'Automatisk priskalkyl' },
+  { key: 'fields', label: 'Tilläggsfält', icon: ListChecks, hint: 'Prisval säljaren gör vid offert' },
+  { key: 'formula', label: 'Prisformel', icon: Calculator, hint: 'Anpassa prisberäkningen (avancerat)' },
   { key: 'included', label: 'Ingår', icon: ClipboardList, hint: 'Checklista vid offert' },
 ];
 
@@ -891,6 +961,8 @@ function ProductLibrarySettings() {
     try {
       setSaving(true);
       setError(null);
+      const fields = (editingMetadata.custom_fields || []).filter(f => f.key && f.label);
+      const hasFields = fields.length > 0;
       const payload = {
         name: editingItem.name,
         description: editingItem.description || '',
@@ -898,8 +970,10 @@ function ProductLibrarySettings() {
         item_type: editingItem.item_type || 'produkt',
         metadata: {
           ...editingMetadata,
-          custom_fields: (editingMetadata.custom_fields || []).filter(f => f.key && f.label),
+          custom_fields: fields,
           included_items: (editingMetadata.included_items || []).filter(i => i.label),
+          // Sync base_price = unit_price so formula evaluator has the right base
+          base_price: hasFields ? (editingItem.unit_price || 0) : undefined,
         },
       };
       if (editingItem.id) {
@@ -949,7 +1023,9 @@ function ProductLibrarySettings() {
     );
   }
 
-  const hasFormula = (editingMetadata.custom_fields?.length ?? 0) > 0;
+  const hasFields = (editingMetadata.custom_fields?.length ?? 0) > 0;
+  const unitPrice = editingItem?.unit_price || 0;
+  const unit = editingMetadata.unit || 'st';
 
   return (
     <div className="space-y-6">
@@ -1042,7 +1118,7 @@ function ProductLibrarySettings() {
                         {(product.metadata?.custom_fields?.length ?? 0) > 0 && (
                           <span className="inline-flex items-center text-xs text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded">
                             <Calculator className="w-3 h-3 mr-1" />
-                            {product.metadata!.custom_fields!.length} fält
+                            {product.metadata!.custom_fields!.length} tillvalsfält
                           </span>
                         )}
                         {product.metadata?.pricing_formula && (
@@ -1130,7 +1206,7 @@ function ProductLibrarySettings() {
               {TABS.map(tab => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.key;
-                const isDisabled = (tab.key === 'formula') && !hasFormula;
+                const isDisabled = (tab.key === 'formula') && !hasFields;
                 return (
                   <button
                     key={tab.key}
@@ -1146,22 +1222,17 @@ function ProductLibrarySettings() {
                   >
                     <Icon className="w-4 h-4" />
                     {tab.label}
-                    {tab.key === 'fields' && (editingMetadata.custom_fields?.length ?? 0) > 0 && (
+                    {tab.key === 'fields' && hasFields && (
                       <span className="ml-1 text-xs bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full">
                         {editingMetadata.custom_fields!.length}
                       </span>
                     )}
-                    {tab.key === 'formula' && editingMetadata.pricing_formula && (
-                      <span className="ml-1 w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                    {tab.key === 'formula' && editingMetadata.pricing_formula && hasFields && (
+                      <span className={`ml-1 w-1.5 h-1.5 rounded-full ${checkIsFormulaAuto(editingMetadata.pricing_formula, editingMetadata.custom_fields || []) ? 'bg-green-500' : 'bg-amber-500'}`} />
                     )}
                   </button>
                 );
               })}
-            </div>
-
-            {/* Tab hint */}
-            <div className="px-6 py-2 bg-gray-50 border-b border-gray-100">
-              <p className="text-xs text-gray-500">{TABS.find(t => t.key === activeTab)?.hint}</p>
             </div>
 
             {/* Tab Content */}
@@ -1170,10 +1241,10 @@ function ProductLibrarySettings() {
                 <TabBase editingItem={editingItem} setEditingItem={setEditingItem} editingMetadata={editingMetadata} setEditingMetadata={setEditingMetadata} />
               )}
               {activeTab === 'fields' && (
-                <TabFields editingMetadata={editingMetadata} setEditingMetadata={setEditingMetadata} />
+                <TabFields editingMetadata={editingMetadata} setEditingMetadata={setEditingMetadata} unitPrice={unitPrice} unit={unit} />
               )}
               {activeTab === 'formula' && (
-                <TabFormula editingMetadata={editingMetadata} setEditingMetadata={setEditingMetadata} />
+                <TabFormula editingMetadata={editingMetadata} setEditingMetadata={setEditingMetadata} unitPrice={unitPrice} unit={unit} />
               )}
               {activeTab === 'included' && (
                 <TabIncluded editingMetadata={editingMetadata} setEditingMetadata={setEditingMetadata} />
@@ -1182,13 +1253,12 @@ function ProductLibrarySettings() {
 
             {/* Footer */}
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
-              {/* Step hint */}
               <div className="text-xs text-gray-400">
-                {activeTab === 'base' && (editingMetadata.custom_fields?.length ?? 0) === 0 && (
-                  <span>Vill du ha prisformel? Gå till <strong>Tilläggsfält</strong> →</span>
+                {activeTab === 'base' && !hasFields && (
+                  <span>Enkel artikel? Fyll i namn och pris och spara. Behöver du prisval? Gå till <strong>Tilläggsfält →</strong></span>
                 )}
-                {activeTab === 'fields' && (editingMetadata.custom_fields?.length ?? 0) > 0 && (
-                  <span>Fält tillagda — gå till <strong>Prisformel</strong> för att beräkna priset →</span>
+                {activeTab === 'fields' && hasFields && (
+                  <span>Prisformeln hanteras automatiskt. Vill du anpassa? Se fliken <strong>Prisformel</strong>.</span>
                 )}
               </div>
               <div className="flex gap-3">
