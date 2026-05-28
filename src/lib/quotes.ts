@@ -14,6 +14,8 @@ export interface QuoteWithRelations extends Quote {
   order?: any;
   organisation?: { id: string; name: string; email?: string; phone?: string; org_number?: string };
   created_by?: { id: string; full_name: string | null } | null;
+  assigned_to?: { id: string; full_name: string } | null;
+  assigned_team?: { id: string; name: string } | null;
 }
 
 export interface QuoteFilters {
@@ -47,7 +49,9 @@ export const getQuotes = async (
         lead:leads(id, title),
         quote_line_items(*),
         order:orders(id, title, status),
-        organisation:organisations(id, name, email, phone, org_number)
+        organisation:organisations(id, name, email, phone, org_number),
+        assigned_to:user_profiles!quotes_assigned_to_user_id_fkey(id, full_name),
+        assigned_team:teams!quotes_assigned_to_team_id_fkey(id, name)
       `, { count: 'exact' })
       .eq('organisation_id', organisationId);
 
@@ -136,7 +140,12 @@ export const acceptQuoteAndCreateOrder = async (
       include_rut: quote.include_rut,
       rut_personnummer: quote.rut_personnummer,
       rut_amount: quote.rut_amount,
-      primary_salesperson_id: quote.lead?.assigned_to_user_id || null,
+      // Carry assignment from quote → order (quote assignment takes precedence, then lead's)
+      assigned_to_user_id: quote.assigned_to_user_id || null,
+      assigned_to_team_id: quote.assigned_to_team_id || null,
+      assignment_type: quote.assignment_type || (quote.assigned_to_user_id ? 'individual' : quote.assigned_to_team_id ? 'team' : null),
+      region: quote.city || null,
+      primary_salesperson_id: quote.assigned_to_user_id || quote.lead?.assigned_to_user_id || null,
       lead_id: quote.lead_id || null,
     };
 
@@ -180,7 +189,9 @@ export const getQuote = async (
         quote_line_items(*),
         order:orders(id, title, status),
         organisation:organisations(id, name, email, phone, org_number, address, postal_code, city),
-        created_by:user_profiles!quotes_created_by_user_id_fkey(id, full_name)
+        created_by:user_profiles!quotes_created_by_user_id_fkey(id, full_name),
+        assigned_to:user_profiles!quotes_assigned_to_user_id_fkey(id, full_name),
+        assigned_team:teams!quotes_assigned_to_team_id_fkey(id, name)
       `)
       .eq('id', id)
       .single();
@@ -266,7 +277,9 @@ export const updateQuote = async (
         lead:leads(id, title),
         quote_line_items(*),
         order:orders(id, title, status),
-        organisation:organisations(id, name, email, phone, org_number)
+        organisation:organisations(id, name, email, phone, org_number),
+        assigned_to:user_profiles!quotes_assigned_to_user_id_fkey(id, full_name),
+        assigned_team:teams!quotes_assigned_to_team_id_fkey(id, name)
       `)
       .single();
 

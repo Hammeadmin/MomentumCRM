@@ -370,9 +370,17 @@ export interface Quote {
   accepted_by_ip?: string | null;
   order_id?: string | null;
   created_by_user_id?: string | null;
+  // Assignment fields (mirrors Order)
+  assigned_to_user_id?: string | null;
+  assigned_to_team_id?: string | null;
+  assignment_type?: AssignmentType | null;
+  city?: string | null;
+  // Relations
   customer?: Customer;
   lead?: Lead;
   line_items?: QuoteLineItem[];
+  assigned_to?: UserProfile;
+  assigned_team?: Team;
 }
 
 export interface QuoteLineItem {

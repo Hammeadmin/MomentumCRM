@@ -38,7 +38,7 @@ import ROTFields from '../components/ROTFields';
 import RUTFields from '../components/RUTFields';
 import ProductLibraryModal from './ProductLibraryModal';
 import type { QuoteTemplate, ProductLibraryItem } from '../lib/quoteTemplates';
-import type { Quote, Customer, Lead, QuoteStatus, QuoteLineItem } from '../types/database';
+import type { Quote, Customer, Lead, QuoteStatus, QuoteLineItem, UserProfile, Team, AssignmentType } from '../types/database';
 
 interface QuoteWithRelations extends Quote {
     customer?: Customer;
@@ -68,6 +68,11 @@ interface QuoteFormData {
     include_rut: boolean;
     rut_personnummer: string | null;
     rut_amount: number;
+    // Assignment
+    assignment_type: '' | 'individual' | 'team';
+    assigned_to_user_id: string;
+    assigned_to_team_id: string;
+    city: string;
 }
 
 interface QuoteEditModalProps {
@@ -87,6 +92,8 @@ interface QuoteEditModalProps {
         title?: string;
         description?: string;
     } | null;
+    teamMembers?: UserProfile[];
+    teams?: Team[];
 }
 
 export default function QuoteEditModal({
@@ -99,7 +106,9 @@ export default function QuoteEditModal({
     companyInfo,
     organisationId,
     onSave,
-    initialData
+    initialData,
+    teamMembers = [],
+    teams = [],
 }: QuoteEditModalProps) {
     const { error: showToastError, success } = useToast();
     const { user } = useAuth();
@@ -148,7 +157,11 @@ export default function QuoteEditModal({
         rot_amount: 0,
         include_rut: false,
         rut_personnummer: null,
-        rut_amount: 0
+        rut_amount: 0,
+        assignment_type: '',
+        assigned_to_user_id: '',
+        assigned_to_team_id: '',
+        city: '',
     });
 
     useEffect(() => {
@@ -173,7 +186,11 @@ export default function QuoteEditModal({
                 rot_amount: quote.rot_amount || 0,
                 include_rut: (quote as any).include_rut || false,
                 rut_personnummer: (quote as any).rut_personnummer || null,
-                rut_amount: (quote as any).rut_amount || 0
+                rut_amount: (quote as any).rut_amount || 0,
+                assignment_type: (quote.assignment_type as '' | 'individual' | 'team') || '',
+                assigned_to_user_id: quote.assigned_to_user_id || '',
+                assigned_to_team_id: quote.assigned_to_team_id || '',
+                city: quote.city || '',
             });
         } else if (initialData) {
             // Pre-fill from lead data
@@ -191,7 +208,11 @@ export default function QuoteEditModal({
                 rot_amount: 0,
                 include_rut: false,
                 rut_personnummer: null,
-                rut_amount: 0
+                rut_amount: 0,
+                assignment_type: '',
+                assigned_to_user_id: '',
+                assigned_to_team_id: '',
+                city: '',
             });
             setSelectedTemplate(null);
         } else {
@@ -210,7 +231,11 @@ export default function QuoteEditModal({
                 rot_amount: 0,
                 include_rut: false,
                 rut_personnummer: null,
-                rut_amount: 0
+                rut_amount: 0,
+                assignment_type: '',
+                assigned_to_user_id: '',
+                assigned_to_team_id: '',
+                city: '',
             });
             setSelectedTemplate(null);
         }
@@ -341,7 +366,11 @@ export default function QuoteEditModal({
                 rot_amount: quoteForm.rot_amount,
                 include_rut: quoteForm.include_rut,
                 rut_personnummer: quoteForm.rut_personnummer,
-                rut_amount: quoteForm.rut_amount
+                rut_amount: quoteForm.rut_amount,
+                assignment_type: quoteForm.assignment_type || null,
+                assigned_to_user_id: quoteForm.assignment_type === 'individual' ? quoteForm.assigned_to_user_id || null : null,
+                assigned_to_team_id: quoteForm.assignment_type === 'team' ? quoteForm.assigned_to_team_id || null : null,
+                city: quoteForm.city || null,
             };
 
             const lineItems = quoteForm.line_items
@@ -968,6 +997,82 @@ export default function QuoteEditModal({
                             placeholder="Beskrivning av offerten..."
                         />
                     </div>
+
+                    {/* Assignment + City — only shown when teamMembers/teams are available */}
+                    {(teamMembers.length > 0 || teams.length > 0) && (
+                        <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                            <h4 className="text-sm font-semibold text-gray-700">Tilldelning</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {/* Assignment type toggle */}
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Typ</label>
+                                    <div className="flex rounded-md border border-gray-300 overflow-hidden">
+                                        {(['', 'individual', 'team'] as const).map((t) => (
+                                            <button
+                                                key={t}
+                                                type="button"
+                                                onClick={() => setQuoteForm(prev => ({
+                                                    ...prev,
+                                                    assignment_type: t,
+                                                    assigned_to_user_id: '',
+                                                    assigned_to_team_id: '',
+                                                }))}
+                                                className={`flex-1 py-1.5 text-xs font-medium transition-colors ${quoteForm.assignment_type === t
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                                                }`}
+                                            >
+                                                {t === '' ? 'Ingen' : t === 'individual' ? 'Person' : 'Team'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Person or team dropdown */}
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                        {quoteForm.assignment_type === 'team' ? 'Team' : 'Säljare'}
+                                    </label>
+                                    {quoteForm.assignment_type === 'team' ? (
+                                        <select
+                                            value={quoteForm.assigned_to_team_id}
+                                            onChange={e => setQuoteForm(prev => ({ ...prev, assigned_to_team_id: e.target.value }))}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                        >
+                                            <option value="">-- Välj team --</option>
+                                            {teams.map(team => (
+                                                <option key={team.id} value={team.id}>{team.name}</option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        <select
+                                            value={quoteForm.assigned_to_user_id}
+                                            onChange={e => setQuoteForm(prev => ({ ...prev, assigned_to_user_id: e.target.value }))}
+                                            disabled={quoteForm.assignment_type === ''}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                                        >
+                                            <option value="">-- Välj säljare --</option>
+                                            {teamMembers.map(m => (
+                                                <option key={m.id} value={m.id}>{m.full_name}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+
+                                {/* City */}
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Stad / Område</label>
+                                    <input
+                                        type="text"
+                                        value={quoteForm.city}
+                                        onChange={e => setQuoteForm(prev => ({ ...prev, city: e.target.value }))}
+                                        placeholder="t.ex. Stockholm"
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Line Items */}
                     <div>

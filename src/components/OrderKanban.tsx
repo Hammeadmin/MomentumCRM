@@ -57,7 +57,9 @@ import {
   type AssignmentType,
   type QuoteStatus,
   type UserProfile,
+  type Team,
 } from '../types/database';
+import type { TeamWithRelations } from '../lib/teams';
 import EmptyState from './EmptyState';
 import ConfirmDialog from './ConfirmDialog';
 import OrderStatusDropdown from './OrderStatusDropdown';
@@ -421,7 +423,7 @@ const LeadKanbanRow = ({
 };
 
 const QuoteKanbanRow = ({
-  quote, borderColor, onDragStart, onClick, onPreview, onSend,
+  quote, borderColor, onDragStart, onClick, onPreview, onSend, teamMembers, teams, onQuickAssign,
 }: {
   quote: QuoteWithRelations;
   borderColor: string;
@@ -429,71 +431,170 @@ const QuoteKanbanRow = ({
   onClick: () => void;
   onPreview?: () => void;
   onSend?: () => void;
-}) => (
-  <div
-    className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
-    style={{ borderLeft: `3px solid ${borderColor}` }}
-    draggable
-    onDragStart={onDragStart}
-    onClick={onClick}
-  >
-    {/* Row 1: Title + Amount */}
-    <div className="flex items-start justify-between gap-2">
-      <p className="text-sm font-medium text-gray-900 leading-tight break-words min-w-0">{quote.title}</p>
-      {quote.total_amount ? (
-        <span className="text-xs font-semibold text-gray-700 whitespace-nowrap flex-shrink-0">
-          {formatCurrency(quote.total_amount)}
-        </span>
-      ) : null}
-    </div>
-    {/* Row 2: Customer */}
-    {quote.customer && (
-      <p className="text-xs text-gray-500 truncate">{quote.customer.name}</p>
-    )}
-    {/* Row 3: Metadata chips */}
-    <div className="flex items-center gap-2 flex-wrap">
-      {quote.line_items && quote.line_items.length > 0 && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
-          <Package className="w-3 h-3" />
-          {quote.line_items.length} {quote.line_items.length === 1 ? 'rad' : 'rader'}
-        </span>
-      )}
-      {quote.lead && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-blue-50 text-blue-600 rounded px-1.5 py-0.5">
-          <Target className="w-3 h-3" />
-          Lead
-        </span>
-      )}
-      {(quote as any).created_at && (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto">
-          <Calendar className="w-3 h-3" />
-          {formatDate((quote as any).created_at)}
-        </span>
-      )}
-    </div>
-    {/* Row 4: Action buttons (visible on hover) */}
-    <div className="hidden group-hover:flex items-center gap-2 pt-1 border-t border-gray-100 mt-0.5">
-      {onPreview && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onPreview(); }}
-          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-0.5 rounded hover:bg-indigo-50 transition-colors"
+  teamMembers: UserProfile[];
+  teams: TeamWithRelations[];
+  onQuickAssign: (updates: { city?: string; assigned_to_user_id?: string; assigned_to_team_id?: string }) => void;
+}) => {
+  const [showPopover, setShowPopover] = React.useState(false);
+  const [assignUser, setAssignUser] = React.useState(quote.assigned_to_user_id || '');
+  const [assignTeam, setAssignTeam] = React.useState(quote.assigned_to_team_id || '');
+  const [assignCity, setAssignCity] = React.useState(quote.city || '');
+
+  const handleAssign = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onQuickAssign({
+      city: assignCity || undefined,
+      assigned_to_user_id: assignUser || undefined,
+      assigned_to_team_id: assignTeam || undefined,
+    });
+    setShowPopover(false);
+  };
+
+  return (
+    <div className="relative">
+      <div
+        className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+        style={{ borderLeft: `3px solid ${borderColor}` }}
+        draggable
+        onDragStart={onDragStart}
+        onClick={onClick}
+      >
+        {/* Row 1: Title + Amount */}
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium text-gray-900 leading-tight break-words min-w-0">{quote.title}</p>
+          {quote.total_amount ? (
+            <span className="text-xs font-semibold text-gray-700 whitespace-nowrap flex-shrink-0">
+              {formatCurrency(quote.total_amount)}
+            </span>
+          ) : null}
+        </div>
+        {/* Row 2: Customer */}
+        {quote.customer && (
+          <p className="text-xs text-gray-500 truncate">{quote.customer.name}</p>
+        )}
+        {/* Row 3: Metadata chips */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {quote.line_items && quote.line_items.length > 0 && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+              <Package className="w-3 h-3" />
+              {quote.line_items.length} {quote.line_items.length === 1 ? 'rad' : 'rader'}
+            </span>
+          )}
+          {quote.assigned_to && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+              <User className="w-3 h-3" />
+              {quote.assigned_to.full_name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || '?'}
+            </span>
+          )}
+          {quote.assigned_team && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+              <Users2 className="w-3 h-3" />
+              {quote.assigned_team.name}
+            </span>
+          )}
+          {quote.city && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 truncate max-w-[80px]">
+              <MapPin className="w-3 h-3 flex-shrink-0" />
+              {quote.city}
+            </span>
+          )}
+          {quote.lead && (
+            <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-600 rounded px-1.5 py-0.5">
+              <Target className="w-3 h-3" />
+              Lead
+            </span>
+          )}
+          {(quote as any).created_at && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto">
+              <Calendar className="w-3 h-3" />
+              {formatDate((quote as any).created_at)}
+            </span>
+          )}
+        </div>
+        {/* Row 4: Action buttons (visible on hover) */}
+        <div className="flex items-center justify-between pt-0.5">
+          <div className="hidden group-hover:flex items-center gap-2">
+            {onPreview && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onPreview(); }}
+                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-0.5 rounded hover:bg-indigo-50 transition-colors"
+              >
+                <Eye className="w-3 h-3" />
+                Förhandsgranska
+              </button>
+            )}
+            {onSend && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onSend(); }}
+                className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 font-medium px-2 py-0.5 rounded hover:bg-green-50 transition-colors"
+              >
+                <Mail className="w-3 h-3" />
+                Skicka
+              </button>
+            )}
+          </div>
+          <button
+            className="opacity-0 group-hover:opacity-100 text-xs font-medium text-amber-600 border border-amber-300 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded transition-all ml-auto"
+            onClick={(e: React.MouseEvent) => { e.stopPropagation(); setShowPopover(v => !v); }}
+            title="Tilldela"
+          >
+            Tilldela
+          </button>
+        </div>
+      </div>
+
+      {/* Quick-assign popover */}
+      {showPopover && (
+        <div
+          className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 flex flex-col gap-2"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Eye className="w-3 h-3" />
-          Förhandsgranska
-        </button>
-      )}
-      {onSend && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onSend(); }}
-          className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 font-medium px-2 py-0.5 rounded hover:bg-green-50 transition-colors"
-        >
-          <Mail className="w-3 h-3" />
-          Skicka
-        </button>
+          <p className="text-xs font-semibold text-gray-700">Snabbtilldela offert</p>
+          <select
+            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
+            value={assignUser}
+            onChange={(e) => { setAssignUser(e.target.value); if (e.target.value) setAssignTeam(''); }}
+          >
+            <option value="">-- Välj säljare --</option>
+            {teamMembers.map(m => (
+              <option key={m.id} value={m.id}>{m.full_name}</option>
+            ))}
+          </select>
+          <select
+            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
+            value={assignTeam}
+            onChange={(e) => { setAssignTeam(e.target.value); if (e.target.value) setAssignUser(''); }}
+          >
+            <option value="">-- Välj team --</option>
+            {teams.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <input
+            className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
+            placeholder="Stad / Område"
+            value={assignCity}
+            onChange={(e) => setAssignCity(e.target.value)}
+          />
+          <div className="flex gap-2 justify-end">
+            <button
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+              onClick={(e) => { e.stopPropagation(); setShowPopover(false); }}
+            >
+              Avbryt
+            </button>
+            <button
+              className="text-xs font-medium bg-amber-600 text-white px-3 py-1 rounded hover:bg-amber-700"
+              onClick={handleAssign}
+            >
+              Spara
+            </button>
+          </div>
+        </div>
       )}
     </div>
-  </div>
-);
+  );
+};
 
 function OrderKanban() {
   const { user, organisationId } = useAuth();
@@ -971,6 +1072,31 @@ function OrderKanban() {
     }
   };
 
+  const handleQuickAssignQuote = async (
+    quote: QuoteWithRelations,
+    updates: { city?: string; assigned_to_user_id?: string; assigned_to_team_id?: string }
+  ) => {
+    try {
+      const patch: Record<string, any> = {};
+      if (updates.city !== undefined) patch.city = updates.city || null;
+      if (updates.assigned_to_user_id !== undefined) {
+        patch.assigned_to_user_id = updates.assigned_to_user_id || null;
+        patch.assignment_type = updates.assigned_to_user_id ? 'individual' : null;
+        patch.assigned_to_team_id = null;
+      }
+      if (updates.assigned_to_team_id !== undefined && !updates.assigned_to_user_id) {
+        patch.assigned_to_team_id = updates.assigned_to_team_id || null;
+        patch.assignment_type = updates.assigned_to_team_id ? 'team' : null;
+        patch.assigned_to_user_id = null;
+      }
+      await updateQuote(quote.id, patch);
+      loadData();
+    } catch (err) {
+      console.error('Error quick-assigning quote:', err);
+      showError('Fel', 'Kunde inte tilldela offerten.');
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       title: '',
@@ -1096,10 +1222,10 @@ function OrderKanban() {
         </div>
 
         {/* Kanban Board Skeleton */}
-        <div className="flex h-full overflow-x-auto pb-4 gap-6">
+        <div className="flex gap-3 overflow-x-auto pb-4 snap-x snap-mandatory h-[calc(100vh-200px)] min-h-[400px]">
           {/* Render 8 skeleton columns matching the actual board structure */}
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="flex-none w-[85vw] sm:w-80 flex flex-col bg-gray-50 rounded-lg h-[calc(100vh-200px)] border border-gray-200">
+            <div key={i} className="flex-none snap-center w-[85vw] sm:w-72 flex flex-col bg-gray-50 rounded-xl h-full border border-gray-200">
               {/* Column Header Skeleton */}
               <div className="p-3 border-b flex items-center justify-between bg-white rounded-t-lg">
                 <div className="h-5 bg-gray-200 rounded w-1/3 animate-pulse"></div>
@@ -1235,7 +1361,7 @@ function OrderKanban() {
       )}
 
       {/* Kanban Board */}
-      <div className="flex overflow-x-auto snap-x snap-mandatory pb-4 lg:grid lg:grid-cols-3 xl:grid-cols-7 gap-4 transition-all">
+      <div className="flex gap-3 overflow-x-auto pb-4 snap-x snap-mandatory h-[calc(100vh-200px)] min-h-[400px]">
         {kanbanColumns.map((column) => {
           const columnOrders = column.type === 'order' ? getOrdersForStatus(column.status) : [];
           const columnLeads = column.type === 'lead' ? leads.filter(lead => lead.status === 'new') : [];
@@ -1252,7 +1378,7 @@ function OrderKanban() {
           return (
             <div
               key={column.status}
-              className={`kanban-column rounded-xl border border-slate-200 shadow-sm ${column.bgColor} min-h-[calc(100vh-200px)] w-[85vw] sm:w-80 flex-none snap-center lg:min-h-96 lg:w-auto transition-all hover:shadow-md`}
+              className={`kanban-column rounded-xl border border-slate-200 shadow-sm ${column.bgColor} flex-none snap-center w-[85vw] sm:w-72 flex flex-col h-full transition-all hover:shadow-md`}
               onDragOver={handleDragOver}
               onDragEnter={(e) => e.currentTarget.classList.add('ring-2', 'ring-blue-400', 'ring-offset-2')}
               onDragLeave={(e) => e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-2')}
@@ -1283,7 +1409,7 @@ function OrderKanban() {
               </div>
 
               {/* Column Content */}
-              <div className="p-3">
+              <div className="p-3 flex-1 overflow-y-auto">
                 <div className="space-y-1.5">
                   {items.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
@@ -1339,6 +1465,9 @@ function OrderKanban() {
                               setSelectedQuote(quote);
                               setShowSendQuoteModal(true);
                             }}
+                            teamMembers={teamMembers}
+                            teams={teams}
+                            onQuickAssign={(updates) => handleQuickAssignQuote(quote, updates)}
                           />
                         ))}
 
@@ -1458,6 +1587,8 @@ function OrderKanban() {
           templates={quoteTemplates}
           companyInfo={companyInfo}
           organisationId={organisationId!}
+          teamMembers={teamMembers}
+          teams={teams}
           onSave={async () => {
             await loadData();
             setShowQuoteEditModal(false);
@@ -1604,6 +1735,8 @@ function OrderKanban() {
           templates={quoteTemplates}
           companyInfo={companyInfo}
           organisationId={organisationId!}
+          teamMembers={teamMembers}
+          teams={teams}
           onSave={handleQuoteCreated}
           initialData={{
             customer_id: leadForQuote.customer_id || '',
