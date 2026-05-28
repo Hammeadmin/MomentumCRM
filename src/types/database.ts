@@ -207,6 +207,8 @@ export interface CustomField {
   type: 'number' | 'select' | 'checkbox';
   unit?: string;
   options?: string[];
+  /** Maps each option label to the numeric value used in pricing formulas */
+  option_values?: Record<string, number>;
   defaultValue?: number | string | boolean;
   placeholder?: string;
 }
