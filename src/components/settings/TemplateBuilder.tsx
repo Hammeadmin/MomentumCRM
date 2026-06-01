@@ -299,11 +299,23 @@ function TemplateBuilder() {
     // Block operations (passed to sub-components)
     // ────────────────────────────────────────────────────────────────
 
-    const handleAddBlock = (type: ContentBlockType) => {
+    const handleAddBlock = (type: ContentBlockType, afterBlockId?: string) => {
         if (!selectedTemplate) return;
         const defaults = getBlockDefaults(type);
         const newBlock: ContentBlock = { id: crypto.randomUUID(), type, content: defaults.content, settings: defaults.settings };
-        setSelectedTemplate({ ...selectedTemplate, content_structure: [...selectedTemplate.content_structure, newBlock] });
+        const blocks = selectedTemplate.content_structure;
+        let newBlocks: ContentBlock[];
+        if (afterBlockId) {
+            const idx = blocks.findIndex(b => b.id === afterBlockId);
+            if (idx !== -1) {
+                newBlocks = [...blocks.slice(0, idx + 1), newBlock, ...blocks.slice(idx + 1)];
+            } else {
+                newBlocks = [...blocks, newBlock];
+            }
+        } else {
+            newBlocks = [...blocks, newBlock];
+        }
+        setSelectedTemplate({ ...selectedTemplate, content_structure: newBlocks });
         setSelectedBlockId(newBlock.id);
     };
 
@@ -478,7 +490,7 @@ function TemplateBuilder() {
                 <div className="w-52 border-r border-gray-200 bg-white shrink-0 overflow-hidden">
                     <ToolboxSidebar
                         selectedTemplate={selectedTemplate}
-                        onAddBlock={handleAddBlock}
+                        onAddBlock={(type) => handleAddBlock(type, selectedBlockId ?? undefined)}
                         onTemplateChange={handleTemplateChange}
                         onDesignOptionChange={updateDesignOption}
                         onTextOverrideChange={updateTextOverride}
@@ -498,6 +510,7 @@ function TemplateBuilder() {
                             onContentChange={handleUpdateBlockContent}
                             onMoveBlock={handleBlockMove}
                             onRemoveBlock={handleRemoveBlock}
+                            onAddBlock={handleAddBlock}
                             uploadingBlockId={uploadingBlockId}
                             onTriggerUpload={triggerFileUpload}
                         />

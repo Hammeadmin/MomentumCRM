@@ -1,12 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import {
     GripVertical, ChevronDown, ChevronRight, Trash2, Eye, EyeOff,
-    Upload, Loader2,
+    Upload, Loader2, Plus,
     Type, MessageSquare, Package, FileText, Image as ImageIcon,
     Building, User, Receipt, Calculator, Info, FileSignature,
     Minus, Columns, LayoutGrid, FileMinus, LayoutTemplate, Star
 } from 'lucide-react';
-import type { ContentBlock, QuoteTemplate, BlockStyleSettings } from '../../lib/quoteTemplates';
+import type { ContentBlock, QuoteTemplate, BlockStyleSettings, ContentBlockType } from '../../lib/quoteTemplates';
 import { BLOCK_REGISTRY, BLOCK_CATEGORY_COLORS, getBlockRegistryEntry } from '../../lib/quoteTemplates';
 import StyleEditor from './StyleEditor';
 
@@ -25,6 +25,7 @@ interface StructurePanelProps {
     onContentChange: (blockId: string, content: any, settings?: any) => void;
     onMoveBlock: (dragIndex: number, hoverIndex: number) => void;
     onRemoveBlock: (blockId: string) => void;
+    onAddBlock: (type: ContentBlockType, afterBlockId?: string) => void;
     // Image upload
     uploadingBlockId: string | null;
     onTriggerUpload: (blockId: string, fieldName?: string) => void;
@@ -38,12 +39,15 @@ export default function StructurePanel({
     onContentChange,
     onMoveBlock,
     onRemoveBlock,
+    onAddBlock,
     uploadingBlockId,
     onTriggerUpload,
 }: StructurePanelProps) {
     // Drag state
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+    // Insert-after state: blockId after which we're showing picker, or 'start' for top
+    const [insertAfterId, setInsertAfterId] = useState<string | null>(null);
 
     const blocks = template.content_structure;
     const selectedBlock = blocks.find(b => b.id === selectedBlockId) || null;
@@ -108,6 +112,14 @@ export default function StructurePanel({
                     </div>
                 ) : (
                     <div className="divide-y divide-gray-100">
+                        {/* Insert-at-top button */}
+                        <InsertButton
+                            isOpen={insertAfterId === '__start__'}
+                            onToggle={() => setInsertAfterId(insertAfterId === '__start__' ? null : '__start__')}
+                            onInsert={(type) => { onAddBlock(type, undefined); setInsertAfterId(null); }}
+                            onClose={() => setInsertAfterId(null)}
+                            atTop
+                        />
                         {blocks.map((block, index) => {
                             const Icon = getIcon(block);
                             const label = getLabel(block);
@@ -177,12 +189,86 @@ export default function StructurePanel({
                                             />
                                         </div>
                                     )}
+
+                                    {/* Insert-after button */}
+                                    <InsertButton
+                                        isOpen={insertAfterId === block.id}
+                                        onToggle={() => setInsertAfterId(insertAfterId === block.id ? null : block.id)}
+                                        onInsert={(type) => { onAddBlock(type, block.id); setInsertAfterId(null); }}
+                                        onClose={() => setInsertAfterId(null)}
+                                    />
                                 </div>
                             );
                         })}
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// InsertButton — compact + button between blocks, opens block-type mini picker
+// ────────────────────────────────────────────────────────────────────────────
+
+const QUICK_BLOCKS: { type: ContentBlockType; label: string }[] = [
+    { type: 'text_block', label: 'Text' },
+    { type: 'header', label: 'Rubrik' },
+    { type: 'spacer', label: 'Mellanrum' },
+    { type: 'divider', label: 'Avdelare' },
+    { type: 'image', label: 'Bild' },
+    { type: 'line_items_table', label: 'Artiklar' },
+    { type: 'totals', label: 'Summering' },
+    { type: 'terms', label: 'Villkor' },
+    { type: 'signature_area', label: 'Signatur' },
+    { type: 'page_break', label: 'Sidbrytning' },
+];
+
+interface InsertButtonProps {
+    isOpen: boolean;
+    onToggle: () => void;
+    onInsert: (type: ContentBlockType) => void;
+    onClose: () => void;
+    atTop?: boolean;
+}
+
+function InsertButton({ isOpen, onToggle, onInsert, onClose, atTop }: InsertButtonProps) {
+    return (
+        <div className={`relative group/insert flex flex-col items-center ${atTop ? 'py-0.5' : ''}`}>
+            <button
+                onClick={(e) => { e.stopPropagation(); onToggle(); }}
+                title="Infoga block här"
+                className={`flex items-center gap-1 w-full justify-center py-0.5 text-xs font-medium transition-all
+                    ${isOpen
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'text-transparent hover:text-blue-400 hover:bg-blue-50'
+                    }`}
+            >
+                <Plus className="w-3 h-3" />
+            </button>
+
+            {isOpen && (
+                <div className="absolute left-0 right-0 z-20 bg-white border border-blue-200 rounded-lg shadow-lg p-2 mt-1 top-full">
+                    <p className="text-xs font-semibold text-gray-500 mb-1.5 px-1">Välj blocktyp att infoga:</p>
+                    <div className="grid grid-cols-2 gap-1">
+                        {QUICK_BLOCKS.map(({ type, label }) => (
+                            <button
+                                key={type}
+                                onClick={() => onInsert(type)}
+                                className="text-left px-2 py-1 text-xs rounded hover:bg-blue-50 hover:text-blue-700 text-gray-700 transition-colors"
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="mt-1.5 w-full text-xs text-gray-400 hover:text-gray-600 text-center py-0.5"
+                    >
+                        Avbryt
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
