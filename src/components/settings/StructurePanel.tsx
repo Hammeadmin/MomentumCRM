@@ -188,7 +188,7 @@ export default function StructurePanel({
                                                     <MoveRight className="w-3 h-3" />
                                                 </button>
                                                 {movePickerBlockId === block.id && (
-                                                    <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-blue-200 rounded-lg shadow-lg p-2 w-40">
+                                                    <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full mt-1 z-30 bg-white border border-blue-200 rounded-lg shadow-lg p-2 w-40">
                                                         <p className="text-xs font-semibold text-gray-500 mb-1 px-1">Flytta till rad:</p>
                                                         {rowBlocks.map((row, ri) => (
                                                             <button
