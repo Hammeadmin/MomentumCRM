@@ -474,7 +474,7 @@ const QuoteKanbanRow = ({
   return (
     <div className="relative">
       <div
-        className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+        className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors overflow-hidden"
         style={{ borderLeft: `3px solid ${borderColor}` }}
         draggable
         onDragStart={onDragStart}
@@ -532,8 +532,8 @@ const QuoteKanbanRow = ({
             </span>
           )}
         </div>
-        {/* Row 4: Action footer */}
-        <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-gray-100">
+        {/* Row 4: Action buttons */}
+        <div className="flex items-center justify-between pt-0.5">
           <div className="flex items-center gap-2">
             {onPreview && (
               <button
