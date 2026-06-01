@@ -1395,7 +1395,7 @@ function OrderKanban() {
       )}
 
       {/* Kanban Board */}
-      <div className="flex gap-2 pb-4 h-[calc(100vh-200px)] min-h-[400px]">
+      <div className="flex gap-1.5 pb-4 h-[calc(100vh-200px)] min-h-[400px] -mx-4 lg:-mx-6 px-4 lg:px-6">
         {kanbanColumns.map((column) => {
           const columnOrders = column.type === 'order' ? getOrdersForStatus(column.status) : [];
           const columnLeads = column.type === 'lead' ? leads.filter(lead => lead.status === 'new') : [];
@@ -1423,21 +1423,21 @@ function OrderKanban() {
             >
               {/* Column Header */}
               <div className={`${column.headerColor} rounded-t-xl px-2 py-2`}>
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-1 min-w-0">
                   <button
                     onClick={() => navigate(column.navigateTo)}
-                    className="text-white font-semibold text-sm truncate hover:underline transition-colors"
+                    className="text-white font-semibold text-xs truncate hover:underline transition-colors min-w-0"
                     title={`Gå till ${column.title}`}
                   >
                     {column.title}
                   </button>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <span className="bg-white/20 text-white text-xs font-bold px-1.5 py-0.5 rounded-full flex-shrink-0">
                       {items.length}
                     </span>
                   </div>
                 </div>
-                <div className="text-white/80 text-xs font-medium mt-1">
+                <div className="text-white/70 text-xs mt-0.5 truncate">
                   {formatCurrency(totalValue)}
                 </div>
               </div>

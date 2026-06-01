@@ -62,7 +62,7 @@ function Layout({ children }: LayoutProps) {
         />
 
         {/* Main Content */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-background">
+        <main className="flex-1 overflow-x-clip overflow-y-auto bg-background">
           <ErrorBoundary>
             <div className="p-4 lg:p-6 pb-20 lg:pb-6">
               {/* Auto-generated Breadcrumbs */}
