@@ -163,7 +163,7 @@ const OrderKanbanRow = ({
   return (
     <div className="relative">
       <div
-        className="group flex flex-col gap-1 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+        className="group flex flex-col gap-1 px-2 py-1.5 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
         style={{ borderLeft: `3px solid ${borderColor}` }}
         draggable
         onDragStart={onDragStart}
@@ -309,7 +309,7 @@ const LeadKanbanRow = ({
   return (
     <div className="relative">
       <div
-        className="group flex flex-col gap-1.5 px-3 py-2.5 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
+        className="group flex flex-col gap-1 px-2 py-1.5 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors"
         style={{ borderLeft: `3px solid ${borderColor}` }}
         draggable
         onDragStart={onDragStart}
@@ -474,7 +474,7 @@ const QuoteKanbanRow = ({
   return (
     <div className="relative">
       <div
-        className="group flex flex-col gap-1 px-3 pt-2 pb-0 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors overflow-hidden"
+        className="group flex flex-col gap-1 px-2 pt-1.5 pb-0 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-grab active:cursor-grabbing transition-colors overflow-hidden"
         style={{ borderLeft: `3px solid ${borderColor}` }}
         draggable
         onDragStart={onDragStart}
@@ -1395,7 +1395,7 @@ function OrderKanban() {
       )}
 
       {/* Kanban Board */}
-      <div className="flex gap-3 overflow-x-auto pb-4 snap-x snap-mandatory h-[calc(100vh-200px)] min-h-[400px]">
+      <div className="flex gap-2 pb-4 h-[calc(100vh-200px)] min-h-[400px]">
         {kanbanColumns.map((column) => {
           const columnOrders = column.type === 'order' ? getOrdersForStatus(column.status) : [];
           const columnLeads = column.type === 'lead' ? leads.filter(lead => lead.status === 'new') : [];
@@ -1412,7 +1412,7 @@ function OrderKanban() {
           return (
             <div
               key={column.status}
-              className={`kanban-column rounded-xl border border-slate-200 shadow-sm ${column.bgColor} flex-none snap-center w-[85vw] sm:w-72 flex flex-col h-full transition-all hover:shadow-md`}
+              className={`kanban-column rounded-xl border border-slate-200 shadow-sm ${column.bgColor} flex-1 min-w-0 flex flex-col h-full transition-all hover:shadow-md`}
               onDragOver={handleDragOver}
               onDragEnter={(e) => e.currentTarget.classList.add('ring-2', 'ring-blue-400', 'ring-offset-2')}
               onDragLeave={(e) => e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-2')}
@@ -1422,7 +1422,7 @@ function OrderKanban() {
               }}
             >
               {/* Column Header */}
-              <div className={`${column.headerColor} rounded-t-xl px-4 py-3`}>
+              <div className={`${column.headerColor} rounded-t-xl px-2 py-2`}>
                 <div className="flex items-center justify-between gap-2">
                   <button
                     onClick={() => navigate(column.navigateTo)}
@@ -1443,8 +1443,8 @@ function OrderKanban() {
               </div>
 
               {/* Column Content */}
-              <div className="p-3 flex-1 overflow-y-auto">
-                <div className="space-y-1.5">
+              <div className="p-1.5 flex-1 overflow-y-auto">
+                <div className="space-y-1">
                   {items.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                       <Package className="w-8 h-8 mx-auto mb-2 text-gray-400" />
