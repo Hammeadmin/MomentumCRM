@@ -298,6 +298,132 @@ function InsertButton({ isOpen, onToggle, onInsert, onClose, atTop }: InsertButt
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// RowColumnEditor — editor for row blocks with column management
+// ────────────────────────────────────────────────────────────────────────────
+
+interface RowColumnEditorProps {
+    rowBlock: ContentBlock;
+    onAddColumn: (blockType: ContentBlockType) => void;
+    onRemoveColumn: (columnId: string) => void;
+    onUpdateColumnWidth: (columnId: string, width: string) => void;
+    onChangeColumnBlockType: (columnId: string, blockType: ContentBlockType) => void;
+    onStyleChange: (key: string, value: any) => void;
+    onMoveUp: () => void;
+    onMoveDown: () => void;
+    onDelete: () => void;
+    canMoveUp: boolean;
+    canMoveDown: boolean;
+}
+
+const WIDTH_OPTIONS = [
+    { value: '1/4', label: '25%' },
+    { value: '1/3', label: '33%' },
+    { value: '1/2', label: '50%' },
+    { value: '2/3', label: '67%' },
+    { value: '3/4', label: '75%' },
+    { value: '1/1', label: '100%' },
+];
+
+function RowColumnEditor({ rowBlock, onAddColumn, onRemoveColumn, onUpdateColumnWidth, onChangeColumnBlockType, onStyleChange, onMoveUp, onMoveDown, onDelete, canMoveUp, canMoveDown }: RowColumnEditorProps) {
+    const [showAddPicker, setShowAddPicker] = useState(false);
+    const columns: RowColumn[] = rowBlock.content?.columns || [];
+
+    return (
+        <div className="space-y-3">
+            {/* Move/Delete actions */}
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Kolumnrad</span>
+                <div className="flex items-center gap-1">
+                    <button onClick={onMoveUp} disabled={!canMoveUp} className="p-1 rounded text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Flytta upp"><ChevronDown className="w-3 h-3 rotate-180" /></button>
+                    <button onClick={onMoveDown} disabled={!canMoveDown} className="p-1 rounded text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Flytta ner"><ChevronDown className="w-3 h-3" /></button>
+                    <button onClick={onDelete} className="p-1 rounded text-red-400 hover:text-red-600" title="Ta bort rad"><Trash2 className="w-3 h-3" /></button>
+                </div>
+            </div>
+
+            {/* Gap setting */}
+            <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500 w-16 shrink-0">Mellanrum</label>
+                <input
+                    type="range" min="0" max="48" step="4"
+                    value={rowBlock.settings?.gap ?? 16}
+                    onChange={(e) => onStyleChange('gap', parseInt(e.target.value))}
+                    className="flex-1"
+                />
+                <span className="text-xs text-gray-500 w-8 text-right">{rowBlock.settings?.gap ?? 16}px</span>
+            </div>
+
+            {/* Columns */}
+            <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Kolumner ({columns.length})</p>
+                {columns.length === 0 && (
+                    <p className="text-xs text-gray-400 italic">Inga kolumner ännu</p>
+                )}
+                {columns.map((col, colIdx) => {
+                    return (
+                        <div key={col.id} className="flex items-center gap-1.5 p-2 bg-white border border-gray-200 rounded-lg">
+                            <span className="text-xs text-gray-400 w-4 shrink-0">{colIdx + 1}.</span>
+
+                            {/* Block type picker */}
+                            <select
+                                value={col.block.type}
+                                onChange={(e) => onChangeColumnBlockType(col.id, e.target.value as ContentBlockType)}
+                                className="flex-1 min-w-0 px-1.5 py-1 text-xs border border-gray-200 rounded bg-white"
+                                title="Blocktyp"
+                            >
+                                {QUICK_BLOCKS.map(qb => (
+                                    <option key={qb.type} value={qb.type}>{qb.label}</option>
+                                ))}
+                            </select>
+
+                            {/* Width picker */}
+                            <select
+                                value={col.width}
+                                onChange={(e) => onUpdateColumnWidth(col.id, e.target.value)}
+                                className="w-14 px-1 py-1 text-xs border border-gray-200 rounded bg-white shrink-0"
+                                title="Kolumnbredd"
+                            >
+                                {WIDTH_OPTIONS.map(w => (
+                                    <option key={w.value} value={w.value}>{w.label}</option>
+                                ))}
+                            </select>
+
+                            {/* Remove column */}
+                            <button onClick={() => onRemoveColumn(col.id)} className="p-1 text-red-400 hover:text-red-600 shrink-0" title="Ta bort kolumn">
+                                <Trash2 className="w-3 h-3" />
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Add column */}
+            <div className="relative">
+                <button
+                    onClick={() => setShowAddPicker(!showAddPicker)}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 border border-dashed border-blue-300 rounded-lg text-xs text-blue-600 hover:bg-blue-50"
+                >
+                    <Plus className="w-3 h-3" />
+                    Lägg till kolumn
+                </button>
+                {showAddPicker && (
+                    <div className="absolute left-0 right-0 bottom-full mb-1 z-20 bg-white border border-blue-200 rounded-lg shadow-lg p-2">
+                        <p className="text-xs font-semibold text-gray-500 mb-1.5 px-1">Välj blocktyp:</p>
+                        <div className="grid grid-cols-2 gap-1">
+                            {QUICK_BLOCKS.map(({ type, label }) => (
+                                <button key={type} onClick={() => { onAddColumn(type); setShowAddPicker(false); }}
+                                    className="text-left px-2 py-1 text-xs rounded hover:bg-blue-50 hover:text-blue-700 text-gray-700">
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // BlockInspector — type-specific editors + StyleEditor, rendered inline
 // ────────────────────────────────────────────────────────────────────────────
 
