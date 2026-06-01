@@ -124,6 +124,12 @@ export type ContentBlockType =
   | 'bank_details'       // Bank account / IBAN / BIC
   | 'custom_text_block';  // Free-form text with rich settings
 
+export interface RowColumn {
+  id: string;
+  width: '1/4' | '1/3' | '1/2' | '2/3' | '3/4' | '1/1';
+  block: ContentBlock;
+}
+
 export interface ContentBlock {
   id: string;
   type: ContentBlockType;
@@ -1006,6 +1012,7 @@ export const BLOCK_REGISTRY: BlockRegistryEntry[] = [
   // ── Layout ──
   { type: 'divider',          label: 'Avdelare',           category: 'layout',   docType: 'both',    icon: 'Minus',          defaultContent: null,                                                 defaultSettings: { marginTop: 16, marginBottom: 16 } },
   { type: 'spacer',           label: 'Mellanrum',          category: 'layout',   docType: 'both',    icon: 'LayoutGrid',     defaultContent: null,                                                 defaultSettings: { spacerHeight: 32 } },
+  { type: 'row',              label: 'Kolumnrad',          category: 'layout',   docType: 'both',    icon: 'Columns',        defaultContent: { columns: [] },                                      defaultSettings: { gap: 16 } },
   { type: 'page_break',       label: 'Ny Sida',            category: 'layout',   docType: 'quote',   icon: 'FileMinus',      defaultContent: null,                                                 defaultSettings: {} },
 
   // ── Premium ──

@@ -6,7 +6,7 @@ import {
     Building, User, Receipt, Calculator, Info, FileSignature,
     Minus, Columns, LayoutGrid, FileMinus, LayoutTemplate, Star
 } from 'lucide-react';
-import type { ContentBlock, QuoteTemplate, BlockStyleSettings, ContentBlockType } from '../../lib/quoteTemplates';
+import type { ContentBlock, QuoteTemplate, BlockStyleSettings, ContentBlockType, RowColumn } from '../../lib/quoteTemplates';
 import { BLOCK_REGISTRY, BLOCK_CATEGORY_COLORS, getBlockRegistryEntry } from '../../lib/quoteTemplates';
 import StyleEditor from './StyleEditor';
 
@@ -26,6 +26,10 @@ interface StructurePanelProps {
     onMoveBlock: (dragIndex: number, hoverIndex: number) => void;
     onRemoveBlock: (blockId: string) => void;
     onAddBlock: (type: ContentBlockType, afterBlockId?: string) => void;
+    onAddColumnToRow: (rowId: string, blockType: ContentBlockType) => void;
+    onRemoveColumnFromRow: (rowId: string, columnId: string) => void;
+    onUpdateColumnWidth: (rowId: string, columnId: string, width: string) => void;
+    onChangeColumnBlockType: (rowId: string, columnId: string, blockType: ContentBlockType) => void;
     // Image upload
     uploadingBlockId: string | null;
     onTriggerUpload: (blockId: string, fieldName?: string) => void;
@@ -40,6 +44,10 @@ export default function StructurePanel({
     onMoveBlock,
     onRemoveBlock,
     onAddBlock,
+    onAddColumnToRow,
+    onRemoveColumnFromRow,
+    onUpdateColumnWidth,
+    onChangeColumnBlockType,
     uploadingBlockId,
     onTriggerUpload,
 }: StructurePanelProps) {
@@ -175,18 +183,34 @@ export default function StructurePanel({
                                     {/* Expanded settings */}
                                     {isSelected && selectedBlock && (
                                         <div className="bg-gray-50 border-t border-gray-100 p-3">
-                                            <BlockInspector
-                                                block={selectedBlock}
-                                                onStyleChange={(key, value) => onStyleChange(selectedBlock.id, key, value)}
-                                                onContentChange={(content, settings) => onContentChange(selectedBlock.id, content, settings)}
-                                                onMoveUp={() => index > 0 && onMoveBlock(index, index - 1)}
-                                                onMoveDown={() => index < blocks.length - 1 && onMoveBlock(index, index + 1)}
-                                                onDelete={() => onRemoveBlock(selectedBlock.id)}
-                                                canMoveUp={index > 0}
-                                                canMoveDown={index < blocks.length - 1}
-                                                uploadingBlockId={uploadingBlockId}
-                                                onTriggerUpload={onTriggerUpload}
-                                            />
+                                            {selectedBlock.type === 'row' ? (
+                                                <RowColumnEditor
+                                                    rowBlock={selectedBlock}
+                                                    onAddColumn={(type) => onAddColumnToRow(selectedBlock.id, type)}
+                                                    onRemoveColumn={(colId) => onRemoveColumnFromRow(selectedBlock.id, colId)}
+                                                    onUpdateColumnWidth={(colId, width) => onUpdateColumnWidth(selectedBlock.id, colId, width)}
+                                                    onChangeColumnBlockType={(colId, type) => onChangeColumnBlockType(selectedBlock.id, colId, type)}
+                                                    onStyleChange={(key, value) => onStyleChange(selectedBlock.id, key, value)}
+                                                    onMoveUp={() => index > 0 && onMoveBlock(index, index - 1)}
+                                                    onMoveDown={() => index < blocks.length - 1 && onMoveBlock(index, index + 1)}
+                                                    onDelete={() => onRemoveBlock(selectedBlock.id)}
+                                                    canMoveUp={index > 0}
+                                                    canMoveDown={index < blocks.length - 1}
+                                                />
+                                            ) : (
+                                                <BlockInspector
+                                                    block={selectedBlock}
+                                                    onStyleChange={(key, value) => onStyleChange(selectedBlock.id, key, value)}
+                                                    onContentChange={(content, settings) => onContentChange(selectedBlock.id, content, settings)}
+                                                    onMoveUp={() => index > 0 && onMoveBlock(index, index - 1)}
+                                                    onMoveDown={() => index < blocks.length - 1 && onMoveBlock(index, index + 1)}
+                                                    onDelete={() => onRemoveBlock(selectedBlock.id)}
+                                                    canMoveUp={index > 0}
+                                                    canMoveDown={index < blocks.length - 1}
+                                                    uploadingBlockId={uploadingBlockId}
+                                                    onTriggerUpload={onTriggerUpload}
+                                                />
+                                            )}
                                         </div>
                                     )}
 

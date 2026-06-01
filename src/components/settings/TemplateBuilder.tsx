@@ -321,7 +321,21 @@ function TemplateBuilder() {
 
     const handleRemoveBlock = (blockId: string) => {
         if (!selectedTemplate) return;
-        setSelectedTemplate({ ...selectedTemplate, content_structure: selectedTemplate.content_structure.filter(b => b.id !== blockId) });
+        const newStructure = selectedTemplate.content_structure
+            .filter(b => b.id !== blockId)
+            .map(b => {
+                if (b.type === 'row' && b.content?.columns) {
+                    return {
+                        ...b,
+                        content: {
+                            ...b.content,
+                            columns: b.content.columns.filter((col: any) => col.block.id !== blockId)
+                        }
+                    };
+                }
+                return b;
+            });
+        setSelectedTemplate({ ...selectedTemplate, content_structure: newStructure });
         if (selectedBlockId === blockId) setSelectedBlockId(null);
     };
 
@@ -336,9 +350,23 @@ function TemplateBuilder() {
 
     const handleBlockStyleChange = (blockId: string, styleKey: string, value: any) => {
         if (!selectedTemplate) return;
-        const updatedStructure = selectedTemplate.content_structure.map(b =>
-            b.id === blockId ? { ...b, settings: { ...b.settings, [styleKey]: value } } : b
-        );
+        const updatedStructure = selectedTemplate.content_structure.map(b => {
+            if (b.id === blockId) return { ...b, settings: { ...b.settings, [styleKey]: value } };
+            if (b.type === 'row' && b.content?.columns) {
+                return {
+                    ...b,
+                    content: {
+                        ...b.content,
+                        columns: b.content.columns.map((col: any) =>
+                            col.block.id === blockId
+                                ? { ...col, block: { ...col.block, settings: { ...col.block.settings, [styleKey]: value } } }
+                                : col
+                        )
+                    }
+                };
+            }
+            return b;
+        });
         setSelectedTemplate({ ...selectedTemplate, content_structure: updatedStructure });
     };
 
@@ -346,8 +374,81 @@ function TemplateBuilder() {
         if (!selectedTemplate) return;
         setSelectedTemplate({
             ...selectedTemplate,
+            content_structure: selectedTemplate.content_structure.map(b => {
+                if (b.id === blockId) return { ...b, content, settings: { ...b.settings, ...settings } };
+                if (b.type === 'row' && b.content?.columns) {
+                    return {
+                        ...b,
+                        content: {
+                            ...b.content,
+                            columns: b.content.columns.map((col: any) =>
+                                col.block.id === blockId
+                                    ? { ...col, block: { ...col.block, content, settings: { ...col.block.settings, ...settings } } }
+                                    : col
+                            )
+                        }
+                    };
+                }
+                return b;
+            })
+        });
+    };
+
+    const handleAddColumnToRow = (rowId: string, blockType: ContentBlockType) => {
+        if (!selectedTemplate) return;
+        const defaults = getBlockDefaults(blockType);
+        const newCol = {
+            id: crypto.randomUUID(),
+            width: '1/2' as const,
+            block: { id: crypto.randomUUID(), type: blockType, content: defaults.content, settings: defaults.settings }
+        };
+        setSelectedTemplate({
+            ...selectedTemplate,
             content_structure: selectedTemplate.content_structure.map(b =>
-                b.id === blockId ? { ...b, content, settings: { ...b.settings, ...settings } } : b
+                b.id === rowId && b.type === 'row'
+                    ? { ...b, content: { ...b.content, columns: [...(b.content?.columns || []), newCol] } }
+                    : b
+            )
+        });
+    };
+
+    const handleRemoveColumnFromRow = (rowId: string, columnId: string) => {
+        if (!selectedTemplate) return;
+        setSelectedTemplate({
+            ...selectedTemplate,
+            content_structure: selectedTemplate.content_structure.map(b =>
+                b.id === rowId && b.type === 'row'
+                    ? { ...b, content: { ...b.content, columns: b.content.columns.filter((col: any) => col.id !== columnId) } }
+                    : b
+            )
+        });
+    };
+
+    const handleUpdateColumnWidth = (rowId: string, columnId: string, width: string) => {
+        if (!selectedTemplate) return;
+        setSelectedTemplate({
+            ...selectedTemplate,
+            content_structure: selectedTemplate.content_structure.map(b =>
+                b.id === rowId && b.type === 'row'
+                    ? { ...b, content: { ...b.content, columns: b.content.columns.map((col: any) => col.id === columnId ? { ...col, width } : col) } }
+                    : b
+            )
+        });
+    };
+
+    const handleChangeColumnBlockType = (rowId: string, columnId: string, blockType: ContentBlockType) => {
+        if (!selectedTemplate) return;
+        const defaults = getBlockDefaults(blockType);
+        setSelectedTemplate({
+            ...selectedTemplate,
+            content_structure: selectedTemplate.content_structure.map(b =>
+                b.id === rowId && b.type === 'row'
+                    ? { ...b, content: { ...b.content, columns: b.content.columns.map((col: any) =>
+                        col.id === columnId
+                            ? { ...col, block: { id: col.block.id, type: blockType, content: defaults.content, settings: defaults.settings } }
+                            : col
+                    ) } }
+                    : b
             )
         });
     };
@@ -511,6 +612,10 @@ function TemplateBuilder() {
                             onMoveBlock={handleBlockMove}
                             onRemoveBlock={handleRemoveBlock}
                             onAddBlock={handleAddBlock}
+                            onAddColumnToRow={handleAddColumnToRow}
+                            onRemoveColumnFromRow={handleRemoveColumnFromRow}
+                            onUpdateColumnWidth={handleUpdateColumnWidth}
+                            onChangeColumnBlockType={handleChangeColumnBlockType}
                             uploadingBlockId={uploadingBlockId}
                             onTriggerUpload={triggerFileUpload}
                         />
