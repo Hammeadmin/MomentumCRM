@@ -436,6 +436,24 @@ function TemplateBuilder() {
         });
     };
 
+    const handleMoveBlockToRow = (blockId: string, rowId: string) => {
+        if (!selectedTemplate) return;
+        const blockToMove = selectedTemplate.content_structure.find(b => b.id === blockId);
+        if (!blockToMove || blockToMove.type === 'row') return;
+        const newCol = { id: crypto.randomUUID(), width: '1/2' as const, block: blockToMove };
+        setSelectedTemplate({
+            ...selectedTemplate,
+            content_structure: selectedTemplate.content_structure
+                .filter(b => b.id !== blockId)
+                .map(b =>
+                    b.id === rowId && b.type === 'row'
+                        ? { ...b, content: { ...b.content, columns: [...(b.content?.columns || []), newCol] } }
+                        : b
+                )
+        });
+        setSelectedBlockId(rowId);
+    };
+
     const handleChangeColumnBlockType = (rowId: string, columnId: string, blockType: ContentBlockType) => {
         if (!selectedTemplate) return;
         const defaults = getBlockDefaults(blockType);
@@ -613,6 +631,7 @@ function TemplateBuilder() {
                             onRemoveBlock={handleRemoveBlock}
                             onAddBlock={handleAddBlock}
                             onAddColumnToRow={handleAddColumnToRow}
+                            onMoveBlockToRow={handleMoveBlockToRow}
                             onRemoveColumnFromRow={handleRemoveColumnFromRow}
                             onUpdateColumnWidth={handleUpdateColumnWidth}
                             onChangeColumnBlockType={handleChangeColumnBlockType}

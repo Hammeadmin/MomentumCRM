@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
     GripVertical, ChevronDown, ChevronRight, Trash2, Eye, EyeOff,
-    Upload, Loader2, Plus,
+    Upload, Loader2, Plus, MoveRight,
     Type, MessageSquare, Package, FileText, Image as ImageIcon,
     Building, User, Receipt, Calculator, Info, FileSignature,
     Minus, Columns, LayoutGrid, FileMinus, LayoutTemplate, Star
@@ -27,6 +27,7 @@ interface StructurePanelProps {
     onRemoveBlock: (blockId: string) => void;
     onAddBlock: (type: ContentBlockType, afterBlockId?: string) => void;
     onAddColumnToRow: (rowId: string, blockType: ContentBlockType) => void;
+    onMoveBlockToRow: (blockId: string, rowId: string) => void;
     onRemoveColumnFromRow: (rowId: string, columnId: string) => void;
     onUpdateColumnWidth: (rowId: string, columnId: string, width: string) => void;
     onChangeColumnBlockType: (rowId: string, columnId: string, blockType: ContentBlockType) => void;
@@ -45,6 +46,7 @@ export default function StructurePanel({
     onRemoveBlock,
     onAddBlock,
     onAddColumnToRow,
+    onMoveBlockToRow,
     onRemoveColumnFromRow,
     onUpdateColumnWidth,
     onChangeColumnBlockType,
@@ -56,9 +58,12 @@ export default function StructurePanel({
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     // Insert-after state: blockId after which we're showing picker, or 'start' for top
     const [insertAfterId, setInsertAfterId] = useState<string | null>(null);
+    // Move-to-row picker: blockId being moved
+    const [movePickerBlockId, setMovePickerBlockId] = useState<string | null>(null);
 
     const blocks = template.content_structure;
     const selectedBlock = blocks.find(b => b.id === selectedBlockId) || null;
+    const rowBlocks = blocks.filter(b => b.type === 'row');
 
     const handleDragStart = (e: React.DragEvent, index: number) => {
         setDragIndex(index);
@@ -172,6 +177,33 @@ export default function StructurePanel({
                                             {label}
                                         </span>
 
+                                        {/* Move to row button (only for non-row blocks when rows exist) */}
+                                        {block.type !== 'row' && rowBlocks.length > 0 && (
+                                            <div className="relative flex-shrink-0">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setMovePickerBlockId(movePickerBlockId === block.id ? null : block.id); }}
+                                                    title="Flytta in i kolumnrad"
+                                                    className="p-1 rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50"
+                                                >
+                                                    <MoveRight className="w-3 h-3" />
+                                                </button>
+                                                {movePickerBlockId === block.id && (
+                                                    <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-blue-200 rounded-lg shadow-lg p-2 w-40">
+                                                        <p className="text-xs font-semibold text-gray-500 mb-1 px-1">Flytta till rad:</p>
+                                                        {rowBlocks.map((row, ri) => (
+                                                            <button
+                                                                key={row.id}
+                                                                onClick={(e) => { e.stopPropagation(); onMoveBlockToRow(block.id, row.id); setMovePickerBlockId(null); }}
+                                                                className="block w-full text-left px-2 py-1 text-xs rounded hover:bg-blue-50 hover:text-blue-700 text-gray-700"
+                                                            >
+                                                                Kolumnrad {ri + 1}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {/* Expand indicator */}
                                         {isSelected ? (
                                             <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
@@ -186,7 +218,9 @@ export default function StructurePanel({
                                             {selectedBlock.type === 'row' ? (
                                                 <RowColumnEditor
                                                     rowBlock={selectedBlock}
+                                                    existingBlocks={blocks.filter(b => b.type !== 'row' && b.id !== selectedBlock.id)}
                                                     onAddColumn={(type) => onAddColumnToRow(selectedBlock.id, type)}
+                                                    onMoveExistingToColumn={(blockId) => onMoveBlockToRow(blockId, selectedBlock.id)}
                                                     onRemoveColumn={(colId) => onRemoveColumnFromRow(selectedBlock.id, colId)}
                                                     onUpdateColumnWidth={(colId, width) => onUpdateColumnWidth(selectedBlock.id, colId, width)}
                                                     onChangeColumnBlockType={(colId, type) => onChangeColumnBlockType(selectedBlock.id, colId, type)}
@@ -303,7 +337,9 @@ function InsertButton({ isOpen, onToggle, onInsert, onClose, atTop }: InsertButt
 
 interface RowColumnEditorProps {
     rowBlock: ContentBlock;
+    existingBlocks: ContentBlock[]; // top-level non-row blocks to move into this row
     onAddColumn: (blockType: ContentBlockType) => void;
+    onMoveExistingToColumn: (blockId: string) => void;
     onRemoveColumn: (columnId: string) => void;
     onUpdateColumnWidth: (columnId: string, width: string) => void;
     onChangeColumnBlockType: (columnId: string, blockType: ContentBlockType) => void;
@@ -324,8 +360,9 @@ const WIDTH_OPTIONS = [
     { value: '1/1', label: '100%' },
 ];
 
-function RowColumnEditor({ rowBlock, onAddColumn, onRemoveColumn, onUpdateColumnWidth, onChangeColumnBlockType, onStyleChange, onMoveUp, onMoveDown, onDelete, canMoveUp, canMoveDown }: RowColumnEditorProps) {
+function RowColumnEditor({ rowBlock, existingBlocks, onAddColumn, onMoveExistingToColumn, onRemoveColumn, onUpdateColumnWidth, onChangeColumnBlockType, onStyleChange, onMoveUp, onMoveDown, onDelete, canMoveUp, canMoveDown }: RowColumnEditorProps) {
     const [showAddPicker, setShowAddPicker] = useState(false);
+    const [addTab, setAddTab] = useState<'new' | 'existing'>('new');
     const columns: RowColumn[] = rowBlock.content?.columns || [];
 
     return (
@@ -407,15 +444,42 @@ function RowColumnEditor({ rowBlock, onAddColumn, onRemoveColumn, onUpdateColumn
                 </button>
                 {showAddPicker && (
                     <div className="absolute left-0 right-0 bottom-full mb-1 z-20 bg-white border border-blue-200 rounded-lg shadow-lg p-2">
-                        <p className="text-xs font-semibold text-gray-500 mb-1.5 px-1">Välj blocktyp:</p>
-                        <div className="grid grid-cols-2 gap-1">
-                            {QUICK_BLOCKS.map(({ type, label }) => (
-                                <button key={type} onClick={() => { onAddColumn(type); setShowAddPicker(false); }}
-                                    className="text-left px-2 py-1 text-xs rounded hover:bg-blue-50 hover:text-blue-700 text-gray-700">
-                                    {label}
-                                </button>
-                            ))}
+                        {/* Tabs */}
+                        <div className="flex mb-2 border-b border-gray-100">
+                            <button onClick={() => setAddTab('new')} className={`flex-1 py-1 text-xs font-medium rounded-tl ${addTab === 'new' ? 'text-blue-600 border-b-2 border-blue-500' : 'text-gray-500'}`}>
+                                Ny typ
+                            </button>
+                            <button onClick={() => setAddTab('existing')} className={`flex-1 py-1 text-xs font-medium rounded-tr ${addTab === 'existing' ? 'text-blue-600 border-b-2 border-blue-500' : 'text-gray-500'}`}>
+                                Befintligt
+                            </button>
                         </div>
+
+                        {addTab === 'new' ? (
+                            <div className="grid grid-cols-2 gap-1">
+                                {QUICK_BLOCKS.map(({ type, label }) => (
+                                    <button key={type} onClick={() => { onAddColumn(type); setShowAddPicker(false); }}
+                                        className="text-left px-2 py-1 text-xs rounded hover:bg-blue-50 hover:text-blue-700 text-gray-700">
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="space-y-1 max-h-40 overflow-y-auto">
+                                {existingBlocks.length === 0 ? (
+                                    <p className="text-xs text-gray-400 text-center py-2">Inga block att flytta</p>
+                                ) : existingBlocks.map(b => {
+                                    const entry = getBlockRegistryEntry(b.type);
+                                    return (
+                                        <button key={b.id} onClick={() => { onMoveExistingToColumn(b.id); setShowAddPicker(false); }}
+                                            className="block w-full text-left px-2 py-1.5 text-xs rounded hover:bg-blue-50 hover:text-blue-700 text-gray-700 border border-transparent hover:border-blue-200">
+                                            {entry?.label || b.type}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <button onClick={() => setShowAddPicker(false)} className="mt-1.5 w-full text-xs text-gray-400 hover:text-gray-600 text-center py-0.5">Avbryt</button>
                     </div>
                 )}
             </div>
