@@ -58,8 +58,7 @@ export const navigation: NavigationItem[] = [
         ]
     },
     { name: 'Intranät', href: '/app/intranat', icon: Newspaper, shortcut: 'G+N' },
-    { name: 'Analys', href: '/app/analys', icon: BarChart3, shortcut: 'G+A' },
-    { name: 'Inställningar', href: '/app/installningar', icon: Settings, shortcut: 'G+S' }
+    { name: 'Analys', href: '/app/analys', icon: BarChart3, shortcut: 'G+A' }
 ];
 
 // Note: Organizations are fetched dynamically from database via AuthContext

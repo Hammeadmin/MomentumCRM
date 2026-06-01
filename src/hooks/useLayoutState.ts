@@ -45,7 +45,7 @@ export interface UseLayoutStateReturn {
 
 export function useLayoutState(): UseLayoutStateReturn {
     // Sidebar State
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
     // Theme State
     const [theme, setTheme] = useState<'light' | 'dark'>('light');

@@ -48,7 +48,7 @@ function Layout({ children }: LayoutProps) {
         />
       </div>
 
-      <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${sidebar.collapsed ? 'lg:ml-[72px]' : 'lg:ml-64'
+      <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${sidebar.collapsed ? 'lg:ml-[56px]' : 'lg:ml-[220px]'
         }`}>
         {/* Header */}
         <Header
