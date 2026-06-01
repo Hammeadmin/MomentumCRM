@@ -37,13 +37,16 @@ function NotificationToast({ notification, onDismiss, onMarkAsRead }: Notificati
     onMarkAsRead();
 
     if (notification.action_url) {
-      // --- FIX: Ensure the URL always routes inside the protected app boundary ---
-      let targetUrl = notification.action_url;
-      if (targetUrl.startsWith('/') && !targetUrl.startsWith('/app/')) {
-        targetUrl = `/app${targetUrl}`;
+      const raw = notification.action_url.trim();
+      if (raw.startsWith('http://') || raw.startsWith('https://')) {
+        window.open(raw, '_blank', 'noopener');
+      } else {
+        let targetUrl = raw.startsWith('/') ? raw : `/${raw}`;
+        if (!targetUrl.startsWith('/app/')) targetUrl = `/app${targetUrl}`;
+        const FALLBACKS: Record<string, string> = { '/app/dashboard': '/app', '/app/notifieringar': '/app' };
+        targetUrl = FALLBACKS[targetUrl.split('?')[0]] ?? targetUrl;
+        navigate(targetUrl);
       }
-
-      navigate(targetUrl);
     }
 
     handleDismiss();

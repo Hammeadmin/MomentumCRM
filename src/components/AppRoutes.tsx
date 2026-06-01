@@ -154,7 +154,7 @@ export default function AppRoutes() {
           {/* OAuth Callbacks */}
           <Route path="/fortnox/callback" element={<RouteErrorBoundary><FortnoxCallback /></RouteErrorBoundary>} />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </Suspense>
     </Layout>

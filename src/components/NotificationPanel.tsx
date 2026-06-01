@@ -35,18 +35,29 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
   });
 
   const handleNotificationClick = async (notification: Notification) => {
-    // Mark as read if not already read
     if (!notification.is_read) {
       await markAsRead(notification.id);
     }
 
-    // Navigate to action URL if available
     if (notification.action_url) {
-      // --- FIX: Ensure the URL always routes inside the protected app boundary ---
-      let targetUrl = notification.action_url;
-      if (targetUrl.startsWith('/') && !targetUrl.startsWith('/app/')) {
+      const raw = notification.action_url.trim();
+      // Skip external URLs
+      if (raw.startsWith('http://') || raw.startsWith('https://')) {
+        window.open(raw, '_blank', 'noopener');
+        onClose();
+        return;
+      }
+      // Normalise to always start with /app/
+      let targetUrl = raw.startsWith('/') ? raw : `/${raw}`;
+      if (!targetUrl.startsWith('/app/')) {
         targetUrl = `/app${targetUrl}`;
       }
+      // Replace unknown sub-paths that have no real route with safe fallbacks
+      const FALLBACKS: Record<string, string> = {
+        '/app/dashboard': '/app',
+        '/app/notifieringar': '/app',
+      };
+      targetUrl = FALLBACKS[targetUrl.split('?')[0]] ?? targetUrl;
 
       navigate(targetUrl);
       onClose();
