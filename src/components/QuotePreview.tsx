@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Building, Mail, Phone, MapPin, Trash2, GripVertical, Settings, Star, FileMinus, Plus } from 'lucide-react';
-import type { QuoteTemplate, ContentBlock, BlockStyleSettings } from '../lib/quoteTemplates';
+import type { QuoteTemplate, ContentBlock, BlockStyleSettings, RowColumn } from '../lib/quoteTemplates';
 import { formatCurrency, formatDate } from '../lib/database';
 import { UNIT_LABELS } from '../lib/quoteTemplates';
 
@@ -322,7 +322,7 @@ function QuotePreview({
     return result;
   };
 
-  const renderContentBlock = (block: ContentBlock, index: number) => {
+  const renderContentBlock = (block: ContentBlock, index: number, skipWrapper?: boolean) => {
     // Helper to get content based on mode
     const getContent = (content: any) => {
       if (typeof content !== 'string') return content;
@@ -1526,9 +1526,37 @@ function QuotePreview({
         );
         break;
 
+      case 'row': {
+        const columns: RowColumn[] = block.content?.columns || [];
+        const gap = block.settings?.gap ?? 16;
+        innerContent = (
+          <div style={{ display: 'flex', gap: `${gap}px`, alignItems: 'flex-start', width: '100%' }}>
+            {columns.map(col => {
+              const widthMap: Record<string, string> = {
+                '1/4': '25%', '1/3': '33.333%', '1/2': '50%',
+                '2/3': '66.666%', '3/4': '75%', '1/1': '100%'
+              };
+              return (
+                <div key={col.id} style={{ flex: `0 1 ${widthMap[col.width] ?? '50%'}`, minWidth: 0 }}>
+                  {renderContentBlock(col.block, -1, true)}
+                </div>
+              );
+            })}
+            {columns.length === 0 && isEditable && (
+              <div className="w-full border-2 border-dashed border-gray-200 rounded p-4 text-center text-xs text-gray-400">
+                Tom kolumnrad — lägg till kolumner från strukturpanelen
+              </div>
+            )}
+          </div>
+        );
+        break;
+      }
+
       default:
         return null;
     }
+
+    if (skipWrapper) return <div key={block.id}>{innerContent}</div>;
 
     return (
       <DraggableBlockWrapper
