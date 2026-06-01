@@ -223,7 +223,7 @@ export const createCalendarEvent = async (
           type: 'event_assignment' as const,
           title: 'Ny teamhändelse schemalagd',
           message: `Ditt team har en ny händelse: "${data.title}"${data.start_time ? ` den ${formatSwedishDate(data.start_time)}` : ''}`,
-          action_url: `/kalender?highlight=${data.id}`
+          action_url: `/app/kalender?highlight=${data.id}`
         };
         await createTeamNotification(teamNotification);
       }
@@ -294,7 +294,7 @@ export const updateCalendarEvent = async (
           type: 'event_assignment' as const,
           title: 'Teamhändelse uppdaterad',
           message: `Händelsen "${data.title}" har uppdaterats${data.start_time ? ` och är schemalagd den ${formatSwedishDate(data.start_time)}` : ''}`,
-          action_url: `/kalender?highlight=${data.id}`,
+          action_url: `/app/kalender?highlight=${data.id}`,
           exclude_user_id: currentEvent.assigned_to_user_id || undefined
         };
         await createTeamNotification(teamNotification);

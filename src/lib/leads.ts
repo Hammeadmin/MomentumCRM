@@ -404,7 +404,7 @@ export const createSalesTask = async (
         type: 'system', // or a new 'task_assignment' type
         title: 'Ny uppgift tilldelad',
         message: `Du har fått en ny uppgift: "${data.title}"`,
-        action_url: `/dashboard?taskId=${data.id}` // or a direct link to the task
+        action_url: `/app/leads`
       });
     }
 
@@ -459,7 +459,7 @@ export const updateSalesTask = async (
         type: 'system',
         title: 'Ny uppgift tilldelad',
         message: `Du har tilldelats uppgiften "${data.title}"`,
-        action_url: `/dashboard?taskId=${data.id}`
+        action_url: `/app/leads`
       });
     }
 
@@ -470,7 +470,7 @@ export const updateSalesTask = async (
         type: 'system',
         title: 'Uppgift slutförd',
         message: `Uppgiften "${data.title}" har slutförts av ${data.user?.full_name || 'användare'}`,
-        action_url: `/dashboard?taskId=${data.id}`
+        action_url: `/app/leads`
       });
     }
 

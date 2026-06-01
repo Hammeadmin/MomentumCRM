@@ -276,7 +276,7 @@ function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
           <button
             onClick={() => {
-              navigate('/notifieringar');
+              navigate('/app/notifieringar');
               onClose();
             }}
             className="w-full text-center text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium py-2"
