@@ -538,10 +538,10 @@ const QuoteKanbanRow = ({
             {onPreview && (
               <button
                 onClick={(e) => { e.stopPropagation(); onPreview(); }}
-                className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-0.5 rounded hover:bg-indigo-50 transition-colors"
+                className="opacity-0 group-hover:opacity-100 flex items-center text-indigo-600 hover:text-indigo-800 p-1 rounded hover:bg-indigo-50 transition-colors"
+                title="Förhandsgranska"
               >
-                <Eye className="w-3 h-3" />
-                Förhandsgranska
+                <Eye className="w-4 h-4" />
               </button>
             )}
             {onSend && (
