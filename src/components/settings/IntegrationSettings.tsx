@@ -34,8 +34,11 @@ import {
   connectFortnox,
   disconnectFortnox,
   testFortnoxConnection,
+  syncInvoicesToFortnox,
+  syncInvoicesFromFortnox,
   type FortnoxConnectionStatus
 } from '../../lib/fortnox';
+import { supabase } from '../../lib/supabase';
 import {
   getSmsSettings,
   saveSmsSettings,
@@ -53,6 +56,244 @@ import {
   type Webhook,
   type WebhookCreateInput
 } from '../../lib/webhooks';
+
+interface FortnoxPanelProps {
+  orgId: string | null;
+  status: FortnoxConnectionStatus;
+  stats: { syncedInvoices: number; unsyncedInvoices: number; syncedCustomers: number; unsyncedCustomers: number; lastSync: string | null };
+  testing: boolean;
+  testResult: string | null;
+  syncing: 'to' | 'from' | null;
+  syncResult: { success: number; failed: number; errors: string[] } | null;
+  onTest: () => void;
+  onSyncToFortnox: () => void;
+  onSyncFromFortnox: () => void;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onLoadStats: () => void;
+}
+
+function FortnoxPanel({
+  orgId,
+  status,
+  stats,
+  testing,
+  testResult,
+  syncing,
+  syncResult,
+  onTest,
+  onSyncToFortnox,
+  onSyncFromFortnox,
+  onConnect,
+  onDisconnect,
+  onLoadStats,
+}: FortnoxPanelProps) {
+  useEffect(() => {
+    if (orgId && status.isConnected) {
+      onLoadStats();
+    }
+  }, [orgId, status.isConnected]);
+
+  const connectionBadge = status.isConnected ? (
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+      <CheckCircle className="w-3 h-3 mr-1" /> Ansluten
+    </span>
+  ) : status.isExpired ? (
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+      <AlertCircle className="w-3 h-3 mr-1" /> Token utgången
+    </span>
+  ) : (
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+      <X className="w-3 h-3 mr-1" /> Ej ansluten
+    </span>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Connection Status */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <h4 className="font-semibold text-gray-900">Fortnox</h4>
+            {connectionBadge}
+          </div>
+          {status.expiresAt && (
+            <p className="text-xs text-gray-500">
+              Token giltig till: {new Date(status.expiresAt).toLocaleString('sv-SE')}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {status.isConnected ? (
+            <button
+              onClick={onDisconnect}
+              className="inline-flex items-center px-3 py-1.5 border border-red-300 rounded-md text-sm text-red-600 hover:bg-red-50"
+            >
+              Koppla från
+            </button>
+          ) : (
+            <button
+              onClick={onConnect}
+              className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+            >
+              <Link className="w-4 h-4 mr-1.5" />
+              {status.isExpired ? 'Återanslut' : 'Anslut till Fortnox'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Test connection */}
+      {status.isConnected && (
+        <div className="border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h5 className="font-medium text-gray-900">Testa anslutning</h5>
+            <button
+              onClick={onTest}
+              disabled={testing}
+              className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {testing ? (
+                <RefreshCw className="w-4 h-4 mr-1.5 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4 mr-1.5" />
+              )}
+              Testa
+            </button>
+          </div>
+          {testResult && (
+            <p className={`text-sm mt-2 ${testResult.startsWith('✅') ? 'text-green-700' : 'text-red-700'}`}>
+              {testResult}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Sync Statistics */}
+      {status.isConnected && (
+        <div className="border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h5 className="font-medium text-gray-900">Synkstatus</h5>
+            <button
+              onClick={onLoadStats}
+              className="p-1 text-gray-400 hover:text-gray-600 rounded"
+              title="Uppdatera statistik"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="bg-green-50 rounded-lg p-3">
+              <p className="text-2xl font-bold text-green-700">{stats.syncedInvoices}</p>
+              <p className="text-xs text-green-600">Synkade fakturor</p>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-3">
+              <p className="text-2xl font-bold text-orange-700">{stats.unsyncedInvoices}</p>
+              <p className="text-xs text-orange-600">Osynkade fakturor</p>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3">
+              <p className="text-2xl font-bold text-blue-700">{stats.syncedCustomers}</p>
+              <p className="text-xs text-blue-600">Synkade kunder</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-2xl font-bold text-gray-700">{stats.unsyncedCustomers}</p>
+              <p className="text-xs text-gray-500">Osynkade kunder</p>
+            </div>
+          </div>
+          {stats.lastSync && (
+            <p className="text-xs text-gray-500">
+              Senaste synk: {new Date(stats.lastSync).toLocaleString('sv-SE')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Sync Actions */}
+      {status.isConnected && (
+        <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+          <h5 className="font-medium text-gray-900">Manuell synkronisering</h5>
+
+          <div className="flex gap-3">
+            <button
+              onClick={onSyncToFortnox}
+              disabled={syncing !== null}
+              className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+            >
+              {syncing === 'to' ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4 mr-2" />
+              )}
+              Skicka till Fortnox
+            </button>
+            <button
+              onClick={onSyncFromFortnox}
+              disabled={syncing !== null}
+              className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              {syncing === 'from' ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4 mr-2" />
+              )}
+              Hämta från Fortnox
+            </button>
+          </div>
+
+          <div className="text-xs text-gray-500 space-y-1">
+            <p><strong>Skicka till Fortnox:</strong> Exporterar osynkade fakturor och kunder till Fortnox.</p>
+            <p><strong>Hämta från Fortnox:</strong> Uppdaterar betalningsstatus på synkade fakturor.</p>
+          </div>
+
+          {syncResult && (
+            <div className={`rounded-lg p-3 ${syncResult.failed > 0 ? 'bg-yellow-50 border border-yellow-200' : 'bg-green-50 border border-green-200'}`}>
+              <p className={`text-sm font-medium ${syncResult.failed > 0 ? 'text-yellow-800' : 'text-green-800'}`}>
+                Synk klar: {syncResult.success} lyckade, {syncResult.failed} misslyckade
+              </p>
+              {syncResult.errors.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {syncResult.errors.slice(0, 5).map((err, i) => (
+                    <li key={i} className="text-xs text-yellow-700">{err}</li>
+                  ))}
+                  {syncResult.errors.length > 5 && (
+                    <li className="text-xs text-yellow-600">+{syncResult.errors.length - 5} fler fel...</li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Not connected help */}
+      {!status.isConnected && !status.isExpired && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h5 className="font-medium text-blue-900 mb-2">Kom igång med Fortnox</h5>
+          <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+            <li>Klicka på "Anslut till Fortnox" ovan</li>
+            <li>Logga in med ditt Fortnox-konto</li>
+            <li>Godkänn behörigheter för MomentumCRM</li>
+            <li>Du skickas tillbaka hit automatiskt</li>
+          </ol>
+        </div>
+      )}
+
+      {status.isExpired && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
+            <div>
+              <h5 className="font-medium text-yellow-900">Anslutning utgången</h5>
+              <p className="text-sm text-yellow-800 mt-1">
+                Din Fortnox-token har gått ut. Klicka på "Återanslut" för att förnya anslutningen.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Integration {
   id: string;
@@ -77,6 +318,9 @@ function IntegrationSettings() {
   const [fortnoxStatus, setFortnoxStatus] = useState<FortnoxConnectionStatus>({ isConnected: false, isExpired: false });
   const [fortnoxTesting, setFortnoxTesting] = useState(false);
   const [fortnoxTestResult, setFortnoxTestResult] = useState<string | null>(null);
+  const [fortnoxSyncing, setFortnoxSyncing] = useState<'to' | 'from' | null>(null);
+  const [fortnoxSyncResult, setFortnoxSyncResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
+  const [fortnoxStats, setFortnoxStats] = useState<{ syncedInvoices: number; unsyncedInvoices: number; syncedCustomers: number; unsyncedCustomers: number; lastSync: string | null }>({ syncedInvoices: 0, unsyncedInvoices: 0, syncedCustomers: 0, unsyncedCustomers: 0, lastSync: null });
 
   // SMS/46elks state
   const [smsSettings, setSmsSettings] = useState<SmsSettings | null>(null);
@@ -195,7 +439,6 @@ function IntegrationSettings() {
       const status = await getFortnoxConnectionStatus(userProfile.organisation_id);
       setFortnoxStatus(status);
 
-      // Update integrations state
       setIntegrations(prev => prev.map(integration =>
         integration.id === 'fortnox'
           ? { ...integration, status: status.isConnected ? 'connected' : (status.isExpired ? 'error' : 'disconnected') }
@@ -205,6 +448,27 @@ function IntegrationSettings() {
 
     checkFortnoxStatus();
   }, [userProfile?.organisation_id]);
+
+  const loadFortnoxStats = async () => {
+    if (!userProfile?.organisation_id) return;
+    const orgId = userProfile.organisation_id;
+
+    const [{ count: syncedInv }, { count: unsyncedInv }, { count: syncedCust }, { count: unsyncedCust }, { data: lastSyncRow }] = await Promise.all([
+      supabase.from('invoices').select('id', { count: 'exact', head: true }).eq('organisation_id', orgId).not('fortnox_invoice_number', 'is', null),
+      supabase.from('invoices').select('id', { count: 'exact', head: true }).eq('organisation_id', orgId).is('fortnox_invoice_number', null).neq('status', 'draft'),
+      supabase.from('customers').select('id', { count: 'exact', head: true }).eq('organisation_id', orgId).not('fortnox_customer_number', 'is', null),
+      supabase.from('customers').select('id', { count: 'exact', head: true }).eq('organisation_id', orgId).is('fortnox_customer_number', null),
+      supabase.from('invoices').select('fortnox_synced_at').eq('organisation_id', orgId).not('fortnox_synced_at', 'is', null).order('fortnox_synced_at', { ascending: false }).limit(1),
+    ]);
+
+    setFortnoxStats({
+      syncedInvoices: syncedInv ?? 0,
+      unsyncedInvoices: unsyncedInv ?? 0,
+      syncedCustomers: syncedCust ?? 0,
+      unsyncedCustomers: unsyncedCust ?? 0,
+      lastSync: lastSyncRow?.[0]?.fortnox_synced_at ?? null,
+    });
+  };
 
   // Check SMS/46elks settings on mount
   useEffect(() => {
@@ -702,192 +966,64 @@ function IntegrationSettings() {
 
             <div className="p-6">
               {showConfigModal === 'fortnox' && (
-                <div className="space-y-4">
-                  <div className="bg-blue-50 p-4 rounded-lg mb-4">
-                    <div className="flex items-start">
-                      <Globe className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
-                      <div>
-                        <h4 className="font-medium text-blue-900">Fortnox Integration</h4>
-                        <p className="text-sm text-blue-700 mt-1">
-                          Anslut ditt Fortnox-konto för att automatiskt synkronisera kunder och fakturor med ditt bokföringssystem.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Connection Status Badge */}
-                  {fortnoxStatus.isConnected ? (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="flex items-center">
-                        <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-                        <span className="text-green-700 font-medium">Ansluten</span>
-                      </div>
-                      {fortnoxStatus.expiresAt && (
-                        <p className="text-xs text-green-600 mt-1">
-                          Token giltig till: {new Date(fortnoxStatus.expiresAt).toLocaleString('sv-SE')}
-                        </p>
-                      )}
-                    </div>
-                  ) : fortnoxStatus.isExpired ? (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <div className="flex items-center">
-                        <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" />
-                        <span className="text-yellow-700 font-medium">Token utgången — återanslut</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center">
-                        <X className="w-5 h-5 text-gray-400 mr-2" />
-                        <span className="text-gray-600 font-medium">Ej ansluten</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {(fortnoxStatus.isConnected || fortnoxStatus.isExpired) ? (
-                    <>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <h5 className="font-medium text-gray-900 mb-2">Funktioner</h5>
-                        <ul className="text-sm text-gray-600 space-y-1">
-                          <li>✓ Exportera kunder till Fortnox</li>
-                          <li>✓ Exportera fakturor med momskoder</li>
-                          <li>✓ Hämta betalningsstatus från Fortnox</li>
-                          <li>✓ Automatisk tokenförnyelse</li>
-                        </ul>
-                      </div>
-
-                      {/* Test Connection Button (only when connected) */}
-                      {fortnoxStatus.isConnected && (
-                        <div className="space-y-2">
-                          <button
-                            onClick={async () => {
-                              if (!userProfile?.organisation_id) return;
-                              setFortnoxTesting(true);
-                              setFortnoxTestResult(null);
-                              const result = await testFortnoxConnection(userProfile.organisation_id);
-                              if (result.success) {
-                                setFortnoxTestResult(`✅ Anslutningen fungerar! Företag: ${result.companyName || 'Okänt'}`);
-                              } else {
-                                setFortnoxTestResult(`❌ Anslutningen misslyckades: ${result.error || 'Okänt fel'}. Prova att återansluta.`);
-                              }
-                              setFortnoxTesting(false);
-                            }}
-                            disabled={fortnoxTesting}
-                            className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                          >
-                            {fortnoxTesting ? (
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-                            ) : (
-                              <Play className="w-4 h-4 mr-2" />
-                            )}
-                            Testa anslutning
-                          </button>
-                          {fortnoxTestResult && (
-                            <p className={`text-sm p-3 rounded-lg ${fortnoxTestResult.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                              {fortnoxTestResult}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Reconnect button (when expired) */}
-                      {fortnoxStatus.isExpired && (
-                        <button
-                          onClick={() => {
-                            if (!userProfile?.organisation_id) {
-                              setError('Organisation saknas');
-                              return;
-                            }
-                            try {
-                              const redirectUri = `${window.location.origin}/app/fortnox/callback`;
-                              connectFortnox(userProfile.organisation_id, redirectUri);
-                            } catch (err) {
-                              setError((err as Error).message || 'Kunde inte starta Fortnox-anslutning');
-                            }
-                          }}
-                          disabled={loading}
-                          className="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
-                        >
-                          {loading ? (
-                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                          ) : (
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                          )}
-                          Återanslut till Fortnox
-                        </button>
-                      )}
-
-                      {/* Disconnect Button */}
-                      <button
-                        onClick={async () => {
-                          if (!confirm('Är du säker på att du vill koppla från Fortnox? Du behöver ansluta igen för att synka data.')) return;
-                          if (userProfile?.organisation_id) {
-                            const result = await disconnectFortnox(userProfile.organisation_id);
-                            if (result.success) {
-                              setFortnoxStatus({ isConnected: false, isExpired: false });
-                              setFortnoxTestResult(null);
-                              setIntegrations(prev => prev.map(i =>
-                                i.id === 'fortnox' ? { ...i, status: 'disconnected' } : i
-                              ));
-                              setSuccess('Fortnox frånkopplad');
-                            } else {
-                              setError(result.error || 'Kunde inte koppla från Fortnox');
-                            }
-                          }
-                        }}
-                        className="w-full inline-flex items-center justify-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50"
-                      >
-                        Koppla från Fortnox
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {/* Features list */}
-                      <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                        <h5 className="font-medium text-gray-900 mb-2">Vad du kan göra med Fortnox</h5>
-                        <ul className="text-sm text-gray-600 space-y-1">
-                          <li>✓ Exportera kunder automatiskt till Fortnox</li>
-                          <li>✓ Skicka fakturor direkt till bokföringen</li>
-                          <li>✓ Synka momskoder och betalningar</li>
-                          <li>✓ Automatisk tokenförnyelse</li>
-                        </ul>
-                      </div>
-
-                      {/* Connect button */}
-                      <div className="text-center py-4">
-                        <button
-                          onClick={() => {
-                            if (!userProfile?.organisation_id) {
-                              setError('Organisation saknas');
-                              return;
-                            }
-                            try {
-                              const redirectUri = `${window.location.origin}/app/fortnox/callback`;
-                              connectFortnox(userProfile.organisation_id, redirectUri);
-                            } catch (err) {
-                              setError((err as Error).message || 'Kunde inte starta Fortnox-anslutning');
-                            }
-                          }}
-                          disabled={loading}
-                          className="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          {loading ? (
-                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                          ) : (
-                            <Globe className="w-5 h-5 mr-2" />
-                          )}
-                          Anslut ditt Fortnox-konto
-                        </button>
-                      </div>
-
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                        <p className="text-xs text-blue-700">
-                          Du kommer att omdirigeras till Fortnox för att godkänna anslutningen. Se till att du är inloggad på rätt Fortnox-konto innan du fortsätter.
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </div>
+                <FortnoxPanel
+                  orgId={userProfile?.organisation_id ?? null}
+                  status={fortnoxStatus}
+                  stats={fortnoxStats}
+                  testing={fortnoxTesting}
+                  testResult={fortnoxTestResult}
+                  syncing={fortnoxSyncing}
+                  syncResult={fortnoxSyncResult}
+                  onTest={async () => {
+                    if (!userProfile?.organisation_id) return;
+                    setFortnoxTesting(true);
+                    setFortnoxTestResult(null);
+                    const result = await testFortnoxConnection(userProfile.organisation_id);
+                    setFortnoxTestResult(result.success
+                      ? `✅ Anslutningen fungerar! Företag: ${result.companyName ?? 'Okänt'}`
+                      : `❌ Misslyckades: ${result.error ?? 'Okänt fel'}`);
+                    setFortnoxTesting(false);
+                  }}
+                  onSyncToFortnox={async () => {
+                    if (!userProfile?.organisation_id) return;
+                    setFortnoxSyncing('to');
+                    setFortnoxSyncResult(null);
+                    const result = await syncInvoicesToFortnox(userProfile.organisation_id);
+                    setFortnoxSyncResult(result);
+                    setFortnoxSyncing(null);
+                    await loadFortnoxStats();
+                  }}
+                  onSyncFromFortnox={async () => {
+                    if (!userProfile?.organisation_id) return;
+                    setFortnoxSyncing('from');
+                    setFortnoxSyncResult(null);
+                    const result = await syncInvoicesFromFortnox(userProfile.organisation_id);
+                    setFortnoxSyncResult(result);
+                    setFortnoxSyncing(null);
+                    await loadFortnoxStats();
+                  }}
+                  onConnect={() => {
+                    if (!userProfile?.organisation_id) { setError('Organisation saknas'); return; }
+                    try {
+                      connectFortnox(userProfile.organisation_id, `${window.location.origin}/app/fortnox/callback`);
+                    } catch (err) { setError((err as Error).message); }
+                  }}
+                  onDisconnect={async () => {
+                    if (!confirm('Koppla från Fortnox? Du behöver ansluta igen för att synka data.')) return;
+                    if (!userProfile?.organisation_id) return;
+                    const result = await disconnectFortnox(userProfile.organisation_id);
+                    if (result.success) {
+                      setFortnoxStatus({ isConnected: false, isExpired: false });
+                      setFortnoxTestResult(null);
+                      setFortnoxSyncResult(null);
+                      setIntegrations(prev => prev.map(i => i.id === 'fortnox' ? { ...i, status: 'disconnected' } : i));
+                      setSuccess('Fortnox frånkopplad');
+                    } else {
+                      setError(result.error ?? 'Kunde inte koppla från Fortnox');
+                    }
+                  }}
+                  onLoadStats={loadFortnoxStats}
+                />
               )}
 
               {showConfigModal === 'google-calendar' && (
