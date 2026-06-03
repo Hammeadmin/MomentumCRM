@@ -31,8 +31,6 @@ const WorkerProfile = React.lazy(() => import('../pages/WorkerProfile'));
 // Detail pages
 const OrderDetailPage = React.lazy(() => import('../pages/OrderDetailPage'));
 const QuoteDetailPage = React.lazy(() => import('../pages/QuoteDetailPage'));
-const FortnoxCallback = React.lazy(() => import('./FortnoxCallback'));
-
 // Regular imports for core pages
 import Customers from '../pages/Customers';
 import Quotes from '../pages/Quotes';
@@ -150,9 +148,6 @@ export default function AppRoutes() {
           {/* Detail Pages */}
           <Route path="/order/:id" element={<RouteErrorBoundary><OrderDetailPage /></RouteErrorBoundary>} />
           <Route path="/offert/:id" element={<RouteErrorBoundary><QuoteDetailPage /></RouteErrorBoundary>} />
-
-          {/* OAuth Callbacks */}
-          <Route path="/fortnox/callback" element={<RouteErrorBoundary><FortnoxCallback /></RouteErrorBoundary>} />
 
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
