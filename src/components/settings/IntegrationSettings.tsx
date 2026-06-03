@@ -990,7 +990,7 @@ function IntegrationSettings() {
                     setFortnoxTestResult(null);
                     const result = await testFortnoxConnection(userProfile.organisation_id);
                     setFortnoxTestResult(result.success
-                      ? `✅ Anslutningen fungerar! Företag: ${result.companyName ?? 'Okänt'}`
+                      ? `✅ Anslutningen fungerar!`
                       : `❌ Misslyckades: ${result.error ?? 'Okänt fel'}`);
                     setFortnoxTesting(false);
                   }}

@@ -245,20 +245,19 @@ export async function exchangeFortnoxCode(
 export async function testFortnoxConnection(
     organisationId: string
 ): Promise<{ success: boolean; companyName?: string; error?: string }> {
-    const result = await fortnoxApiRequest<{ CompanyInformation: { CompanyName: string } }>(
+    // Fetch a single customer as a lightweight connectivity check.
+    // /companyinformation requires a scope we don't request.
+    const result = await fortnoxApiRequest<{ Customers: unknown[] }>(
         organisationId,
         'GET',
-        '/companyinformation'
+        '/customers?limit=1'
     );
 
     if (!result.success) {
         return { success: false, error: result.error };
     }
 
-    return {
-        success: true,
-        companyName: result.data?.CompanyInformation?.CompanyName,
-    };
+    return { success: true };
 }
 
 /**
