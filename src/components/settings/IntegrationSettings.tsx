@@ -36,6 +36,7 @@ import {
   testFortnoxConnection,
   syncInvoicesToFortnox,
   syncInvoicesFromFortnox,
+  connectFortnoxPopup,
   type FortnoxConnectionStatus
 } from '../../lib/fortnox';
 import { supabase } from '../../lib/supabase';
@@ -539,9 +540,18 @@ function IntegrationSettings() {
         if (!userProfile?.organisation_id) {
           throw new Error('Organisation saknas');
         }
-        const redirectUri = `${window.location.origin}/app/fortnox/callback`;
-        connectFortnox(userProfile.organisation_id, redirectUri);
-        // OAuth will redirect
+        const result = await connectFortnoxPopup(userProfile.organisation_id);
+        if (result.success) {
+          const status = await getFortnoxConnectionStatus(userProfile.organisation_id);
+          setFortnoxStatus(status);
+          setIntegrations(prev => prev.map(i =>
+            i.id === 'fortnox' ? { ...i, status: status.isConnected ? 'connected' : 'error' } : i
+          ));
+          setSuccess('Fortnox ansluten!');
+          setTimeout(() => setSuccess(null), 3000);
+        } else if (result.error) {
+          throw new Error(result.error);
+        }
         return;
       }
 
@@ -1002,10 +1012,22 @@ function IntegrationSettings() {
                     setFortnoxSyncing(null);
                     await loadFortnoxStats();
                   }}
-                  onConnect={() => {
+                  onConnect={async () => {
                     if (!userProfile?.organisation_id) { setError('Organisation saknas'); return; }
                     try {
-                      connectFortnox(userProfile.organisation_id, `${window.location.origin}/app/fortnox/callback`);
+                      const result = await connectFortnoxPopup(userProfile.organisation_id);
+                      if (result.success) {
+                        const status = await getFortnoxConnectionStatus(userProfile.organisation_id);
+                        setFortnoxStatus(status);
+                        setIntegrations(prev => prev.map(i =>
+                          i.id === 'fortnox' ? { ...i, status: status.isConnected ? 'connected' : 'error' } : i
+                        ));
+                        await loadFortnoxStats();
+                        setSuccess('Fortnox ansluten!');
+                        setTimeout(() => setSuccess(null), 3000);
+                      } else if (result.error) {
+                        setError(result.error);
+                      }
                     } catch (err) { setError((err as Error).message); }
                   }}
                   onDisconnect={async () => {
