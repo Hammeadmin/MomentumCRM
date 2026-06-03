@@ -40,8 +40,8 @@ export default function FortnoxCallback() {
                 if (result.success) {
                     setStatus('success');
                     if (isPopup) {
+                        // Let the opener close the popup to avoid postMessage race conditions
                         window.opener.postMessage({ type: 'fortnox-oauth-result', success: true }, window.location.origin);
-                        window.close();
                     } else {
                         setTimeout(() => {
                             navigate('/app/installningar?tab=integrations', { replace: true });
@@ -52,8 +52,10 @@ export default function FortnoxCallback() {
                     const msg = result.error || 'Kunde inte ansluta till Fortnox.';
                     setErrorMessage(msg);
                     if (isPopup) {
-                        window.opener.postMessage({ type: 'fortnox-oauth-result', success: false, error: msg }, window.location.origin);
-                        setTimeout(() => window.close(), 2000);
+                        // Delay sending the message so the user sees the error for 2s before the opener closes the popup
+                        setTimeout(() => {
+                            window.opener.postMessage({ type: 'fortnox-oauth-result', success: false, error: msg }, window.location.origin);
+                        }, 2000);
                     }
                 }
             } catch (err) {
@@ -62,8 +64,9 @@ export default function FortnoxCallback() {
                 setErrorMessage(msg);
                 const isPopup = !!window.opener && window.opener !== window;
                 if (isPopup) {
-                    window.opener.postMessage({ type: 'fortnox-oauth-result', success: false, error: msg }, window.location.origin);
-                    setTimeout(() => window.close(), 2000);
+                    setTimeout(() => {
+                        window.opener.postMessage({ type: 'fortnox-oauth-result', success: false, error: msg }, window.location.origin);
+                    }, 2000);
                 }
             }
         };
