@@ -226,7 +226,10 @@ export async function exchangeFortnoxCode(
             },
         });
 
+        console.log('[exchangeFortnoxCode] edge fn response:', { data, error });
+
         if (error) {
+            console.error('[exchangeFortnoxCode] invoke error:', error);
             return { success: false, error: error.message };
         }
 
