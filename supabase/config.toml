@@ -4,3 +4,17 @@
 
 [track-quote-view]
 verify_jwt = false
+
+# fortnox-api is called from the OAuth callback page which has no Supabase
+# session, so JWT verification must be disabled. The function uses the
+# service role key for all DB access and validates the org ID from the body.
+[fortnox-api]
+verify_jwt = false
+
+# sync-fortnox and sync-from-fortnox are called from authenticated app
+# sessions but disabling JWT keeps them callable from server-side contexts too.
+[sync-fortnox]
+verify_jwt = false
+
+[sync-from-fortnox]
+verify_jwt = false
