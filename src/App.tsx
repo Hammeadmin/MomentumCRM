@@ -10,6 +10,7 @@ import PublicLeadForm from './components/PublicLeadForm';
 import AppRoutes from './components/AppRoutes';
 import LoginPage from './pages/LoginPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import FortnoxCallback from './components/FortnoxCallback';
 
 // Public Website
 import PublicLayout from './layouts/public/PublicLayout';
@@ -62,6 +63,8 @@ function App() {
               {/* Public standalone routes */}
               <Route path="/quote-accept/:token" element={<QuoteAcceptance />} />
               <Route path="/forms/:formId" element={<PublicLeadForm />} />
+              {/* OAuth callbacks — must be public so the popup doesn't hit the auth guard */}
+              <Route path="/app/fortnox/callback" element={<FortnoxCallback />} />
 
               {/* ===========================
                   PROTECTED APP ROUTES
