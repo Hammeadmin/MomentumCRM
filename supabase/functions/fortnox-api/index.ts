@@ -315,6 +315,26 @@ Deno.serve(async (req: Request) => {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
         const body = (await req.json()) as Record<string, unknown>;
 
+        // proxy and refresh touch sensitive Fortnox tokens — require a valid caller.
+        // auth is intentionally open: it receives a one-time, short-lived OAuth code
+        // from Fortnox and is called from the OAuth callback page which has no session.
+        if (body.action === 'proxy' || body.action === 'refresh') {
+            const authHeader = req.headers.get('Authorization');
+            const token = authHeader?.replace('Bearer ', '') ?? '';
+            if (!token) {
+                return jsonError('Unauthorized', 401);
+            }
+            // Accept the service role key (server-to-server calls from sync functions)
+            // or a valid user JWT.
+            if (token !== supabaseServiceKey) {
+                const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+                if (authErr || !user) {
+                    console.error('[fortnox-api] Unauthorized request to', body.action);
+                    return jsonError('Unauthorized', 401);
+                }
+            }
+        }
+
         switch (body.action) {
             case 'auth':
                 return await exchangeCode(

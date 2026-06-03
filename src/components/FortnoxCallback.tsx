@@ -22,12 +22,13 @@ export default function FortnoxCallback() {
             const authCode = urlParams.get('code');
             const state = urlParams.get('state'); // organisation_id
 
-            console.log('[FortnoxCallback] URL:', window.location.href);
+            console.log('[FortnoxCallback] path:', window.location.pathname);
             console.log('[FortnoxCallback] code:', authCode ? '✓ present' : '✗ missing', '| state:', state ? '✓ present' : '✗ missing');
 
             if (!authCode || !state) {
-                const allParams = Object.fromEntries(urlParams.entries());
-                console.error('[FortnoxCallback] Missing params. All URL params:', allParams);
+                // Log param names only — never log values to avoid exposing the OAuth code
+                const paramKeys = Array.from(urlParams.keys());
+                console.error('[FortnoxCallback] Missing params. Received param names:', paramKeys);
                 setStatus('error');
                 setErrorMessage('Saknar auktoriseringskod eller state-parameter från Fortnox.');
                 return;
