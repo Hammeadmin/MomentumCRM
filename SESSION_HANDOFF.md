@@ -1,210 +1,259 @@
 # MomentumCRM — Session Handoff Document
 
-**Branch:** `claude/sad-darwin-731708`  
-**Latest commit:** `35935cd`  
-**Status:** All changes committed and pushed. Ready for PR review and merge into `main`.  
-**Worktree path:** `C:\Users\Elhar\Desktop\MomentumCRM\MomentumCRM\.claude\worktrees\sad-darwin-731708`  
-**Main repo path:** `C:\Users\Elhar\Desktop\MomentumCRM\MomentumCRM`
+**Branch:** `claude/focused-wozniak-QGZs5`  
+**Latest commit:** `8de720e`  
+**Status:** All changes committed and pushed. Ready for PR review and merge into `main`.
 
 ---
 
 ## Stack & Key Facts
 
 - React 18 + TypeScript + Supabase + Tailwind CSS
-- Swedish UI (all labels in Swedish)
-- **Two `updateLead` functions exist** — always import from `src/lib/leads.ts` (logs activity, accepts `actingUserId`), never from `src/lib/database.ts` (no logging)
-- Translation strings live in `src/locales/sv.ts` — access via `useTranslation()` hook. Never hardcode Swedish strings in components.
-- Invoice templates are stored in the `quote_templates` table with `settings.template_type = 'invoice'`
-- Quote templates have `settings.template_type = 'quote'` (default when creating a new template)
+- Swedish UI — all labels must use `useTranslation()` from `src/locales/sv.ts`, never hardcoded strings
+- **Two `updateLead` functions exist** — always import from `src/lib/leads.ts` (logs activity), never from `src/lib/database.ts`
+- Invoice templates: `settings.template_type = 'invoice'`; always read design_options as `template?.design_options || template?.settings?.design_options || {}`
+- Lead lifecycle: `new` → `qualified` (quote) → `won` (order); fire-and-forget: `updateLead(id, { status: 'won' }).catch(...)`
+- TypeScript must stay clean — run `npx tsc --noEmit` after every change
+- Git push always needs token: `git remote set-url origin https://<GITHUB_PAT>@github.com/Hammeadmin/MomentumCRM.git`
 
 ---
 
-## Everything Done Across Both Sessions (25 commits)
+## Everything Done This Session
 
-### Phase 1 — Order Modal Foundations
-**Commits:** `274c6ea`, `34c3c42`, `e107890`
-- `CreateOrderModal` completely rewritten: tabbed layout (Grundinfo / Kund & Uppdrag / Orderrader / Avdrag)
-- `lead_id` field added to orders flow — orders can be linked to a lead
-- Lead picker added to `CreateOrderModal` with autofill (selecting a lead fills title, description, customer, source, region)
-- Product library wired up correctly in `CreateOrderModal`
-- Line items section added using `LineItemsEditor`
+### 1. TemplateBuilder: Precise Block Insertion (`+` buttons between blocks)
 
-### Phase 2 — Tab-Aware Validation
-**Commit:** `cf4425c`
-- Native HTML `required` attributes never fire on fields in hidden tabs
-- Fix: all tabbed modals now do explicit manual validation before submit, auto-switch to the failing tab, and show a toast error
+**Files:** `src/components/settings/TemplateBuilder.tsx`, `src/components/settings/StructurePanel.tsx`
 
-### Phase 3 — LineItemsEditor Unification
-**Commit:** `b30d62b`
-- `unit` field added to `LineItemsEditor.LineItem` type and propagated to all 6 modals + 3 library files
-- All order/invoice modals now use the shared `LineItemsEditor` component
+`handleAddBlock` now accepts an optional `afterBlockId?: string`. When provided, the new block is spliced in immediately after that block rather than appended at the end.
 
-### Phase 4 — Lead/Quote/Order Pipeline Fix
-**Commit:** `97928d7`
+`StructurePanel` now renders a `+` insert button between every pair of blocks and above the first block. Clicking opens a compact block-type picker. Insertion calls `onAddBlock(type, afterBlockId)`.
 
-| Problem | Fix |
-|---|---|
-| Phantom Kanban quote cards | `createOrderWithQuote` now repurposes existing draft quote or creates new with `status: 'accepted'` — never `draft` |
-| `updateOrderAndQuote` created draft backing quotes | Changed to always use `status: 'accepted'` |
-| `acceptQuoteAndCreateOrder` never marked lead as won | Added `updateLead(lead_id, { status: 'won' })` after order creation |
-| `CreateOrderModal` never marked lead as won | Added fire-and-forget `updateLead` call after success |
-| `Ordermanagement.handleSaveOrder` never marked lead as won | Added `updateLead` import + call in create branch |
-| `CalendarView` was marking lead as `won` at quote creation | Fixed to `qualified` — correct: quote = qualified, order = won |
-
-**Lead lifecycle (correct):** `new` → `qualified` (quote created) → `won` (order created or quote accepted)
-
-**Fire-and-forget pattern used throughout:**
 ```typescript
-if (someLeadId) {
-  updateLead(someLeadId, { status: 'won' }).catch(err =>
-    console.error('Failed to mark lead as won:', err)
-  );
+// Key change in handleAddBlock
+if (afterBlockId) {
+    const idx = blocks.findIndex(b => b.id === afterBlockId);
+    newBlocks = idx !== -1
+        ? [...blocks.slice(0, idx + 1), newBlock, ...blocks.slice(idx + 1)]
+        : [...blocks, newBlock];
 }
 ```
 
-### OrderKanban Fixes
-**Commit:** `6420d1d`
+---
 
-| Problem | Fix |
-|---|---|
-| Activity log showed no user name (user_id was null) | Every `createOrderActivity` call now calls `supabase.auth.getUser()` to resolve the real auth user |
-| Edit modal inside OrderDetailModal showed old 550-line inline form | Removed inline form, now opens shared `OrderEditModal` from `ordermanagement.tsx` as overlay |
+### 2. TemplateBuilder: Row/Column Side-by-Side Layout
 
-### Kanban Card Title Truncation Fix
-**Commit:** `7eaa0b2`
-- `truncate` CSS class forced single-line cutoff on all three card types
-- Fixed: changed to `break-words min-w-0` so full titles display
+**Files:** `src/lib/quoteTemplates.ts`, `src/components/settings/TemplateBuilder.tsx`, `src/components/settings/StructurePanel.tsx`, `src/components/QuotePreview.tsx`
 
-### Invoice Header Alignment Fix
-**Commit:** `29ca759`
-- Company phone/email in invoice header had `justify-center` on flex divs → visually misaligned vs address lines
-- Fixed: removed `justify-center`, plain `<p>` tags
+**New `RowColumn` interface** exported from `src/lib/quoteTemplates.ts`:
+```typescript
+export interface RowColumn {
+    id: string;
+    width: '1/4' | '1/3' | '1/2' | '2/3' | '3/4' | '1/1';
+    block: ContentBlock;
+}
+```
 
-### Invoice Icons Removed + Customer Org.nr Added
-**Commit:** `4546605`
-- Removed `Mail`, `Phone`, `MapPin` icon imports from `InvoicePreview.tsx` (looked unprofessional)
-- Customer org.nr now shown in invoice preview: `Org.nr: {invoice.customer.org_number}`
-- Customer email/phone shown as plain text (no icons)
+**New `row` block type** added to `BLOCK_REGISTRY`:
+- `type: 'row'`, `label: 'Kolumnrad'`, `category: 'layout'`
+- `defaultContent: { columns: [] }`, `defaultSettings: { gap: 16 }`
 
-### Invoice Template Selection Feature
-**Commits:** `8ee3596`, `9dc199c`, `f4f9b45`
+**`handleMoveBlockToRow(blockId, rowId)`** in TemplateBuilder: removes block from top-level array, adds it as a new `RowColumn` inside the target row's `content.columns`.
 
-**What was built:**
-1. **`InvoiceDetailsModal.tsx`** — template picker moved out of the customer info card into its own clearly labelled "Designmall" card. Shows hint + link to Settings when no invoice templates exist. `onSend` callback now carries the selected template as a second argument.
-2. **`EmailInvoiceModal.tsx`** — added `template?: QuoteTemplate` prop. Passed to both `InvoicePreview` instances (live preview AND the hidden off-screen PDF render target used to generate the attachment).
-3. **`InvoiceManagement.tsx`** — added `emailTemplate` state. Captured from `onSend` callback, forwarded to `EmailInvoiceModal`, cleared on close.
-4. **`src/lib/invoices.ts`** — added `org_number` to customer relation in both `getInvoices` and `getInvoice` select statements (was missing, so org_nr was always undefined in preview).
-5. **`src/locales/sv.ts`** — added `INVOICES.DETAILS` section with 4 translation keys for the template picker UI.
-6. **`src/components/InvoicePreview.tsx`** — full template-driven rendering fixed (see below).
+**`StructurePanel` `RowColumnEditor`**: shown when selected block is `row` type. Provides column width selectors, add/remove column buttons, gap slider, and a picker to move existing top-level blocks into the row.
 
-**Three root-cause bugs fixed in `InvoicePreview.tsx` (commit `f4f9b45`):**
+**`QuotePreview`** renders `row` blocks as a flex container. `renderContentBlock` gained a `skipWrapper?: boolean` third param so column blocks don't get double-wrapped.
 
-| Bug | Fix |
-|---|---|
-| `design_options` read from wrong path (`template?.design_options`) | Now checks both: `template?.design_options \|\| template?.settings?.design_options` |
-| 16 invoice block types all returned `null` from `renderContentBlock` | Added renderers for: `header_row`, `invoice_header`, `customer_info`, `customer_details`, `totals`, `subtotal`, `vat_info`, `total`, `rot_rut_info`, `payment_info`, `bank_details`, `page_footer`, `terms`, `custom_text_block`, `f_skatt_text`, `divider`, `spacer` |
-| Hardcoded static sections always rendered, conflicting with template blocks | Wrapped static header/customer/totals/footer in `{!template && (...)}` — template mode drives the full layout, default mode keeps the old static layout |
+**Event bubbling fixes on dropdowns:** All picker dropdowns in StructurePanel use `onClick={(e) => e.stopPropagation()} onDragStart={(e) => e.stopPropagation()}`.
 
 ---
 
-## File Change Summary (All Sessions)
+### 3. Fortnox: Complete Integration Overhaul
+
+#### 3a. `supabase/functions/fortnox-api/index.ts` — Full Rewrite
+
+Previous version had the wrong code entirely (sync logic calling itself). Rewritten with three actions:
+
+| Action | What it does |
+|---|---|
+| `auth` | OAuth code exchange — stores `access_token`, `refresh_token`, `fortnox_token_expires_at` in `organisations` |
+| `proxy` | Proxies Fortnox REST API calls. Auto-refreshes token if within 5 min of expiry |
+| `refresh` | Force-refresh token (admin/debug) |
+
+Uses `FORTNOX_CLIENT_ID` + `FORTNOX_CLIENT_SECRET` from `Deno.env`. Extracts `ErrorInformation.message` from Fortnox error responses for readable errors.
+
+**Security**: `proxy` and `refresh` actions perform manual JWT verification — caller must supply a valid user JWT or the service role key. `auth` is intentionally open (OAuth code is single-use and short-lived):
+
+```typescript
+if (body.action === 'proxy' || body.action === 'refresh') {
+    const token = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
+    if (token !== supabaseServiceKey) {
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        if (error || !user) return jsonError('Unauthorized', 401);
+    }
+}
+```
+
+#### 3b. `supabase/functions/sync-fortnox/index.ts`
+
+- Fixed import: `npm:@supabase/supabase-js` → `jsr:@supabase/supabase-js@2`
+- Added `HouseWorkCostProposal` to ROT/RUT invoice payload (was a TODO):
+```typescript
+houseWorkCostProposal = [{
+    PersonNumber: fortnoxPersonnummer,
+    ...(fastighetsbeteckning ? { RealEstateDesignation: fastighetsbeteckning } : {})
+}];
+// In Invoice body:
+...(houseWorkCostProposal ? { HouseWorkCostProposal: houseWorkCostProposal } : {})
+```
+
+#### 3c. `supabase/config.toml`
+
+```toml
+[fortnox-api]
+verify_jwt = false   # Needed for OAuth callback page (no session). Auth done manually inside fn.
+
+# sync-fortnox and sync-from-fortnox: verify_jwt = true (default)
+# Always called from authenticated app sessions.
+```
+
+#### 3d. Fortnox OAuth Popup
+
+**`src/lib/fortnox.ts`** — new `connectFortnoxPopup(organisationId)`:
+- Opens a centered 600×700 popup to the Fortnox auth URL
+- Returns a `Promise` that resolves when the callback page posts `fortnox-oauth-result` message back
+- Polls every 500ms for manual popup close (resolves with error if closed without completing)
+- If browser blocks the popup, resolves with a Swedish error message
+
+**`src/components/FortnoxCallback.tsx`** — popup-aware:
+- Detects popup context via `!!window.opener && window.opener !== window`
+- **Success**: `postMessage({ type: 'fortnox-oauth-result', success: true })` — opener calls `popup.close()`
+- **Error**: delays `postMessage` by 2 seconds so user sees the error, then opener closes
+- Falls back to full-page `navigate()` when not in a popup
+- Detects Fortnox `?error=` redirect (e.g. `error_missing_license`) and shows readable Swedish message
+- Logs only pathname and param key names — never param values (avoids CWE-532 OAuth code exposure)
+
+**CRITICAL ROUTING RULE**: `/app/fortnox/callback` is registered as a **public route in `App.tsx`**, before the `ProtectedRoute` wrapper for `/app/*`. It must stay public — the popup has no Supabase session when Fortnox redirects back. Moving it back inside `ProtectedRoute` will break OAuth (auth guard strips the `?code=` params).
+
+```tsx
+// App.tsx — public routes (before the ProtectedRoute block)
+<Route path="/app/fortnox/callback" element={<FortnoxCallback />} />
+```
+
+#### 3e. `src/lib/fortnox.ts` — Scope and test connection fixes
+
+- OAuth scope reduced to `invoice customer` — `companyinformation` was removed because it requires a separate Fortnox license module and caused `error_missing_license`
+- `testFortnoxConnection` changed from `GET /companyinformation` to `GET /customers?limit=1` (same reason — we don't have that scope)
+
+#### 3f. `src/components/settings/IntegrationSettings.tsx` — FortnoxPanel
+
+Added `FortnoxPanel` component (defined in the same file, before `IntegrationSettings`). Shows:
+- Connection status badge (green/yellow/gray) + token expiry time
+- Test connection button with result
+- Sync stats grid: synced invoices, unsynced invoices, synced customers, unsynced customers
+- "Skicka till Fortnox" (export) and "Hämta från Fortnox" (update payment status) buttons with spinners
+- Sync result summary with per-error list
+- Setup guide for first-time connect; expired token warning
+
+`loadFortnoxStats()` runs 5 parallel Supabase `count` queries to populate the stats tiles.
+
+Both the card-level "Anslut" button and the FortnoxPanel button use `connectFortnoxPopup`. On success, connection status and stats refresh in-place without leaving the settings page.
+
+---
+
+### 4. Fortnox Production Checklist (non-code)
+
+These must be in place for the integration to work — they are not in the repo:
+
+| What | Where to set it |
+|---|---|
+| `VITE_FORTNOX_CLIENT_ID` | Hosting env vars (Vercel/Netlify) — frontend uses this to build the OAuth URL |
+| `FORTNOX_CLIENT_ID` | Supabase edge function secrets |
+| `FORTNOX_CLIENT_SECRET` | Supabase edge function secrets |
+| Deploy edge functions | `supabase functions deploy fortnox-api sync-fortnox sync-from-fortnox` |
+| Fortnox account license | The authorizing Fortnox user needs API access for `invoice` and `customer` modules |
+| Fortnox app scopes | The registered developer app must have `invoice` and `customer` scopes enabled |
+
+---
+
+## File Change Summary (This Session)
 
 | File | What Changed |
 |---|---|
-| `src/components/CreateOrderModal.tsx` | Full rewrite: tabbed layout, lead picker, LineItemsEditor, manual validation, updateLead on success |
-| `src/components/OrderDetailModal.tsx` | Removed 550-line inline form; now uses shared OrderEditModal |
-| `src/components/ordermanagement.tsx` | Export OrderEditModal; add updateLead import + call in handleSaveOrder |
-| `src/components/CalendarView.tsx` | Fix: `won` → `qualified` at quote-creation stage |
-| `src/components/LineItemsEditor.tsx` | Added `unit` field to LineItem type |
-| `src/components/QuoteEditModal.tsx` | LineItemsEditor integration + manual validation |
-| `src/components/InvoiceEditModal.tsx` | LineItemsEditor integration |
-| `src/components/OrderKanban.tsx` | Card titles: `truncate` → `break-words min-w-0` |
-| `src/components/InvoicePreview.tsx` | Removed icons; added org_nr; fixed alignment; full template-driven rendering with 16+ block renderers |
-| `src/components/InvoiceManagement.tsx` | Added `QuoteTemplate` import, `emailTemplate` state, threaded to EmailInvoiceModal |
-| `src/components/invoices/modals/InvoiceDetailsModal.tsx` | Template picker own section; onSend passes template; useTranslation for i18n |
-| `src/components/invoices/modals/EmailInvoiceModal.tsx` | Added `template` prop; passes to both InvoicePreview instances |
-| `src/lib/orders.ts` | createOrderWithQuote: repurpose existing draft quote, always accepted status; updateOrder: auth user in activities |
-| `src/lib/quotes.ts` | acceptQuoteAndCreateOrder: mark lead as won |
-| `src/lib/invoices.ts` | Added `org_number` to customer relation in getInvoices + getInvoice select queries |
-| `src/locales/sv.ts` | Added `INVOICES.DETAILS` section (template picker i18n strings) |
-| `src/lib/quoteTemplates.ts` | Added distinct `design_options` to all 3 default invoice templates (color + logo position) |
-| `src/components/settings/TemplateBuilder.tsx` | Template dropdown uses `<optgroup>` by type; colored type badge (toggle) added to header |
+| `src/lib/quoteTemplates.ts` | Added `RowColumn` interface export; added `row` block to `BLOCK_REGISTRY` |
+| `src/components/settings/TemplateBuilder.tsx` | `handleAddBlock` positional insertion; `handleMoveBlockToRow`; row column management handlers |
+| `src/components/settings/StructurePanel.tsx` | `+` insert buttons; `RowColumnEditor`; move-to-row picker with event bubbling fixes |
+| `src/components/QuotePreview.tsx` | Added `row` block renderer; `skipWrapper` param on `renderContentBlock` |
+| `supabase/functions/fortnox-api/index.ts` | Complete rewrite: `auth` / `proxy` / `refresh` actions; manual JWT auth for sensitive actions |
+| `supabase/functions/sync-fortnox/index.ts` | Fixed jsr import; added `HouseWorkCostProposal` for ROT/RUT |
+| `supabase/config.toml` | `verify_jwt = false` for `fortnox-api` only |
+| `src/components/FortnoxCallback.tsx` | Popup-aware; handles Fortnox `?error=` responses; safe console logging |
+| `src/lib/fortnox.ts` | Added `connectFortnoxPopup`; reduced OAuth scope; fixed `testFortnoxConnection` |
+| `src/components/settings/IntegrationSettings.tsx` | Added `FortnoxPanel` component; `connectFortnoxPopup` in connect handlers; `loadFortnoxStats` |
+| `src/App.tsx` | `/app/fortnox/callback` registered as public route before `ProtectedRoute` |
+| `src/components/AppRoutes.tsx` | Removed duplicate `/fortnox/callback` route (now handled in App.tsx) |
 
 ---
 
 ## Architecture Decisions
 
-### Why fire-and-forget for lead status updates?
-Lead status updates (`won`) are triggered after the primary operation (order creation) succeeds. Using `.catch()` means a failure to update the lead never rolls back or blocks the order. The order is the source of truth; lead status is derived.
+### Why `verify_jwt = false` only for `fortnox-api`?
+The OAuth callback page is a public route with no Supabase session. `supabase.functions.invoke` from an unauthenticated context sends no Authorization header, so the gateway would return 401 before our code even runs — explaining zero logs in Supabase. Sensitive actions (`proxy`, `refresh`) are protected by manual JWT verification inside the function instead.
 
-### Why `src/lib/leads.ts` and not `src/lib/database.ts` for `updateLead`?
-`leads.ts` version logs an activity entry (audit trail) and accepts `actingUserId`. `database.ts` version has no logging. **Always use `src/lib/leads.ts`.**
+### Why is the OAuth callback a public route?
+Fortnox redirects the popup back to `/app/fortnox/callback?code=xxx&state=xxx`. If that route is behind `ProtectedRoute`, the auth guard intercepts the request, redirects to `/login`, and the query params are lost. The callback page doesn't need a session — the token exchange is server-side via the edge function (service role key).
 
-### Why `status: 'accepted'` for backing quotes?
-Backing quotes (auto-created when an order is created directly) are internal records, never shown to the customer. `draft` status makes them appear in the Kanban quotes column as phantom cards. `accepted` is semantically correct and keeps them invisible.
+### Why `invoice customer` scope only?
+`companyinformation` triggered `error_missing_license` on accounts without that specific Fortnox API module. The two core scopes (`invoice`, `customer`) are sufficient for all sync operations.
 
-### Why `{!template && (...)}` in InvoicePreview?
-When a template is selected, the template's `content_structure` blocks are meant to drive the entire layout (header, customer info, line items, totals, footer). If the hardcoded static sections also rendered, they would duplicate or conflict with the template blocks. The static sections step aside completely when a template is active.
+### Why popup instead of redirect for OAuth?
+The user stays on the settings page. After the popup closes, the connection status and sync stats refresh in-place. No page navigation, no lost state.
 
-### Why `template?.design_options || template?.settings?.design_options`?
-The `QuoteTemplate` type defines `design_options` at both the top level and nested inside `settings`. Templates created through the TemplateBuilder historically store them in `settings.design_options`. The component now checks both locations so it works regardless of where the data landed.
+### `connectFortnoxPopup` server-to-server calls
+When `sync-fortnox` or `sync-from-fortnox` invoke `fortnox-api` with `action: 'proxy'`, they use a Supabase client initialized with the service role key. `supabase.functions.invoke` automatically sends that key as the `Authorization: Bearer` header, which passes the manual auth check in `fortnox-api`.
 
 ---
 
-## Known Issues / What's Left To Do
+## Known Issues / What's Left
 
-### ~~1. Invoice templates lack visual differentiation out of the box~~ ✅ FIXED (commit `35935cd`)
-Default invoice templates now ship with distinct `design_options` inside `settings`:
-- **Professionell Faktura**: navy `#1e40af`, logo right
-- **Enkel Faktura**: teal `#0f766e`, logo left
-- **ROT/RUT Faktura**: amber `#92400e`, logo left, amber-tinted ROT block
+### 1. Fortnox sync not yet end-to-end tested
+The user has all secrets configured and edge functions deployed, but as of this session the Fortnox account had a licensing issue (`error_missing_license`). Once they obtain the Integration license from Fortnox, the code is ready to test. The OAuth popup flow gets past that point and the callback correctly identifies the license error with a readable message.
 
-Users switching between templates will see immediate visual differences in color scheme and logo placement without any extra configuration.
-
-### ~~2. TemplateBuilder — invoice vs quote filter~~ ✅ FIXED (commit `35935cd`)
-The template selector dropdown now groups templates with `<optgroup>` labels ("📋 Fakturor" / "📄 Offerter"). A colored pill badge appears next to the selector showing the currently active template type ("💰 Faktura" in green, "📄 Offert" in blue). The badge doubles as a click-to-toggle button so type can be changed without digging into the sidebar.
-
-### 3. No new tests were written
-All fixes were surgical changes to existing logic. The test suite (if any) has not been expanded to cover the new behaviour.
-
-### 4. Branch is ahead of main
-Branch `claude/sad-darwin-731708` is ahead of `main` and ready for a PR. The merge conflict with main's `InvoicePreview.tsx` edit was already resolved in commit `b3105db`.
-
-### 5. `supabase.auth.getUser()` pattern in orders.ts
-The auth user resolution in `createOrderActivity` calls uses `supabase.auth.getUser()` which requires an authenticated browser context. This is fine for the current client-side React architecture but would break in any future server-side or edge function context.
+### 2. No new tests written
+All changes were feature/integration work. The TypeScript is clean (`npx tsc --noEmit` passes with zero errors).
 
 ---
 
 ## How To Continue In A New Session
 
-1. Open the worktree: `C:\Users\Elhar\Desktop\MomentumCRM\MomentumCRM\.claude\worktrees\sad-darwin-731708`
-   - Or the main repo: `C:\Users\Elhar\Desktop\MomentumCRM\MomentumCRM`
-2. The active branch is `claude/sad-darwin-731708`, all changes are pushed
-3. To merge into main: open a PR on GitHub from `claude/sad-darwin-731708` → `main`
-4. TypeScript is clean: `npx tsc --noEmit` runs with zero errors
-5. Next logical tasks are in the "Known Issues" section above
+1. Active branch: `claude/focused-wozniak-QGZs5` — all changes pushed
+2. TypeScript is clean: `npx tsc --noEmit` passes
+3. Always set remote with token before pushing: `git remote set-url origin https://<GITHUB_PAT>@github.com/Hammeadmin/MomentumCRM.git`
+4. To merge: open a PR on GitHub from `claude/focused-wozniak-QGZs5` → `main`
 
 ---
 
-## Quick Reference: Key Patterns Used
+## Quick Reference: Key Patterns
 
 ```typescript
-// Fire-and-forget lead status update (never blocks primary operation)
+// Fire-and-forget lead status update
 if (leadId) {
   updateLead(leadId, { status: 'won' }).catch(err =>
     console.error('Failed to mark lead as won:', err)
   );
 }
 
-// Auth user in activity logging
-const { data: { user: authUser } } = await supabase.auth.getUser();
-await createOrderActivity(orderId, authUser?.id || null, 'event_type', 'description');
-
-// Template design options (check both locations)
-const { primary_color = '#2563eb', font_family = 'Inter' } =
+// Template design options (always check both locations)
+const { primary_color = '#2563eb' } =
   template?.design_options || template?.settings?.design_options || {};
 
 // Translation hook (never hardcode Swedish strings)
-const { invoices: t } = useTranslation();
-// then: t.DETAILS.TEMPLATE_LABEL, t.MESSAGES.CREATED, etc.
+const { t } = useTranslation();
+
+// Fortnox popup connect pattern
+const result = await connectFortnoxPopup(organisationId);
+if (result.success) {
+  // refresh status, load stats
+} else if (result.error) {
+  setError(result.error);
+}
 ```
