@@ -140,7 +140,7 @@ export function getFortnoxAuthUrl(
     const params = new URLSearchParams({
         client_id: clientId,
         redirect_uri: redirectUri,
-        scope: 'invoice customer companyinformation',
+        scope: 'invoice customer',
         state: organisationId,
         access_type: 'offline',
         response_type: 'code',

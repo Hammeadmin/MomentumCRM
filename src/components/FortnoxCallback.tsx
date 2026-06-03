@@ -25,8 +25,26 @@ export default function FortnoxCallback() {
             console.log('[FortnoxCallback] path:', window.location.pathname);
             console.log('[FortnoxCallback] code:', authCode ? '✓ present' : '✗ missing', '| state:', state ? '✓ present' : '✗ missing');
 
+            // Fortnox may redirect back with an error instead of a code
+            const fortnoxError = urlParams.get('error');
+            const fortnoxErrorDesc = urlParams.get('error_description');
+            if (fortnoxError) {
+                const msg = fortnoxErrorDesc
+                    ? decodeURIComponent(fortnoxErrorDesc.replace(/\+/g, ' '))
+                    : fortnoxError;
+                console.error('[FortnoxCallback] Fortnox OAuth error:', fortnoxError);
+                setStatus('error');
+                setErrorMessage(`Fortnox nekade åtkomst: ${msg}`);
+                const isPopup = !!window.opener && window.opener !== window;
+                if (isPopup) {
+                    setTimeout(() => {
+                        window.opener.postMessage({ type: 'fortnox-oauth-result', success: false, error: msg }, window.location.origin);
+                    }, 2000);
+                }
+                return;
+            }
+
             if (!authCode || !state) {
-                // Log param names only — never log values to avoid exposing the OAuth code
                 const paramKeys = Array.from(urlParams.keys());
                 console.error('[FortnoxCallback] Missing params. Received param names:', paramKeys);
                 setStatus('error');
