@@ -35,19 +35,34 @@ export default function FortnoxCallback() {
 
                 const result = await exchangeFortnoxCode(state, authCode, redirectUri);
 
+                const isPopup = !!window.opener && window.opener !== window;
+
                 if (result.success) {
                     setStatus('success');
-                    // Short delay so the user sees the success state
-                    setTimeout(() => {
-                        navigate('/app/installningar?tab=integrations', { replace: true });
-                    }, 1200);
+                    if (isPopup) {
+                        window.opener.postMessage({ type: 'fortnox-oauth-result', success: true }, window.location.origin);
+                        // Popup will be closed by the opener; keep success UI briefly
+                    } else {
+                        setTimeout(() => {
+                            navigate('/app/installningar?tab=integrations', { replace: true });
+                        }, 1200);
+                    }
                 } else {
                     setStatus('error');
-                    setErrorMessage(result.error || 'Kunde inte ansluta till Fortnox.');
+                    const msg = result.error || 'Kunde inte ansluta till Fortnox.';
+                    setErrorMessage(msg);
+                    if (isPopup) {
+                        window.opener.postMessage({ type: 'fortnox-oauth-result', success: false, error: msg }, window.location.origin);
+                    }
                 }
             } catch (err) {
+                const msg = (err as Error).message || 'Ett oväntat fel inträffade.';
                 setStatus('error');
-                setErrorMessage((err as Error).message || 'Ett oväntat fel inträffade.');
+                setErrorMessage(msg);
+                const isPopup = !!window.opener && window.opener !== window;
+                if (isPopup) {
+                    window.opener.postMessage({ type: 'fortnox-oauth-result', success: false, error: msg }, window.location.origin);
+                }
             }
         };
 

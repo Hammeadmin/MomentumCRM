@@ -150,7 +150,7 @@ export function getFortnoxAuthUrl(
 }
 
 /**
- * Initiate Fortnox OAuth connection — navigates to Fortnox auth page
+ * Initiate Fortnox OAuth connection — navigates to Fortnox auth page (full redirect)
  */
 export function connectFortnox(
     organisationId: string,
@@ -158,6 +158,54 @@ export function connectFortnox(
 ): void {
     const authUrl = getFortnoxAuthUrl(redirectUri, organisationId);
     window.location.href = authUrl;
+}
+
+/**
+ * Initiate Fortnox OAuth connection via a popup window.
+ * Resolves when the callback page posts a message back to this window.
+ */
+export function connectFortnoxPopup(
+    organisationId: string,
+): Promise<{ success: boolean; error?: string }> {
+    const redirectUri = `${window.location.origin}/app/fortnox/callback`;
+    const authUrl = getFortnoxAuthUrl(redirectUri, organisationId);
+
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    const popup = window.open(
+        authUrl,
+        'fortnox-oauth',
+        `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`
+    );
+
+    if (!popup) {
+        return Promise.resolve({ success: false, error: 'Popup blockerades av webbläsaren. Tillåt popups för den här sidan.' });
+    }
+
+    return new Promise((resolve) => {
+        const onMessage = (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
+            if (event.data?.type !== 'fortnox-oauth-result') return;
+            window.removeEventListener('message', onMessage);
+            clearInterval(pollClosed);
+            popup.close();
+            resolve({ success: event.data.success, error: event.data.error });
+        };
+
+        window.addEventListener('message', onMessage);
+
+        // Fallback: if user closes popup manually
+        const pollClosed = setInterval(() => {
+            if (popup.closed) {
+                clearInterval(pollClosed);
+                window.removeEventListener('message', onMessage);
+                resolve({ success: false, error: 'Popup stängdes utan att slutföra anslutningen.' });
+            }
+        }, 500);
+    });
 }
 
 /**
