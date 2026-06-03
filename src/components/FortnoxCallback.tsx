@@ -41,7 +41,7 @@ export default function FortnoxCallback() {
                     setStatus('success');
                     if (isPopup) {
                         window.opener.postMessage({ type: 'fortnox-oauth-result', success: true }, window.location.origin);
-                        // Popup will be closed by the opener; keep success UI briefly
+                        window.close();
                     } else {
                         setTimeout(() => {
                             navigate('/app/installningar?tab=integrations', { replace: true });
@@ -53,6 +53,7 @@ export default function FortnoxCallback() {
                     setErrorMessage(msg);
                     if (isPopup) {
                         window.opener.postMessage({ type: 'fortnox-oauth-result', success: false, error: msg }, window.location.origin);
+                        setTimeout(() => window.close(), 2000);
                     }
                 }
             } catch (err) {
@@ -62,6 +63,7 @@ export default function FortnoxCallback() {
                 const isPopup = !!window.opener && window.opener !== window;
                 if (isPopup) {
                     window.opener.postMessage({ type: 'fortnox-oauth-result', success: false, error: msg }, window.location.origin);
+                    setTimeout(() => window.close(), 2000);
                 }
             }
         };
