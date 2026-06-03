@@ -1,19 +1,27 @@
 /*
-# Sync Fortnox Edge Function
+# Fortnox API Edge Function
 
-Handles batch synchronization of customers and invoices to Fortnox.
-Moves looping/batching from client-side to server-side to prevent browser timeouts.
+OAuth token exchange and API proxy for the Fortnox accounting integration.
 
 Actions:
-- `sync-customers`: Sync all unsynced customers to Fortnox
-- `sync-invoices`: Sync all unsynced invoices to Fortnox
+- `auth`    : Exchange OAuth authorization code for access + refresh tokens
+- `proxy`   : Proxy any Fortnox REST API call, auto-refreshing tokens as needed
+- `refresh` : Force a token refresh (used by admin/debug tooling)
 
-Required environment variables:
+Required environment variables (set in Supabase Edge Function secrets):
 - SUPABASE_URL
 - SUPABASE_SERVICE_ROLE_KEY
+- FORTNOX_CLIENT_ID
+- FORTNOX_CLIENT_SECRET
 */
 
-import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+
+const FORTNOX_TOKEN_URL = 'https://apps.fortnox.se/oauth-v1/token';
+const FORTNOX_API_BASE = 'https://api.fortnox.se/3';
+
+// Refresh token if it expires within 5 minutes
+const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -21,24 +29,274 @@ const corsHeaders = {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-interface SyncRequest {
-    action: 'sync-customers' | 'sync-invoices';
-    organisation_id: string;
-    ids?: string[]; // Optional: specific IDs to sync, otherwise sync all unsynced
+function jsonResponse(data: unknown, status = 200): Response {
+    return new Response(JSON.stringify(data), {
+        status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 }
 
-interface SyncResult {
-    success: number;
-    failed: number;
-    errors: string[];
+function jsonError(message: string, status = 400): Response {
+    return new Response(JSON.stringify({ success: false, error: message }), {
+        status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 }
 
-// Batch configuration
-const BATCH_SIZE = 10;
-const BATCH_DELAY_MS = 500; // Delay between batches to avoid rate limiting
+// ─── Token Exchange ────────────────────────────────────────────────────────────
+
+async function exchangeCode(
+    supabase: ReturnType<typeof createClient>,
+    organisationId: string,
+    code: string,
+    redirectUri: string,
+    clientId: string,
+    clientSecret: string,
+): Promise<Response> {
+    if (!organisationId || !code || !redirectUri) {
+        return jsonError('Missing required fields: organisation_id, code, redirect_uri');
+    }
+
+    const tokenRes = await fetch(FORTNOX_TOKEN_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+        },
+        body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: redirectUri,
+        }).toString(),
+    });
+
+    if (!tokenRes.ok) {
+        const errorBody = await tokenRes.text();
+        console.error('[fortnox-api] auth: token exchange failed', tokenRes.status, errorBody);
+        return jsonError(`Token exchange failed (${tokenRes.status}): ${errorBody}`, 400);
+    }
+
+    const tokens = await tokenRes.json();
+
+    if (!tokens.access_token) {
+        return jsonError('Fortnox did not return an access_token');
+    }
+
+    const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
+
+    const { error: dbError } = await supabase
+        .from('organisations')
+        .update({
+            fortnox_access_token: tokens.access_token,
+            fortnox_refresh_token: tokens.refresh_token ?? null,
+            fortnox_token_expires_at: expiresAt,
+        })
+        .eq('id', organisationId);
+
+    if (dbError) {
+        console.error('[fortnox-api] auth: failed to store tokens', dbError);
+        return jsonError(`Failed to store tokens: ${dbError.message}`, 500);
+    }
+
+    console.log(`[fortnox-api] auth: tokens stored for org ${organisationId}, expires ${expiresAt}`);
+    return jsonResponse({ success: true, expires_at: expiresAt });
+}
+
+// ─── Token Refresh ─────────────────────────────────────────────────────────────
+
+async function doRefreshToken(
+    supabase: ReturnType<typeof createClient>,
+    organisationId: string,
+    refreshToken: string,
+    clientId: string,
+    clientSecret: string,
+): Promise<{ accessToken: string | null; error?: string }> {
+    const tokenRes = await fetch(FORTNOX_TOKEN_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+        },
+        body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+        }).toString(),
+    });
+
+    if (!tokenRes.ok) {
+        const body = await tokenRes.text();
+        console.error('[fortnox-api] refresh failed:', tokenRes.status, body);
+        return { accessToken: null, error: `Refresh failed (${tokenRes.status}): ${body}` };
+    }
+
+    const tokens = await tokenRes.json();
+
+    if (!tokens.access_token) {
+        return { accessToken: null, error: 'No access_token in refresh response' };
+    }
+
+    const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
+
+    await supabase
+        .from('organisations')
+        .update({
+            fortnox_access_token: tokens.access_token,
+            // Fortnox may or may not return a new refresh token — keep old one if not
+            ...(tokens.refresh_token ? { fortnox_refresh_token: tokens.refresh_token } : {}),
+            fortnox_token_expires_at: expiresAt,
+        })
+        .eq('id', organisationId);
+
+    console.log(`[fortnox-api] refresh: new token stored for org ${organisationId}, expires ${expiresAt}`);
+    return { accessToken: tokens.access_token };
+}
+
+// ─── Resolve Access Token (with auto-refresh) ──────────────────────────────────
+
+async function resolveAccessToken(
+    supabase: ReturnType<typeof createClient>,
+    organisationId: string,
+    clientId: string,
+    clientSecret: string,
+): Promise<{ token: string | null; error?: string }> {
+    const { data: org, error } = await supabase
+        .from('organisations')
+        .select('fortnox_access_token, fortnox_refresh_token, fortnox_token_expires_at')
+        .eq('id', organisationId)
+        .single();
+
+    if (error || !org) {
+        return { token: null, error: 'Organisation not found' };
+    }
+
+    if (!org.fortnox_access_token) {
+        return { token: null, error: 'Fortnox not connected for this organisation' };
+    }
+
+    const isExpiredOrSoon = org.fortnox_token_expires_at
+        ? new Date(org.fortnox_token_expires_at).getTime() <= Date.now() + REFRESH_BUFFER_MS
+        : false;
+
+    if (isExpiredOrSoon) {
+        if (!org.fortnox_refresh_token) {
+            return { token: null, error: 'Token expired and no refresh token available — please reconnect Fortnox' };
+        }
+        const refreshed = await doRefreshToken(supabase, organisationId, org.fortnox_refresh_token, clientId, clientSecret);
+        if (!refreshed.accessToken) {
+            return { token: null, error: refreshed.error };
+        }
+        return { token: refreshed.accessToken };
+    }
+
+    return { token: org.fortnox_access_token };
+}
+
+// ─── API Proxy ─────────────────────────────────────────────────────────────────
+
+async function proxyRequest(
+    supabase: ReturnType<typeof createClient>,
+    body: Record<string, unknown>,
+    clientId: string,
+    clientSecret: string,
+): Promise<Response> {
+    const { organisation_id, method, endpoint, body: requestBody } = body as {
+        organisation_id: string;
+        method: string;
+        endpoint: string;
+        body?: unknown;
+    };
+
+    if (!organisation_id || !method || !endpoint) {
+        return jsonError('Missing required fields: organisation_id, method, endpoint');
+    }
+
+    const { token, error: tokenError } = await resolveAccessToken(supabase, organisation_id as string, clientId, clientSecret);
+
+    if (!token) {
+        return jsonError(tokenError ?? 'Could not obtain access token', 401);
+    }
+
+    const url = `${FORTNOX_API_BASE}${endpoint}`;
+
+    const fetchOptions: RequestInit = {
+        method: method as string,
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        },
+    };
+
+    if (requestBody && method !== 'GET' && method !== 'DELETE') {
+        fetchOptions.body = JSON.stringify(requestBody);
+    }
+
+    let responseText: string;
+    let httpStatus: number;
+
+    try {
+        const res = await fetch(url, fetchOptions);
+        httpStatus = res.status;
+        responseText = await res.text();
+    } catch (fetchErr) {
+        console.error('[fortnox-api] proxy: network error', fetchErr);
+        return jsonError(`Network error calling Fortnox: ${(fetchErr as Error).message}`, 502);
+    }
+
+    let responseData: unknown;
+    try {
+        responseData = JSON.parse(responseText);
+    } catch {
+        responseData = { raw: responseText };
+    }
+
+    if (httpStatus < 200 || httpStatus >= 300) {
+        const rd = responseData as Record<string, unknown>;
+        const fortnoxMsg =
+            (rd?.ErrorInformation as Record<string, unknown>)?.message as string ??
+            (rd?.ErrorInformation as Record<string, unknown>)?.Message as string ??
+            (rd as Record<string, unknown>)?.message as string ??
+            `HTTP ${httpStatus}`;
+
+        console.error(`[fortnox-api] proxy: Fortnox returned ${httpStatus} for ${method} ${endpoint}:`, fortnoxMsg);
+        return jsonResponse({ success: false, error: fortnoxMsg, statusCode: httpStatus, details: responseData });
+    }
+
+    return jsonResponse({ success: true, data: responseData });
+}
+
+// ─── Force Refresh Endpoint ────────────────────────────────────────────────────
+
+async function forceRefresh(
+    supabase: ReturnType<typeof createClient>,
+    organisationId: string,
+    clientId: string,
+    clientSecret: string,
+): Promise<Response> {
+    if (!organisationId) return jsonError('Missing organisation_id');
+
+    const { data: org } = await supabase
+        .from('organisations')
+        .select('fortnox_refresh_token')
+        .eq('id', organisationId)
+        .single();
+
+    if (!org?.fortnox_refresh_token) {
+        return jsonError('No refresh token available — please reconnect Fortnox');
+    }
+
+    const result = await doRefreshToken(supabase, organisationId, org.fortnox_refresh_token, clientId, clientSecret);
+
+    if (!result.accessToken) {
+        return jsonError(result.error ?? 'Token refresh failed');
+    }
+
+    return jsonResponse({ success: true });
+}
+
+// ─── Main Handler ──────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
-    // Handle CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response(null, { status: 200, headers: corsHeaders });
     }
@@ -46,373 +304,39 @@ Deno.serve(async (req: Request) => {
     try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
         const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const clientId = Deno.env.get('FORTNOX_CLIENT_ID') ?? '';
+        const clientSecret = Deno.env.get('FORTNOX_CLIENT_SECRET') ?? '';
+
+        if (!clientId || !clientSecret) {
+            console.error('[fortnox-api] FORTNOX_CLIENT_ID or FORTNOX_CLIENT_SECRET not set');
+            return jsonError('Fortnox credentials not configured on server', 500);
+        }
+
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const body = (await req.json()) as Record<string, unknown>;
 
-        const requestData: SyncRequest = await req.json();
+        switch (body.action) {
+            case 'auth':
+                return await exchangeCode(
+                    supabase,
+                    body.organisation_id as string,
+                    body.code as string,
+                    body.redirect_uri as string,
+                    clientId,
+                    clientSecret,
+                );
 
-        if (!requestData.organisation_id) {
-            return new Response(
-                JSON.stringify({ success: false, error: 'Missing organisation_id' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-            );
+            case 'proxy':
+                return await proxyRequest(supabase, body, clientId, clientSecret);
+
+            case 'refresh':
+                return await forceRefresh(supabase, body.organisation_id as string, clientId, clientSecret);
+
+            default:
+                return jsonError(`Unknown action "${body.action}". Use: auth | proxy | refresh`, 400);
         }
-
-        if (!requestData.action) {
-            return new Response(
-                JSON.stringify({ success: false, error: 'Missing action. Use "sync-customers" or "sync-invoices"' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-            );
-        }
-
-        // Get organisation's Fortnox credentials to verify connection
-        const { data: org, error: orgError } = await supabase
-            .from('organisations')
-            .select('fortnox_access_token, fortnox_token_expires_at')
-            .eq('id', requestData.organisation_id)
-            .single();
-
-        if (orgError || !org) {
-            return new Response(
-                JSON.stringify({ success: false, error: 'Organisation not found' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
-            );
-        }
-
-        if (!org.fortnox_access_token) {
-            return new Response(
-                JSON.stringify({ success: false, error: 'Fortnox is not connected for this organisation' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-            );
-        }
-
-        let result: SyncResult;
-
-        if (requestData.action === 'sync-customers') {
-            result = await syncCustomers(supabase, requestData.organisation_id, requestData.ids);
-        } else if (requestData.action === 'sync-invoices') {
-            result = await syncInvoices(supabase, requestData.organisation_id, requestData.ids);
-        } else {
-            return new Response(
-                JSON.stringify({ success: false, error: 'Invalid action. Use "sync-customers" or "sync-invoices"' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-            );
-        }
-
-        return new Response(
-            JSON.stringify(result),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        );
-
-    } catch (error) {
-        console.error('Error in sync-fortnox:', error);
-        return new Response(
-            JSON.stringify({ success: 0, failed: 0, errors: [(error as Error).message] }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
+    } catch (err) {
+        console.error('[fortnox-api] Unhandled error:', err);
+        return jsonError((err as Error).message, 500);
     }
 });
-
-/**
- * Sync customers to Fortnox in batches
- */
-async function syncCustomers(
-    supabase: any,
-    organisationId: string,
-    specificIds?: string[]
-): Promise<SyncResult> {
-    const result: SyncResult = { success: 0, failed: 0, errors: [] };
-
-    try {
-        // Fetch customers to sync
-        let query = supabase
-            .from('customers')
-            .select('*')
-            .eq('organisation_id', organisationId);
-
-        if (specificIds && specificIds.length > 0) {
-            query = query.in('id', specificIds);
-        } else {
-            // Only unsynced customers (no fortnox_customer_number)
-            query = query.is('fortnox_customer_number', null);
-        }
-
-        const { data: customers, error } = await query;
-
-        if (error) {
-            result.errors.push(`Failed to fetch customers: ${error.message}`);
-            return result;
-        }
-
-        if (!customers || customers.length === 0) {
-            return result; // No customers to sync
-        }
-
-        console.log(`Syncing ${customers.length} customers to Fortnox`);
-
-        // Process in batches
-        for (let i = 0; i < customers.length; i += BATCH_SIZE) {
-            const batch = customers.slice(i, i + BATCH_SIZE);
-
-            for (const customer of batch) {
-                try {
-                    // Call fortnox-api edge function to export customer
-                    const { data, error: invokeError } = await supabase.functions.invoke('fortnox-api', {
-                        body: {
-                            action: 'proxy',
-                            organisation_id: organisationId,
-                            method: 'POST',
-                            endpoint: '/customers',
-                            body: {
-                                Customer: {
-                                    Name: customer.name,
-                                    Email: customer.email || undefined,
-                                    Phone1: customer.phone_number || undefined,
-                                    Address1: customer.address || undefined,
-                                    ZipCode: customer.postal_code || undefined,
-                                    City: customer.city || undefined,
-                                    Type: customer.customer_type === 'company' ? 'COMPANY' : 'PRIVATE',
-                                    VATType: 'SEVAT',
-                                    // Only send OrganisationNumber & VATNumber for company customers
-                                    ...(customer.customer_type === 'company' && customer.org_number ? {
-                                        OrganisationNumber: customer.org_number.replace(/[\s\-]/g, ''),
-                                        VATNumber: `SE${customer.org_number.replace(/[\s\-]/g, '')}01`,
-                                    } : {}),
-                                }
-                            }
-                        }
-                    });
-
-                    if (invokeError || !data?.success) {
-                        result.failed++;
-                        result.errors.push(`${customer.name}: ${invokeError?.message || data?.error || 'Unknown error'}`);
-                        continue;
-                    }
-
-                    const fortnoxCustomerNumber = data.data?.Customer?.CustomerNumber;
-
-                    // Update customer with Fortnox number
-                    if (fortnoxCustomerNumber) {
-                        await supabase
-                            .from('customers')
-                            .update({ fortnox_customer_number: fortnoxCustomerNumber })
-                            .eq('id', customer.id);
-                    }
-
-                    result.success++;
-                } catch (err) {
-                    result.failed++;
-                    result.errors.push(`${customer.name}: ${(err as Error).message}`);
-                }
-            }
-
-            // Delay between batches to avoid rate limiting
-            if (i + BATCH_SIZE < customers.length) {
-                await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
-            }
-        }
-
-        console.log(`Customer sync complete: ${result.success} success, ${result.failed} failed`);
-        return result;
-
-    } catch (error) {
-        result.errors.push((error as Error).message);
-        return result;
-    }
-}
-
-/**
- * Sync invoices to Fortnox in batches
- */
-async function syncInvoices(
-    supabase: any,
-    organisationId: string,
-    specificIds?: string[]
-): Promise<SyncResult> {
-    const result: SyncResult = { success: 0, failed: 0, errors: [] };
-
-    try {
-        // Fetch invoices to sync with related data
-        let query = supabase
-            .from('invoices')
-            .select(`
-                *,
-                customer:customers(
-                    id, name, email, phone_number, address, postal_code, city,
-                    org_number, customer_type, vat_handling, fortnox_customer_number,
-                    rot_personnummer, rot_fastighetsbeteckning, rot_organisationsnummer,
-                    rut_personnummer
-                ),
-                line_items:invoice_line_items(*)
-            `)
-            .eq('organisation_id', organisationId);
-
-        if (specificIds && specificIds.length > 0) {
-            query = query.in('id', specificIds);
-        } else {
-            // Only unsynced invoices (no fortnox_invoice_number)
-            query = query.is('fortnox_invoice_number', null);
-        }
-
-        const { data: invoices, error } = await query;
-
-        if (error) {
-            result.errors.push(`Failed to fetch invoices: ${error.message}`);
-            return result;
-        }
-
-        if (!invoices || invoices.length === 0) {
-            return result; // No invoices to sync
-        }
-
-        console.log(`Syncing ${invoices.length} invoices to Fortnox`);
-
-        // Process in batches
-        for (let i = 0; i < invoices.length; i += BATCH_SIZE) {
-            const batch = invoices.slice(i, i + BATCH_SIZE);
-
-            for (const invoice of batch) {
-                try {
-                    // Check if customer has Fortnox number
-                    let fortnoxCustomerNumber = invoice.customer?.fortnox_customer_number;
-
-                    if (!fortnoxCustomerNumber) {
-                        // Need to sync customer first
-                        if (!invoice.customer) {
-                            result.failed++;
-                            result.errors.push(`Invoice ${invoice.invoice_number}: No customer`);
-                            continue;
-                        }
-
-                        // Sync customer
-                        const customerResult = await syncCustomers(supabase, organisationId, [invoice.customer.id]);
-                        if (customerResult.success === 0) {
-                            result.failed++;
-                            result.errors.push(`Invoice ${invoice.invoice_number}: Could not sync customer`);
-                            continue;
-                        }
-
-                        // Re-fetch customer to get Fortnox number
-                        const { data: updatedCustomer } = await supabase
-                            .from('customers')
-                            .select('fortnox_customer_number')
-                            .eq('id', invoice.customer.id)
-                            .single();
-
-                        fortnoxCustomerNumber = updatedCustomer?.fortnox_customer_number;
-
-                        if (!fortnoxCustomerNumber) {
-                            result.failed++;
-                            result.errors.push(`Invoice ${invoice.invoice_number}: Customer sync failed`);
-                            continue;
-                        }
-                    }
-
-                    // Prepare invoice rows
-                    const lineItems = invoice.line_items || [];
-                    const vatRate = invoice.customer?.vat_handling === 'omvänd byggmoms' ? 0 : 25;
-                    // ROT/RUT invoices still use 25% VAT — the deduction is handled by Fortnox separately
-
-                    // Determine ROT/RUT type
-                    // invoice.include_rot / invoice.include_rut are the authoritative flags
-                    const isROT = invoice.include_rot === true;
-                    const isRUT = !isROT && invoice.include_rut === true;
-                    // Fortnox requires specific sub-types, not just "ROT"/"RUT"
-                    // Default to CONSTRUCTION for ROT, CLEANING for RUT (most common)
-                    const houseWorkType = isROT ? 'CONSTRUCTION' : isRUT ? 'CLEANING' : null;
-
-                    // Personnummer: use invoice-level data first, fall back to customer-level
-                    const personnummer = isROT
-                        ? (invoice.rot_personnummer || invoice.customer?.rot_personnummer || null)
-                        : isRUT
-                            ? (invoice.rut_personnummer || invoice.customer?.rut_personnummer || null)
-                            : null;
-
-                    // Fastighetsbeteckning: only relevant for ROT
-                    const fastighetsbeteckning = isROT
-                        ? (invoice.rot_fastighetsbeteckning || invoice.customer?.rot_fastighetsbeteckning || null)
-                        : null;
-
-                    // Fortnox accepts personnummer as-is, e.g. "19801215-1234"
-                    const fortnoxPersonnummer = personnummer || undefined;
-
-                    const invoiceRows = lineItems.map((item: any) => ({
-                        Description: item.description,
-                        DeliveredQuantity: item.quantity,
-                        Price: item.unit_price,
-                        VAT: vatRate,
-                        Unit: item.unit || 'st',
-                        // HouseWork must be on every row for Fortnox to apply the deduction
-                        ...(houseWorkType ? {
-                            HouseWork: true,
-                            HouseWorkType: houseWorkType,
-                        } : {}),
-                    }));
-
-                    // Format dates
-                    const formatDate = (date: string | null): string | undefined => {
-                        if (!date) return undefined;
-                        return new Date(date).toISOString().split('T')[0];
-                    };
-
-                    // Call fortnox-api edge function to export invoice
-                    const { data, error: invokeError } = await supabase.functions.invoke('fortnox-api', {
-                        body: {
-                            action: 'proxy',
-                            organisation_id: organisationId,
-                            method: 'POST',
-                            endpoint: '/invoices',
-                            body: {
-                                Invoice: {
-                                    CustomerNumber: fortnoxCustomerNumber,
-                                    InvoiceDate: formatDate(invoice.created_at),
-                                    DueDate: formatDate(invoice.due_date),
-                                    YourReference: invoice.customer?.name,
-                                    Remarks: invoice.work_summary || undefined,
-                                    InvoiceRows: invoiceRows,
-                                    // TODO: ROT/RUT header fields need correct Fortnox API v3 field names
-                                    // before re-enabling. Current names are rejected by Fortnox.
-                                }
-                            }
-                        }
-                    });
-
-                    if (invokeError || !data?.success) {
-                        result.failed++;
-                        result.errors.push(`Invoice ${invoice.invoice_number}: ${invokeError?.message || data?.error || 'Unknown error'}`);
-                        continue;
-                    }
-
-                    const fortnoxInvoiceNumber = data.data?.Invoice?.DocumentNumber;
-
-                    // Update invoice with Fortnox number
-                    if (fortnoxInvoiceNumber) {
-                        await supabase
-                            .from('invoices')
-                            .update({
-                                fortnox_invoice_number: fortnoxInvoiceNumber,
-                                fortnox_synced_at: new Date().toISOString()
-                            })
-                            .eq('id', invoice.id);
-                    }
-
-                    result.success++;
-                } catch (err) {
-                    result.failed++;
-                    result.errors.push(`Invoice ${invoice.invoice_number}: ${(err as Error).message}`);
-                }
-            }
-
-            // Delay between batches to avoid rate limiting
-            if (i + BATCH_SIZE < invoices.length) {
-                await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
-            }
-        }
-
-        console.log(`Invoice sync complete: ${result.success} success, ${result.failed} failed`);
-        return result;
-
-    } catch (error) {
-        result.errors.push((error as Error).message);
-        return result;
-    }
-}

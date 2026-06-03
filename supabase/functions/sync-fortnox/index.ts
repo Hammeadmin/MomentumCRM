@@ -13,7 +13,7 @@ Required environment variables:
 - SUPABASE_SERVICE_ROLE_KEY
 */
 
-import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -349,6 +349,17 @@ async function syncInvoices(
                         return new Date(date).toISOString().split('T')[0];
                     };
 
+                    // Build ROT/RUT HouseWorkCostProposal for invoice header
+                    // Fortnox API v3: array of buyer SSN + property objects
+                    let houseWorkCostProposal: any[] | undefined = undefined;
+                    if (houseWorkType && fortnoxPersonnummer) {
+                        const proposalEntry: any = { PersonNumber: fortnoxPersonnummer };
+                        if (fastighetsbeteckning) {
+                            proposalEntry.RealEstateDesignation = fastighetsbeteckning;
+                        }
+                        houseWorkCostProposal = [proposalEntry];
+                    }
+
                     // Call fortnox-api edge function to export invoice
                     const { data, error: invokeError } = await supabase.functions.invoke('fortnox-api', {
                         body: {
@@ -364,8 +375,8 @@ async function syncInvoices(
                                     YourReference: invoice.customer?.name,
                                     Remarks: invoice.work_summary || undefined,
                                     InvoiceRows: invoiceRows,
-                                    // TODO: ROT/RUT header fields need correct Fortnox API v3 field names
-                                    // before re-enabling. Current names are rejected by Fortnox.
+                                    // ROT/RUT: buyer SSN and property sent at invoice level
+                                    ...(houseWorkCostProposal ? { HouseWorkCostProposal: houseWorkCostProposal } : {}),
                                 }
                             }
                         }
